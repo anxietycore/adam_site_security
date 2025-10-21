@@ -18,24 +18,20 @@ Object.entries(sounds).forEach(([name, sound]) => {
     }
 });
 
-// Данные для входа
+// Данные для входа (спрятать в видео!)
 const VALID_CREDENTIALS = {
-    username: "operator",
-    password: "vigil9"
+    username: "van_koss",
+    password: "johan734"
 };
 
-// Инициализация системы по клику
-document.getElementById('init-btn').addEventListener('click', function() {
-    // Скрываем экран инициализации
-    document.getElementById('init-screen').classList.add('hidden');
-    // Показываем экран загрузки
-    document.getElementById('boot-screen').classList.remove('hidden');
+// Загрузка системы
+document.addEventListener('DOMContentLoaded', function() {
     // Запускаем звук загрузки
-    sounds.boot_sound.play();
+    sounds.boot_sound.play().catch(e => {
+        console.log('Автовоспроизведение заблокировано');
+    });
     
-    // Остальная логика загрузки
-    setTimeout(() => sounds.beep.play(), 1000);
-    
+    // Анимация печати с звуком
     const bootTexts = document.querySelectorAll('.boot-text p');
     bootTexts.forEach((text, index) => {
         setTimeout(() => {
@@ -45,11 +41,12 @@ document.getElementById('init-btn').addEventListener('click', function() {
         }, 500 + (index * 1000));
     });
     
+    // Показываем логин через 6 секунд
     setTimeout(showLoginScreen, 6000);
 });
 
 function showLoginScreen() {
-    // Останавливаем звук загрузки когда показываем логин
+    // Останавливаем звук загрузки
     sounds.boot_sound.pause();
     sounds.boot_sound.currentTime = 0;
     
@@ -102,7 +99,6 @@ function login() {
         
         // Очистка полей
         document.getElementById('password').value = '';
-        document.getElementById('username').value = '';
         document.getElementById('username').focus();
     }
 }
