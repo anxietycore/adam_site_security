@@ -20,11 +20,20 @@ const VALID_CREDENTIALS = {
 
 // Загрузка системы
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('Страница загружена, запускаем загрузку...');
-    startBootSequence();
+    console.log('Страница загружена');
+    
+    // Обработчик кнопки запуска
+    document.getElementById('start-btn').addEventListener('click', function() {
+        console.log('Запуск системы...');
+        startBootSequence();
+    });
 });
 
 function startBootSequence() {
+    // Скрываем стартовый экран, показываем загрузку
+    document.getElementById('start-screen').classList.add('hidden');
+    document.getElementById('boot-screen').classList.remove('hidden');
+    
     console.log('Запуск последовательности загрузки...');
     
     const bootTexts = document.querySelectorAll('.boot-text p');
@@ -32,11 +41,11 @@ function startBootSequence() {
     
     let currentIndex = 0;
     
-    // Запускаем звук загрузки
+    // Запускаем звук загрузки (теперь после клика пользователя)
     setTimeout(() => {
         console.log('Запуск звука загрузки...');
         sounds.boot_sound.play().catch(e => {
-            console.log('Звук загрузки не запустился:', e);
+            console.log('Ошибка звука:', e);
         });
     }, 500);
     
