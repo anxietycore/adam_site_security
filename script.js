@@ -1,6 +1,5 @@
 // Звуковые эффекты
 const sounds = {
-    typewriter: new Audio('sounds/typewriter.wav'),
     glitch: new Audio('sounds/glitch.wav'),
     access_denied: new Audio('sounds/access_denied.wav'),
     access_granted: new Audio('sounds/access_granted.wav'),
@@ -21,47 +20,51 @@ const VALID_CREDENTIALS = {
 
 // Загрузка системы
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('Страница загружена, запускаем загрузку...');
     startBootSequence();
 });
 
 function startBootSequence() {
+    console.log('Запуск последовательности загрузки...');
+    
     const bootTexts = document.querySelectorAll('.boot-text p');
+    console.log('Найдено строк:', bootTexts.length);
+    
     let currentIndex = 0;
+    
+    // Запускаем звук загрузки
+    setTimeout(() => {
+        console.log('Запуск звука загрузки...');
+        sounds.boot_sound.play().catch(e => {
+            console.log('Звук загрузки не запустился:', e);
+        });
+    }, 500);
     
     // Функция для показа следующей строки
     function showNextLine() {
+        console.log('Показ строки', currentIndex);
+        
         if (currentIndex < bootTexts.length) {
             const text = bootTexts[currentIndex];
-            
-            // Показываем строку
             text.classList.remove('hidden');
-            
-            // Проигрываем звук печати
-            sounds.typewriter.currentTime = 0;
-            sounds.typewriter.play();
-            
             currentIndex++;
             
             // Запускаем следующую строку через 1 секунду
             setTimeout(showNextLine, 1000);
         } else {
             // Все строки показаны, переходим к логину
+            console.log('Все строки показаны, переход к логину...');
             setTimeout(showLoginScreen, 1000);
         }
     }
-    
-    // Запускаем звук загрузки
-    setTimeout(() => {
-        sounds.boot_sound.play().catch(e => {
-            console.log('Звук загрузки не запустился автоматически');
-        });
-    }, 500);
     
     // Начинаем показ строк через 1 секунду
     setTimeout(showNextLine, 1000);
 }
 
 function showLoginScreen() {
+    console.log('Показ экрана логина...');
+    
     // Останавливаем звук загрузки
     sounds.boot_sound.pause();
     sounds.boot_sound.currentTime = 0;
@@ -72,17 +75,6 @@ function showLoginScreen() {
     // Фокус на поле ввода
     document.getElementById('username').focus();
 }
-
-// Звук при вводе в поля
-document.getElementById('username').addEventListener('input', () => {
-    sounds.typewriter.currentTime = 0;
-    sounds.typewriter.play();
-});
-
-document.getElementById('password').addEventListener('input', () => {
-    sounds.typewriter.currentTime = 0;
-    sounds.typewriter.play();
-});
 
 // Обработка логина
 document.getElementById('login-btn').addEventListener('click', login);
