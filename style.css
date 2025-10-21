@@ -220,3 +220,49 @@ body {
     80% { transform: translate(2px, -2px); }
     100% { transform: translate(0); }
 }
+/* Стили терминала */
+#terminal {
+    padding: 20px;
+    height: 100vh;
+    overflow-y: auto;
+    background: #0a0a0a;
+}
+
+.output {
+    margin: 2px 0;
+    white-space: pre-wrap;
+}
+
+.command {
+    color: #FFFFFF;
+    margin: 2px 0;
+}
+
+.error {
+    color: #FF0000;
+    margin: 2px 0;
+}
+
+.spacer {
+    height: 10px;
+}
+
+.input-line {
+    display: flex;
+    align-items: center;
+    margin: 5px 0;
+}
+
+.prompt {
+    color: #00FF41;
+}
+
+.cmd {
+    color: #FFFFFF;
+}
+
+.cursor {
+    animation: blink 1s step-end infinite;
+    background-color: #00FF41;
+    margin-left: 2px;
+}
