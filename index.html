@@ -9,7 +9,26 @@
     <div class="scanline"></div>
     <div class="noise"></div>
     
-    <div id="boot-screen">
+    <!-- Экран инициализации -->
+    <div id="init-screen">
+        <div class="init-message">
+            <div class="logo">
+                <pre>
+  ___    ___   ___    __  __ 
+ / _ \  / _ \ |_ _|  |  \/  |
+| | | || | | | | |   | |\/| |
+| |_| || |_| | | |   | |  | |
+ \___/  \___/ |___|  |_|  |_|
+                </pre>
+            </div>
+            <p>> SECURE TERMINAL SYSTEM</p>
+            <p>> STAND BY FOR INITIALIZATION</p>
+            <button id="init-btn">INITIALIZE SYSTEM</button>
+        </div>
+    </div>
+    
+    <!-- Экран загрузки -->
+    <div id="boot-screen" class="hidden">
         <div class="boot-message">
             <div class="logo">
                 <pre>
@@ -31,6 +50,7 @@
         </div>
     </div>
 
+    <!-- Экран логина -->
     <div id="login-screen" class="hidden">
         <div class="login-form">
             <p class="login-prompt">SECURE TERMINAL ACCESS</p>
