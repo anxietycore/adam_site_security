@@ -4,6 +4,29 @@
     <meta charset="UTF-8">
     <title>A.D.A.M. TERMINAL // VIGIL-9</title>
     <link rel="stylesheet" href="style.css">
+    <style>
+        #terminal {
+            padding: 20px;
+            height: calc(100vh - 60px);
+            overflow-y: auto;
+        }
+        .input-line {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            padding: 20px;
+            background: black;
+            border-top: 1px solid #00FF41;
+        }
+        .cursor {
+            animation: blink 1s step-end infinite;
+            background-color: #00FF41;
+        }
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+    </style>
 </head>
 <body>
     <div class="scanline"></div>
