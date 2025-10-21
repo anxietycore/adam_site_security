@@ -8,17 +8,12 @@ const sounds = {
     boot_sound: new Audio('sounds/boot_sound.wav')
 };
 
-// Настройки громкости (от 0 до 1)
-Object.entries(sounds).forEach(([name, sound]) => {
-    if (name === 'boot_sound') {
-        sound.volume = 0.4;
-        sound.loop = false;
-    } else {
-        sound.volume = 0.3;
-    }
+// Настройки громкости
+Object.values(sounds).forEach(sound => {
+    sound.volume = 0.3;
 });
 
-// Данные для входа (спрятать в видео!)
+// Данные для входа
 const VALID_CREDENTIALS = {
     username: "van_koss",
     password: "johan734"
@@ -26,24 +21,45 @@ const VALID_CREDENTIALS = {
 
 // Загрузка системы
 document.addEventListener('DOMContentLoaded', function() {
-    // Запускаем звук загрузки
-    sounds.boot_sound.play().catch(e => {
-        console.log('Автовоспроизведение заблокировано');
-    });
-    
-    // Анимация печати с звуком
+    startBootSequence();
+});
+
+function startBootSequence() {
     const bootTexts = document.querySelectorAll('.boot-text p');
-    bootTexts.forEach((text, index) => {
-        setTimeout(() => {
-            text.style.opacity = 1;
+    let currentIndex = 0;
+    
+    // Функция для показа следующей строки
+    function showNextLine() {
+        if (currentIndex < bootTexts.length) {
+            const text = bootTexts[currentIndex];
+            
+            // Показываем строку
+            text.classList.remove('hidden');
+            
+            // Проигрываем звук печати
             sounds.typewriter.currentTime = 0;
             sounds.typewriter.play();
-        }, 500 + (index * 1000));
-    });
+            
+            currentIndex++;
+            
+            // Запускаем следующую строку через 1 секунду
+            setTimeout(showNextLine, 1000);
+        } else {
+            // Все строки показаны, переходим к логину
+            setTimeout(showLoginScreen, 1000);
+        }
+    }
     
-    // Показываем логин через 6 секунд
-    setTimeout(showLoginScreen, 6000);
-});
+    // Запускаем звук загрузки
+    setTimeout(() => {
+        sounds.boot_sound.play().catch(e => {
+            console.log('Звук загрузки не запустился автоматически');
+        });
+    }, 500);
+    
+    // Начинаем показ строк через 1 секунду
+    setTimeout(showNextLine, 1000);
+}
 
 function showLoginScreen() {
     // Останавливаем звук загрузки
