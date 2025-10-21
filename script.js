@@ -60,29 +60,23 @@ function login() {
     const errorElement = document.getElementById('login-error');
     
     console.log('=== ПОПЫТКА ВХОДА ===');
-    console.log('Введён логин:', `"${username}"`, 'тип:', typeof username, 'длина:', username.length);
-    console.log('Введён пароль:', `"${password}"`, 'тип:', typeof password, 'длина:', password.length);
-    console.log('Ожидаемый логин:', `"${VALID_CREDENTIALS.username}"`, 'тип:', typeof VALID_CREDENTIALS.username, 'длина:', VALID_CREDENTIALS.username.length);
-    console.log('Ожидаемый пароль:', `"${VALID_CREDENTIALS.password}"`, 'тип:', typeof VALID_CREDENTIALS.password, 'длина:', VALID_CREDENTIALS.password.length);
-    
-    // Проверка посимвольно
-    console.log('Символы логина:', Array.from(username).map(c => c.charCodeAt(0)));
-    console.log('Символы пароля:', Array.from(password).map(c => c.charCodeAt(0)));
+    console.log('Введён логин:', `"${username}"`);
+    console.log('Введён пароль:', `"${password}"`);
     
     const isUsernameMatch = username === VALID_CREDENTIALS.username;
     const isPasswordMatch = password === VALID_CREDENTIALS.password;
     
-    console.log('Логин совпадает:', isUsernameMatch);
-    console.log('Пароль совпадает:', isPasswordMatch);
-    
     if (isUsernameMatch && isPasswordMatch) {
         console.log('✅ УСПЕШНЫЙ ВХОД!');
-        document.body.classList.add('glitch');
+        // УСПЕХ - плавный переход БЕЗ глитча
+        document.body.style.transition = 'opacity 0.8s ease-in-out';
+        document.body.style.opacity = '0';
         setTimeout(() => {
             window.location.href = 'terminal.html';
-        }, 1000);
+        }, 800);
     } else {
         console.log('❌ ОШИБКА ВХОДА!');
+        // ОШИБКА - глитч + сообщение
         errorElement.classList.remove('hidden');
         document.body.classList.add('glitch');
         setTimeout(() => document.body.classList.remove('glitch'), 300);
