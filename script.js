@@ -1,7 +1,7 @@
 // Данные для входа
 const VALID_CREDENTIALS = {
-    username: "11",
-    password: "11"
+    username: "qq",
+    password: "ww"
 };
 
 // Загрузка системы
