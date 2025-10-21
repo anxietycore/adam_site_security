@@ -1,0 +1,198 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background-color: #0a0a0a;
+    color: #00FF41;
+    font-family: 'Courier New', monospace;
+    overflow: hidden;
+    cursor: default;
+    position: relative;
+}
+
+/* Эффект сканирующей линии */
+.scanline {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: rgba(0, 255, 65, 0.3);
+    animation: scanline 3s linear infinite;
+    pointer-events: none;
+    z-index: 100;
+}
+
+@keyframes scanline {
+    0% { transform: translateY(-100%); }
+    100% { transform: translateY(100vh); }
+}
+
+/* Эффект шума */
+.noise {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: 
+        radial-gradient(circle at 20% 50%, rgba(0, 255, 65, 0.03) 1%, transparent 1%),
+        radial-gradient(circle at 80% 20%, rgba(0, 255, 65, 0.03) 1%, transparent 1%),
+        radial-gradient(circle at 40% 80%, rgba(0, 255, 65, 0.03) 1%, transparent 1%);
+    background-size: 200px 200px;
+    animation: noise 0.2s infinite;
+    pointer-events: none;
+    z-index: 99;
+}
+
+@keyframes noise {
+    0% { transform: translate(0, 0); }
+    10% { transform: translate(-1px, -1px); }
+    20% { transform: translate(1px, 1px); }
+    30% { transform: translate(-1px, 1px); }
+    40% { transform: translate(1px, -1px); }
+    50% { transform: translate(-1px, -1px); }
+    60% { transform: translate(1px, 1px); }
+    70% { transform: translate(-1px, 1px); }
+    80% { transform: translate(1px, -1px); }
+    90% { transform: translate(-1px, -1px); }
+    100% { transform: translate(0, 0); }
+}
+
+/* Экран загрузки */
+#boot-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: black;
+    z-index: 10;
+}
+
+.boot-message {
+    text-align: left;
+}
+
+.logo pre {
+    font-size: 12px;
+    margin-bottom: 30px;
+    text-align: center;
+}
+
+.boot-text p {
+    margin: 10px 0;
+    animation: typewriter 0.5s steps(40) forwards;
+    opacity: 0;
+}
+
+.boot-text p:nth-child(1) { animation-delay: 0.5s; }
+.boot-text p:nth-child(2) { animation-delay: 1.5s; }
+.boot-text p:nth-child(3) { animation-delay: 2.5s; }
+.boot-text p:nth-child(4) { animation-delay: 3.5s; }
+.boot-text p:nth-child(5) { animation-delay: 4.5s; }
+.boot-text p:nth-child(6) { animation-delay: 5.5s; }
+
+@keyframes typewriter {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* Экран логина */
+#login-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: black;
+    z-index: 5;
+}
+
+.login-form {
+    text-align: center;
+    border: 1px solid #00FF41;
+    padding: 30px;
+    background: rgba(0, 0, 0, 0.8);
+}
+
+.login-prompt {
+    font-size: 18px;
+    margin-bottom: 20px;
+    text-transform: uppercase;
+}
+
+.input-group {
+    margin: 15px 0;
+    text-align: left;
+}
+
+.input-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-size: 14px;
+}
+
+.input-group input {
+    width: 250px;
+    background: black;
+    border: 1px solid #00FF41;
+    color: #00FF41;
+    padding: 8px;
+    font-family: 'Courier New', monospace;
+    outline: none;
+}
+
+.input-group input:focus {
+    border-color: #00FF41;
+    box-shadow: 0 0 10px #00FF41;
+}
+
+#login-btn {
+    background: black;
+    border: 1px solid #00FF41;
+    color: #00FF41;
+    padding: 10px 20px;
+    margin-top: 15px;
+    cursor: pointer;
+    font-family: 'Courier New', monospace;
+    text-transform: uppercase;
+}
+
+#login-btn:hover {
+    background: #00FF41;
+    color: black;
+}
+
+.error {
+    color: #ff0000;
+    margin-top: 10px;
+    font-size: 14px;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* Глитч-эффект */
+.glitch {
+    animation: glitch 0.3s infinite;
+}
+
+@keyframes glitch {
+    0% { transform: translate(0); }
+    20% { transform: translate(-2px, 2px); }
+    40% { transform: translate(-2px, -2px); }
+    60% { transform: translate(2px, 2px); }
+    80% { transform: translate(2px, -2px); }
+    100% { transform: translate(0); }
+}
