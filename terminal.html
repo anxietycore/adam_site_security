@@ -4,44 +4,13 @@
     <meta charset="UTF-8">
     <title>A.D.A.M. TERMINAL // VIGIL-9</title>
     <link rel="stylesheet" href="style.css">
-    <style>
-        #terminal {
-            padding: 20px;
-            height: calc(100vh - 60px);
-            overflow-y: auto;
-        }
-        .input-line {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            padding: 20px;
-            background: black;
-            border-top: 1px solid #00FF41;
-        }
-        .cursor {
-            animation: blink 1s step-end infinite;
-            background-color: #00FF41;
-        }
-        @keyframes blink {
-            50% { opacity: 0; }
-        }
-    </style>
 </head>
 <body>
     <div class="scanline"></div>
     <div class="noise"></div>
     
     <div id="terminal">
-        <div class="output">> AUTHENTICATION SUCCESSFUL</div>
-        <div class="output">> WELCOME, OPERATOR</div>
-        <div class="output">> TYPE "help" FOR AVAILABLE COMMANDS</div>
-    </div>
-
-    <div class="input-line">
-        <span class="prompt">adam@secure:~$ </span>
-        <span class="cmd" id="currentCmd"></span>
-        <span class="cursor" id="cursor">_</span>
+        <!-- Терминал будет заполняться через JavaScript -->
     </div>
 
     <script src="terminal.js"></script>
