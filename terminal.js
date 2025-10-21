@@ -15,7 +15,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function addInputLine() {
         // Добавляем пустую строку перед новым вводом
-        addOutput('', 'spacer');
+        const spacer = document.createElement('div');
+        spacer.style.height = '15px';
+        terminal.appendChild(spacer);
         
         const inputLine = document.createElement('div');
         inputLine.className = 'input-line';
@@ -23,7 +25,6 @@ document.addEventListener('DOMContentLoaded', function() {
         terminal.appendChild(inputLine);
         
         terminal.scrollTop = terminal.scrollHeight;
-        document.getElementById('currentCmd').focus();
     }
 
     function processCommand(cmd) {
@@ -41,71 +42,71 @@ document.addEventListener('DOMContentLoaded', function() {
         // Обрабатываем команду
         switch(cmd.toLowerCase()) {
             case 'help':
-                addOutput('Available commands:');
-                addOutput('  help     - Show this help');
-                addOutput('  clear    - Clear terminal');
-                addOutput('  status   - Show protocol status');
-                addOutput('  subjects - List active subjects');
-                addOutput('  erich    - Erich Van Koss dossier');
-                addOutput('  johan    - Subject 734 data');
-                addOutput('  mars     - Mars incident report');
-                addOutput('  logout   - End session');
+                addOutput('Доступные команды:');
+                addOutput('  help     - Показать справку');
+                addOutput('  clear    - Очистить терминал');
+                addOutput('  status   - Статус протокола');
+                addOutput('  subjects - Список субъектов');
+                addOutput('  erich    - Досье Эриха Ван Косса');
+                addOutput('  johan    - Данные субъекта 734');
+                addOutput('  mars     - Отчёт об инциденте на Марсе');
+                addOutput('  logout   - Завершить сеанс');
                 break;
                 
             case 'clear':
                 terminal.innerHTML = '';
-                addOutput('> A.D.A.M. TERMINAL // VIGIL-9 ACTIVE');
-                addOutput('> TYPE "help" FOR AVAILABLE COMMANDS');
+                addOutput('> ТЕРМИНАЛ A.D.A.M. // VIGIL-9 АКТИВЕН');
+                addOutput('> ВВЕДИТЕ "help" ДЛЯ СПИСКА КОМАНД');
                 break;
                 
             case 'status':
-                addOutput('PROTOCOL VIGIL-9: ACTIVE');
-                addOutput('OBSERVATION: ONGOING');
-                addOutput('LAST UPDATE: ' + new Date().toLocaleString());
+                addOutput('ПРОТОКОЛ VIGIL-9: АКТИВЕН');
+                addOutput('НАБЛЮДЕНИЕ: В РЕЖИМЕ РЕАЛЬНОГО ВРЕМЕНИ');
+                addOutput('ПОСЛЕДНЕЕ ОБНОВЛЕНИЕ: ' + new Date().toLocaleString('ru-RU'));
                 break;
                 
             case 'subjects':
-                addOutput('ACTIVE SUBJECTS: 734');
-                addOutput('TERMINATED: 1289');
-                addOutput('MAYAKS: 47');
-                addOutput('ANOMALIES: 3');
+                addOutput('АКТИВНЫЕ СУБЪЕКТЫ: 734');
+                addOutput('ЛИКВИДИРОВАНЫ: 1289');
+                addOutput('МАЯКИ: 47');
+                addOutput('АНОМАЛИИ: 3');
                 break;
 
             case 'erich':
-                addOutput('ERICH VAN KOSS - COORDINATOR LEVEL 9');
-                addOutput('STATUS: MISSING/Presumed DEAD');
-                addOutput('LAST KNOWN LOCATION: MARS_SECTOR_3D');
-                addOutput('NOTES: FOUNDER. POSSIBLE TRAITOR.');
-                addOutput('SECURITY CLEARANCE: REVOKED');
+                addOutput('ЭРИХ ВАН КОСС - КООРДИНАТОР УРОВНЯ 9');
+                addOutput('СТАТУС: ПРОПАВШИЙ БЕЗ ВЕСТИ');
+                addOutput('ПОСЛЕДНЕЕ МЕСТОПОЛОЖЕНИЕ: СЕКТОР 3-D МАРС');
+                addOutput('ЗАМЕТКИ: ОСНОВАТЕЛЬ. ВОЗМОЖНЫЙ ПРЕДАТЕЛЬ.');
+                addOutput('ДОПУСК: ОТОЗВАН');
                 break;
 
             case 'johan':
-                addOutput('SUBJECT 734: JOHAN VAN KOSS');
-                addOutput('STATUS: CONVERTED_TO_MAYAK');
-                addOutput('LOCATION: MARS_SECTOR_3D');
-                addOutput('MISSION: MARS_ANOMALY_RESEARCH');
-                addOutput('NOTES: SON OF ERICH VAN KOSS');
-                addOutput('BIOLOGICAL STATUS: UNKNOWN');
+                addOutput('СУБЪЕКТ 734: ЙОХАН ВАН КОСС');
+                addOutput('СТАТУС: ПРЕОБРАЖЁН В МАЯК');
+                addOutput('МЕСТОПОЛОЖЕНИЕ: СЕКТОР 3-D МАРС');
+                addOutput('МИССИЯ: ИССЛЕДОВАНИЕ АНОМАЛИИ МАРС');
+                addOutput('ЗАМЕТКИ: СЫН ЭРИХА ВАН КОССА');
+                addOutput('БИОЛОГИЧЕСКИЙ СТАТУС: НЕИЗВЕСТЕН');
                 break;
 
             case 'mars':
-                addOutput('INCIDENT REPORT: MARS_SECTOR_3D');
-                addOutput('DATE: [REDACTED]');
-                addOutput('SUBJECTS: 4 DEPLOYED, 1 LOST');
-                addOutput('ANOMALY: BLACK BIOMASS DETECTED');
-                addOutput('STATUS: QUARANTINE ACTIVE');
-                addOutput('MAYAK_734: ACTIVE_OBSERVATION');
+                addOutput('ОТЧЁТ ОБ ИНЦИДЕНТЕ: СЕКТОР 3-D МАРС');
+                addOutput('ДАТА: [ЗАСЕКРЕЧЕНО]');
+                addOutput('СУБЪЕКТЫ: 4 ЗАДЕЙСТВОВАНЫ, 1 ПОТЕРЯН');
+                addOutput('АНОМАЛИЯ: ОБНАРУЖЕНА ЧЁРНАЯ БИОМАССА');
+                addOutput('СТАТУС: КАРАНТИН АКТИВЕН');
+                addOutput('МАЯК_734: АКТИВНОЕ НАБЛЮДЕНИЕ');
                 break;
                 
             case 'logout':
-                addOutput('ENDING SESSION...');
+                addOutput('ЗАВЕРШЕНИЕ СЕАНСА...');
                 setTimeout(() => {
                     window.location.href = 'index.html';
                 }, 1000);
                 break;
                 
             default:
-                addOutput(`command not found: ${cmd}`, 'error');
+                addOutput(`команда не найдена: ${cmd}`, 'error');
         }
         
         // Добавляем новую строку для ввода
@@ -147,8 +148,8 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // Начальная настройка
-    addOutput('> A.D.A.M. TERMINAL // VIGIL-9 ACTIVE');
-    addOutput('> WELCOME, OPERATOR');
-    addOutput('> TYPE "help" FOR AVAILABLE COMMANDS');
+    addOutput('> ТЕРМИНАЛ A.D.A.M. // VIGIL-9 АКТИВЕН');
+    addOutput('> ДОБРО ПОЖАЛОВАТЬ, ОПЕРАТОР');
+    addOutput('> ВВЕДИТЕ "help" ДЛЯ СПИСКА КОМАНД');
     addInputLine();
 });
