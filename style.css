@@ -13,7 +13,7 @@ body {
     position: relative;
 }
 
-/* УЛУЧШЕННЫЙ ЭФФЕКТ ШУМА - НА 20% ЯРЧЕ */
+/* УЛУЧШЕННЫЙ ЭФФЕКТ ШУМА - НА 50% ЯРЧЕ */
 .noise {
     position: fixed;
     top: 0;
@@ -21,11 +21,11 @@ body {
     width: 100%;
     height: 100%;
     background: 
-        radial-gradient(circle at 20% 50%, rgba(0, 255, 65, 0.12) 1px, transparent 1px),
-        radial-gradient(circle at 80% 20%, rgba(0, 255, 65, 0.10) 1px, transparent 1px),
-        radial-gradient(circle at 40% 80%, rgba(0, 255, 65, 0.15) 2px, transparent 2px),
-        radial-gradient(circle at 60% 10%, rgba(0, 255, 65, 0.08) 1px, transparent 1px),
-        radial-gradient(circle at 10% 90%, rgba(0, 255, 65, 0.09) 1px, transparent 1px);
+        radial-gradient(circle at 20% 50%, rgba(0, 255, 65, 0.18) 1px, transparent 1px),
+        radial-gradient(circle at 80% 20%, rgba(0, 255, 65, 0.15) 1px, transparent 1px),
+        radial-gradient(circle at 40% 80%, rgba(0, 255, 65, 0.22) 2px, transparent 2px),
+        radial-gradient(circle at 60% 10%, rgba(0, 255, 65, 0.12) 1px, transparent 1px),
+        radial-gradient(circle at 10% 90%, rgba(0, 255, 65, 0.14) 1px, transparent 1px);
     background-size: 300px 300px, 400px 400px, 500px 500px, 350px 350px, 450px 450px;
     animation: noise 8s infinite linear;
     pointer-events: none;
