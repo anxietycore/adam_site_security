@@ -1,16 +1,13 @@
 // Данные для входа
 const VALID_CREDENTIALS = {
-    username: "1",
-    password: "1"
+    username: "11",
+    password: "11"
 };
 
 // Загрузка системы
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('Страница загружена');
-    
     // Обработчик кнопки запуска
     document.getElementById('start-btn').addEventListener('click', function() {
-        console.log('Запуск системы...');
         startBootSequence();
     });
 });
