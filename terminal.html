@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>A.D.A.M. TERMINAL // VIGIL-9</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="scanline"></div>
+    <div class="noise"></div>
+    
+    <div id="terminal">
+        <div class="output">> AUTHENTICATION SUCCESSFUL</div>
+        <div class="output">> WELCOME, OPERATOR</div>
+        <div class="output">> TYPE "help" FOR AVAILABLE COMMANDS</div>
+    </div>
+
+    <div class="input-line">
+        <span class="prompt">adam@secure:~$ </span>
+        <span class="cmd" id="currentCmd"></span>
+        <span class="cursor" id="cursor">_</span>
+    </div>
+
+    <script src="terminal.js"></script>
+</body>
+</html>
