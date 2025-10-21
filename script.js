@@ -59,19 +59,18 @@ function login() {
     const password = document.getElementById('password').value;
     const errorElement = document.getElementById('login-error');
     
-    // СБРАСЫВАЕМ ОШИБКУ ПЕРЕД КАЖДОЙ ПРОВЕРКОЙ
-    errorElement.classList.add('hidden');
-    
     console.log('=== ПОПЫТКА ВХОДА ===');
-    console.log('Введён логин:', `"${username}"`);
-    console.log('Введён пароль:', `"${password}"`);
     
     const isUsernameMatch = username === VALID_CREDENTIALS.username;
     const isPasswordMatch = password === VALID_CREDENTIALS.password;
     
     if (isUsernameMatch && isPasswordMatch) {
         console.log('✅ УСПЕШНЫЙ ВХОД!');
-        // УСПЕХ - плавный переход БЕЗ глитча
+        // УСПЕХ - показываем "ДОСТУП РАЗРЕШЁН" зелёным
+        errorElement.textContent = 'ДОСТУП РАЗРЕШЁН';
+        errorElement.style.color = '#00FF41';
+        errorElement.classList.remove('hidden');
+        
         document.body.style.transition = 'opacity 0.8s ease-in-out';
         document.body.style.opacity = '0';
         setTimeout(() => {
@@ -79,7 +78,9 @@ function login() {
         }, 800);
     } else {
         console.log('❌ ОШИБКА ВХОДА!');
-        // ОШИБКА - глитч + сообщение
+        // ОШИБКА - глитч + "ДОСТУП ЗАПРЕЩЁН" красным
+        errorElement.textContent = 'ДОСТУП ЗАПРЕЩЁН';
+        errorElement.style.color = '#ff0000';
         errorElement.classList.remove('hidden');
         document.body.classList.add('glitch');
         setTimeout(() => document.body.classList.remove('glitch'), 300);
