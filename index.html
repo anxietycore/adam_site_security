@@ -2,50 +2,38 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>A.D.A.M. SECURE ACCESS</title>
+    <title>A.D.A.M. // СЕКУРНЫЙ ДОСТУП</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="scanline"></div>
     <div class="noise"></div>
     
-    <!-- Экран инициализации -->
-    <div id="init-screen">
-        <div class="init-message">
-            <div class="logo">
-                <pre>
-  ___    ___   ___    __  __ 
- / _ \  / _ \ |_ _|  |  \/  |
-| | | || | | | | |   | |\/| |
-| |_| || |_| | | |   | |  | |
- \___/  \___/ |___|  |_|  |_|
-                </pre>
-            </div>
-            <p>> SECURE TERMINAL SYSTEM</p>
-            <p>> STAND BY FOR INITIALIZATION</p>
-            <button id="init-btn">INITIALIZE SYSTEM</button>
-        </div>
-    </div>
-    
     <!-- Экран загрузки -->
-    <div id="boot-screen" class="hidden">
+    <div id="boot-screen">
         <div class="boot-message">
             <div class="logo">
                 <pre>
-  ___    ___   ___    __  __ 
- / _ \  / _ \ |_ _|  |  \/  |
-| | | || | | | | |   | |\/| |
-| |_| || |_| | | |   | |  | |
- \___/  \___/ |___|  |_|  |_|
+ .----------------.  .----------------.  .----------------.  .----------------. 
+| .--------------. || .--------------. || .--------------. || .--------------. |
+| |      __      | || |  ________    | || |      __      | || | ____    ____ | |
+| |     /  \     | || | |_   ___ `.  | || |     /  \     | || ||_   \  /   _|| |
+| |    / /\ \    | || |   | |   `. \ | || |    / /\ \    | || |  |   \/   |  | |
+| |   / ____ \   | || |   | |    | | | || |   / ____ \   | || |  | |\  /| |  | |
+| | _/ /    \ \_ | || |  _| |___.' / | || | _/ /    \ \_ | || | _| |_\/_| |_ | |
+| ||____|  |____|| || | |________.'  | || ||____|  |____|| || ||_____||_____|| |
+| |              | || |              | || |              | || |              | |
+| '--------------' || '--------------' || '--------------' || '--------------' |
+ '----------------'  '----------------'  '----------------'  '----------------' 
                 </pre>
             </div>
             <div class="boot-text">
-                <p>> INITIALIZING A.D.A.M. SECURITY PROTOCOL...</p>
-                <p>> LOADING VIGIL-9 SUBSYSTEM...</p>
-                <p>> MEMORY TEST: OK</p>
-                <p>> CRYPTO MODULE: ACTIVE</p>
-                <p>> WARNING: UNAUTHORIZED ACCESS FORBIDDEN</p>
-                <p>> SYSTEM READY</p>
+                <p>> ИНИЦИАЛИЗАЦИЯ ПРОТОКОЛА БЕЗОПАСНОСТИ A.D.A.M...</p>
+                <p>> ЗАГРУЗКА ПОДСИСТЕМЫ VIGIL-9...</p>
+                <p>> ТЕСТ ПАМЯТИ: УСПЕШНО</p>
+                <p>> КРИПТОМОДУЛЬ: АКТИВИРОВАН</p>
+                <p>> ПРЕДУПРЕЖДЕНИЕ: НЕСАНКЦИОНИРОВАННЫЙ ДОСТУП ЗАПРЕЩЁН</p>
+                <p>> СИСТЕМА ГОТОВА</p>
             </div>
         </div>
     </div>
@@ -53,17 +41,17 @@
     <!-- Экран логина -->
     <div id="login-screen" class="hidden">
         <div class="login-form">
-            <p class="login-prompt">SECURE TERMINAL ACCESS</p>
+            <p class="login-prompt">СЕКУРНЫЙ ДОСТУП К ТЕРМИНАЛУ</p>
             <div class="input-group">
-                <label for="username">USERNAME:</label>
+                <label for="username">ИМЯ ПОЛЬЗОВАТЕЛЯ:</label>
                 <input type="text" id="username" autocomplete="off">
             </div>
             <div class="input-group">
-                <label for="password">PASSWORD:</label>
+                <label for="password">ПАРОЛЬ:</label>
                 <input type="password" id="password" autocomplete="off">
             </div>
-            <button id="login-btn">AUTHENTICATE</button>
-            <p id="login-error" class="error hidden">ACCESS DENIED</p>
+            <button id="login-btn">АУТЕНТИФИКАЦИЯ</button>
+            <p id="login-error" class="error hidden">ДОСТУП ЗАПРЕЩЁН</p>
         </div>
     </div>
 
