@@ -1,17 +1,3 @@
-// Звуковые эффекты
-const sounds = {
-    glitch: new Audio('sounds/glitch.wav'),
-    access_denied: new Audio('sounds/access_denied.wav'),
-    access_granted: new Audio('sounds/access_granted.wav'),
-    beep: new Audio('sounds/beep.wav'),
-    boot_sound: new Audio('sounds/boot_sound.wav')
-};
-
-// Настройки громкости
-Object.values(sounds).forEach(sound => {
-    sound.volume = 0.3;
-});
-
 // Данные для входа
 const VALID_CREDENTIALS = {
     username: "van_koss",
@@ -34,50 +20,29 @@ function startBootSequence() {
     document.getElementById('start-screen').classList.add('hidden');
     document.getElementById('boot-screen').classList.remove('hidden');
     
-    console.log('Запуск последовательности загрузки...');
-    
-    const bootTexts = document.querySelectorAll('.boot-text p');
-    console.log('Найдено строк:', bootTexts.length);
-    
+    const bootTexts = document.querySelectorAll('#boot-screen .boot-text p');
     let currentIndex = 0;
-    
-    // Запускаем звук загрузки (теперь после клика пользователя)
-    setTimeout(() => {
-        console.log('Запуск звука загрузки...');
-        sounds.boot_sound.play().catch(e => {
-            console.log('Ошибка звука:', e);
-        });
-    }, 500);
     
     // Функция для показа следующей строки
     function showNextLine() {
-        console.log('Показ строки', currentIndex);
-        
         if (currentIndex < bootTexts.length) {
             const text = bootTexts[currentIndex];
-            text.classList.remove('hidden');
+            text.style.opacity = 1;
             currentIndex++;
             
             // Запускаем следующую строку через 1 секунду
             setTimeout(showNextLine, 1000);
         } else {
             // Все строки показаны, переходим к логину
-            console.log('Все строки показаны, переход к логину...');
             setTimeout(showLoginScreen, 1000);
         }
     }
     
-    // Начинаем показ строк через 1 секунду
-    setTimeout(showNextLine, 1000);
+    // Начинаем показ строк через 0.5 секунды
+    setTimeout(showNextLine, 500);
 }
 
 function showLoginScreen() {
-    console.log('Показ экрана логина...');
-    
-    // Останавливаем звук загрузки
-    sounds.boot_sound.pause();
-    sounds.boot_sound.currentTime = 0;
-    
     document.getElementById('boot-screen').classList.add('hidden');
     document.getElementById('login-screen').classList.remove('hidden');
     
@@ -89,7 +54,6 @@ function showLoginScreen() {
 document.getElementById('login-btn').addEventListener('click', login);
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Enter') {
-        sounds.beep.play();
         login();
     }
 });
@@ -101,15 +65,12 @@ function login() {
     
     if (username === VALID_CREDENTIALS.username && password === VALID_CREDENTIALS.password) {
         // Успешный вход
-        sounds.access_granted.play();
         document.body.classList.add('glitch');
         setTimeout(() => {
             window.location.href = 'terminal.html';
         }, 1000);
     } else {
         // Неверные данные
-        sounds.access_denied.play();
-        sounds.glitch.play();
         errorElement.classList.remove('hidden');
         document.body.classList.add('glitch');
         setTimeout(() => document.body.classList.remove('glitch'), 300);
