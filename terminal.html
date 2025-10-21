@@ -13,6 +13,13 @@
         <!-- Терминал будет заполняться через JavaScript -->
     </div>
 
+    <script>
+        // Защита от кнопки "Назад"
+        history.pushState(null, null, location.href);
+        window.onpopstate = function() {
+            history.go(1);
+        };
+    </script>
     <script src="terminal.js"></script>
 </body>
 </html>
