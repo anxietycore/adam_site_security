@@ -4,12 +4,18 @@ const sounds = {
     glitch: new Audio('sounds/glitch.wav'),
     access_denied: new Audio('sounds/access_denied.wav'),
     access_granted: new Audio('sounds/access_granted.wav'),
-    beep: new Audio('sounds/beep.wav')
+    beep: new Audio('sounds/beep.wav'),
+    boot_sound: new Audio('sounds/boot_sound.wav')
 };
 
 // Настройки громкости (от 0 до 1)
-Object.values(sounds).forEach(sound => {
-    sound.volume = 0.3; // 30% громкости
+Object.entries(sounds).forEach(([name, sound]) => {
+    if (name === 'boot_sound') {
+        sound.volume = 0.4;
+        sound.loop = false;
+    } else {
+        sound.volume = 0.3;
+    }
 });
 
 // Данные для входа
@@ -18,12 +24,18 @@ const VALID_CREDENTIALS = {
     password: "vigil9"
 };
 
-// Загрузка системы
-document.addEventListener('DOMContentLoaded', function() {
-    // Проигрываем звук загрузки
+// Инициализация системы по клику
+document.getElementById('init-btn').addEventListener('click', function() {
+    // Скрываем экран инициализации
+    document.getElementById('init-screen').classList.add('hidden');
+    // Показываем экран загрузки
+    document.getElementById('boot-screen').classList.remove('hidden');
+    // Запускаем звук загрузки
+    sounds.boot_sound.play();
+    
+    // Остальная логика загрузки
     setTimeout(() => sounds.beep.play(), 1000);
     
-    // Анимация печати с звуком
     const bootTexts = document.querySelectorAll('.boot-text p');
     bootTexts.forEach((text, index) => {
         setTimeout(() => {
@@ -37,6 +49,10 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function showLoginScreen() {
+    // Останавливаем звук загрузки когда показываем логин
+    sounds.boot_sound.pause();
+    sounds.boot_sound.currentTime = 0;
+    
     document.getElementById('boot-screen').classList.add('hidden');
     document.getElementById('login-screen').classList.remove('hidden');
     
