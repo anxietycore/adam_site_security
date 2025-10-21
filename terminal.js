@@ -77,7 +77,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 
             default:
                 addOutput(`command not found: ${cmd}`);
-                sounds.error.play(); // Звук ошибки для неверной команды
+                sounds.error.play();
         }
         
         addInputLine();
