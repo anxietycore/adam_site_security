@@ -59,6 +59,9 @@ function login() {
     const password = document.getElementById('password').value;
     const errorElement = document.getElementById('login-error');
     
+    // СБРАСЫВАЕМ ОШИБКУ ПЕРЕД КАЖДОЙ ПРОВЕРКОЙ
+    errorElement.classList.add('hidden');
+    
     console.log('=== ПОПЫТКА ВХОДА ===');
     console.log('Введён логин:', `"${username}"`);
     console.log('Введён пароль:', `"${password}"`);
