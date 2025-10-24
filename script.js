@@ -9,9 +9,16 @@ console.log('Ожидаемые данные:', VALID_CREDENTIALS);
 
 // Загрузка системы
 document.addEventListener('DOMContentLoaded', function() {
+    // === СЧЁТЧИК ПОСЕЩЕНИЙ ===
+    let visits = parseInt(localStorage.getItem('adam_visits')) || 0;
+    visits++;
+    localStorage.setItem('adam_visits', visits);
+    console.log(`Посещений A.D.A.M.: ${visits}`);
+    // === КОНЕЦ СЧЁТЧИКА ===
+    
     console.log('DOM загружен');
     
-    // Обработчик кнопки запуска
+    // Остальной код без изменений...
     document.getElementById('start-btn').addEventListener('click', function() {
         console.log('Кнопка запуска нажата');
         startBootSequence();
