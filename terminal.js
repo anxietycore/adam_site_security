@@ -104,6 +104,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     window.location.href = 'index.html';
                 }, 1000);
                 break;
+
+            case 'visits':
+                const userVisits = localStorage.getItem('adam_visits') || 1;
+                addOutput(`ВАШИ ПОСЕЩЕНИЯ СИСТЕМЫ: ${userVisits}`);
+                addOutput('СТАТИСТИКА ПО ВСЕМ ОПЕРАТОРАМ: [ЗАСЕКРЕЧЕНО]');
+                break;
                 
             default:
                 addOutput(`команда не найдена: ${cmd}`, 'error');
