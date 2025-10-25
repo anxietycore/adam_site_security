@@ -85,73 +85,106 @@ function login() {
         }, 800);
     } else {
         console.log('❌ ОШИБКА ВХОДА!');
-        // ОШИБКА - МЕГА-ГЛИТЧ С РАЗРЫВАМИ
+        // ОШИБКА - АДСКИЙ ГЛИТЧ
         errorElement.textContent = 'ДОСТУП ЗАПРЕЩЁН';
         errorElement.style.color = '#ff0000';
         errorElement.classList.remove('hidden');
         
-        // Запускаем мега-глитч эффекты
-        activateMegaGlitch();
+        // Запускаем АДСКИЙ глитч
+        activateHellGlitch();
         
         document.getElementById('password').value = '';
         document.getElementById('username').focus();
     }
 }
 
-// Функция мега-глитча
-function activateMegaGlitch() {
-    // Создаем элементы глитча
-    const scanline = document.createElement('div');
-    scanline.className = 'glitch-scanline';
+// Функция АДСКОГО глитча
+function activateHellGlitch() {
+    // Создаем все элементы глитча
+    const layers = [
+        createGlitchElement('glitch-layer glitch-layer-1'),
+        createGlitchElement('glitch-layer glitch-layer-2'),
+        createGlitchElement('digital-noise'),
+        createGlitchElement('scanlines'),
+        createGlitchElement('flicker')
+    ];
     
-    const noise = document.createElement('div');
-    noise.className = 'glitch-noise';
+    // Добавляем тряску экрана
+    document.body.classList.add('screen-shake');
+    document.body.classList.add('rgb-split');
     
-    document.body.appendChild(scanline);
-    document.body.appendChild(noise);
-    
-    // Добавляем тряску
-    document.body.classList.add('glitch-shake');
-    
-    // Запускаем основной глитч
-    document.body.classList.add('glitch');
+    // Глитч текста ошибки
+    const errorText = document.getElementById('login-error');
+    errorText.classList.add('text-glitch');
+    errorText.setAttribute('data-text', errorText.textContent);
     
     // Звуковой эффект
-    playErrorSound();
+    playHellSound();
     
-    // Убираем эффекты через 1 секунду
+    // Случайные вспышки
+    const flashInterval = setInterval(() => {
+        document.body.style.filter = `hue-rotate(${Math.random() * 360}deg) brightness(${1 + Math.random() * 0.5})`;
+        setTimeout(() => {
+            document.body.style.filter = 'none';
+        }, 50);
+    }, 100);
+    
+    // Убираем эффекты через 1.5 секунды
     setTimeout(() => {
-        document.body.classList.remove('glitch');
-        document.body.classList.remove('glitch-shake');
+        // Убираем классы
+        document.body.classList.remove('screen-shake');
+        document.body.classList.remove('rgb-split');
+        errorText.classList.remove('text-glitch');
+        
+        // Убираем фильтры
+        document.body.style.filter = 'none';
         
         // Удаляем созданные элементы
-        if (document.body.contains(scanline)) {
-            document.body.removeChild(scanline);
-        }
-        if (document.body.contains(noise)) {
-            document.body.removeChild(noise);
-        }
-    }, 1000);
+        layers.forEach(layer => {
+            if (document.body.contains(layer)) {
+                document.body.removeChild(layer);
+            }
+        });
+        
+        // Останавливаем интервалы
+        clearInterval(flashInterval);
+        
+    }, 1500);
 }
 
-// Функция для звукового эффекта
-function playErrorSound() {
+// Создание элемента глитча
+function createGlitchElement(className) {
+    const element = document.createElement('div');
+    element.className = className;
+    document.body.appendChild(element);
+    return element;
+}
+
+// Звуковой эффект ада
+function playHellSound() {
     try {
         const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
         
-        oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
+        // Создаем несколько осцилляторов для адского звука
+        for (let i = 0; i < 3; i++) {
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            // Случайные частоты для хаоса
+            const freq = 80 + Math.random() * 200;
+            oscillator.frequency.setValueAtTime(freq, audioContext.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(30, audioContext.currentTime + 0.5);
+            
+            gainNode.gain.setValueAtTime(0.05, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.5);
+            
+            oscillator.start();
+            oscillator.stop(audioContext.currentTime + 0.5);
+        }
         
-        oscillator.frequency.setValueAtTime(150, audioContext.currentTime);
-        oscillator.frequency.exponentialRampToValueAtTime(50, audioContext.currentTime + 0.3);
-        
-        gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-        
-        oscillator.start();
-        oscillator.stop(audioContext.currentTime + 0.3);
     } catch (e) {
         console.log('Audio not supported');
     }
