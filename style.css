@@ -446,9 +446,67 @@ body {
     display: none !important;
 }
 
-/* Глитч-эффект */
+/* Мега-глитч эффект */
 .glitch {
-    animation: glitch 0.3s infinite;
+    animation: mega-glitch 0.5s infinite;
+    position: relative;
+}
+
+@keyframes mega-glitch {
+    0% { 
+        transform: translate(0);
+        filter: hue-rotate(0deg);
+    }
+    20% { 
+        transform: translate(-5px, 3px) skewX(10deg);
+        filter: hue-rotate(90deg) contrast(200%);
+    }
+    40% { 
+        transform: translate(5px, -3px) skewX(-15deg);
+        filter: hue-rotate(180deg) brightness(150%);
+    }
+    60% { 
+        transform: translate(-3px, 5px) skewY(5deg);
+        filter: hue-rotate(270deg) saturate(200%);
+    }
+    80% { 
+        transform: translate(3px, -5px) skewY(-10deg);
+        filter: hue-rotate(300deg) contrast(150%);
+    }
+    100% { 
+        transform: translate(0);
+        filter: hue-rotate(360deg);
+    }
+}
+
+/* Дополнительные эффекты */
+.glitch::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(45deg, #ff0000, #00ff41, #0000ff);
+    mix-blend-mode: overlay;
+    opacity: 0.3;
+    animation: rgb-flicker 0.1s infinite;
+}
+
+@keyframes rgb-flicker {
+    0%, 100% { opacity: 0.1; }
+    50% { opacity: 0.4; }
+}
+
+/* Тряска экрана */
+@keyframes screen-shake {
+    0%, 100% { transform: translateX(0); }
+    10%, 30%, 50%, 70%, 90% { transform: translateX(-10px); }
+    20%, 40%, 60%, 80% { transform: translateX(10px); }
+}
+
+.glitch {
+    animation: mega-glitch 0.5s infinite, screen-shake 0.5s infinite;
 }
 
 @keyframes glitch {
