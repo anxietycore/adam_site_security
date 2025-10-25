@@ -171,12 +171,12 @@ document.addEventListener('DOMContentLoaded', function() {
             case 'net':
                 await typeText('[КАРТА СЕТИ — АКТИВНЫЕ РЕЛЕЙНЫЕ МОДУЛИ]', 'output', 5);
                 await typeText('------------------------------------', 'output', 1);
-                await typeText('[V9-HX] / МОДУЛЬ: HELIX.................ОТВЕТ НЕСТАБИЛЕН', 'output', 3);
+                await typeText('[V9-HX] / МОДУЛЬ: HELIX................ОТВЕТ НЕСТАБИЛЕН', 'output', 3);
                 await typeText('[V9-MR] / МОДУЛЬ: MARS.................ПЕРЕДАЧА ПРЕРВАНА', 'output', 3);
                 await typeText('[V9-OR] / МОДУЛЬ: ОРБИТАЛЬНЫЙ РЕЛЕЙ....СИГНАЛ ИСКАЖЁН', 'output', 3);
                 await typeText('[V9-LT] / МОДУЛЬ: LITHIUM CORE.........ДОСТУП ОГРАНИЧЕН', 'output', 3);
-                await typeText('[V9-TN] / МОДУЛЬ: TERMINAL-9............ОТКЛИК НОРМАЛЬНЫЙ', 'output', 3);
-                await typeText('[V9-ML] / МОДУЛЬ: MONOLITH..............АКТИВНОСТЬ: ПОДАВЛЕНА', 'output', 3);
+                await typeText('[V9-TN] / МОДУЛЬ: TERMINAL-9...........ОТКЛИК НОРМАЛЬНЫЙ', 'output', 3);
+                await typeText('[V9-ML] / МОДУЛЬ: MONOLITH.............АКТИВНОСТЬ: ПОДАВЛЕНА', 'output', 3);
                 await typeText('------------------------------------', 'output', 1);
                 await typeText('ДОСТУПНЫЕ ЦЕЛИ ДЛЯ TRACE:', 'output', 5);
                 await typeText('> TRACE V9-HX', 'output', 8);
