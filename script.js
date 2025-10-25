@@ -85,41 +85,58 @@ function login() {
         }, 800);
     } else {
         console.log('❌ ОШИБКА ВХОДА!');
-        // ОШИБКА - НАСТОЯЩИЙ ГЛИТЧ С РАЗРЫВАМИ
+        // ОШИБКА - МЕГА-ГЛИТЧ С РАЗРЫВАМИ
         errorElement.textContent = 'ДОСТУП ЗАПРЕЩЁН';
         errorElement.style.color = '#ff0000';
         errorElement.classList.remove('hidden');
         
-        // Создаем элементы глитча
-        const scanline = document.createElement('div');
-        scanline.className = 'glitch-scanline';
-        
-        const noise = document.createElement('div');
-        noise.className = 'glitch-noise';
-        
-        document.body.appendChild(scanline);
-        document.body.appendChild(noise);
-        
-        // Запускаем мега-глитч
-        document.body.classList.add('glitch');
-        
-        // Увеличиваем время глитча
-        setTimeout(() => {
-            document.body.classList.remove('glitch');
-            // Удаляем элементы глитча
-            document.body.removeChild(scanline);
-            document.body.removeChild(noise);
-        }, 1000); // Глитч длится 1 секунду
+        // Запускаем мега-глитч эффекты
+        activateMegaGlitch();
         
         document.getElementById('password').value = '';
         document.getElementById('username').focus();
     }
 }
 
-// Функция для звукового эффекта (опционально)
+// Функция мега-глитча
+function activateMegaGlitch() {
+    // Создаем элементы глитча
+    const scanline = document.createElement('div');
+    scanline.className = 'glitch-scanline';
+    
+    const noise = document.createElement('div');
+    noise.className = 'glitch-noise';
+    
+    document.body.appendChild(scanline);
+    document.body.appendChild(noise);
+    
+    // Добавляем тряску
+    document.body.classList.add('glitch-shake');
+    
+    // Запускаем основной глитч
+    document.body.classList.add('glitch');
+    
+    // Звуковой эффект
+    playErrorSound();
+    
+    // Убираем эффекты через 1 секунду
+    setTimeout(() => {
+        document.body.classList.remove('glitch');
+        document.body.classList.remove('glitch-shake');
+        
+        // Удаляем созданные элементы
+        if (document.body.contains(scanline)) {
+            document.body.removeChild(scanline);
+        }
+        if (document.body.contains(noise)) {
+            document.body.removeChild(noise);
+        }
+    }, 1000);
+}
+
+// Функция для звукового эффекта
 function playErrorSound() {
     try {
-        // Создаем бип-звук через Web Audio API
         const audioContext = new (window.AudioContext || window.webkitAudioContext)();
         const oscillator = audioContext.createOscillator();
         const gainNode = audioContext.createGain();
