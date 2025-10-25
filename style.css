@@ -446,7 +446,7 @@ body {
     display: none !important;
 }
 
-/* НАСТОЯЩИЙ ГЛИТЧ С РАЗРЫВАМИ ЭКРАНА */
+/* МЕГА-ГЛИТЧ С РАЗРЫВАМИ ЭКРАНА */
 .glitch {
     position: relative;
     overflow: hidden;
@@ -461,7 +461,6 @@ body {
     width: 100%;
     height: 100%;
     background: inherit;
-    transform: translateX(0);
 }
 
 .glitch::before {
@@ -469,6 +468,7 @@ body {
     clip-path: polygon(0 0, 100% 0, 100% 35%, 0 35%);
     background: #ff0000;
     mix-blend-mode: difference;
+    opacity: 0.7;
 }
 
 .glitch::after {
@@ -476,6 +476,7 @@ body {
     clip-path: polygon(0 65%, 100% 65%, 100% 100%, 0 100%);
     background: #00ff41;
     mix-blend-mode: difference;
+    opacity: 0.7;
 }
 
 @keyframes glitch-1 {
@@ -572,26 +573,27 @@ body {
     }
 }
 
-/* Дополнительные эффекты разрыва */
+/* Сканирующая линия */
 .glitch-scanline {
-    position: absolute;
+    position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 2px;
     background: #00ff41;
-    animation: scanline 0.1s linear infinite;
-    z-index: 1000;
+    animation: scanline 0.5s linear;
+    z-index: 9999;
+    box-shadow: 0 0 10px #00ff41;
 }
 
 @keyframes scanline {
-    0% { top: 0; }
-    100% { top: 100%; }
+    0% { top: 0; opacity: 1; }
+    100% { top: 100vh; opacity: 0; }
 }
 
-/* Эффект цифрового шума */
+/* Цифровой шум */
 .glitch-noise {
-    position: absolute;
+    position: fixed;
     top: 0;
     left: 0;
     width: 100%;
@@ -603,11 +605,24 @@ body {
     animation: noise 0.1s infinite;
     opacity: 0.3;
     mix-blend-mode: overlay;
+    pointer-events: none;
+    z-index: 9998;
 }
 
 @keyframes noise {
     0% { transform: translate(0,0); }
     100% { transform: translate(10px,10px); }
+}
+
+/* Дополнительная тряска */
+@keyframes screen-shake {
+    0%, 100% { transform: translateX(0); }
+    10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+    20%, 40%, 60%, 80% { transform: translateX(5px); }
+}
+
+.glitch-shake {
+    animation: screen-shake 0.5s;
 }
 
 /* Стили терминала */
