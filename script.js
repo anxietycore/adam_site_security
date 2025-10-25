@@ -98,9 +98,22 @@ function login() {
     }
 }
 
-// Функция АДСКОГО глитча
+// Функция АДСКОГО глитча с разрушением окна логина
 function activateHellGlitch() {
-    // Создаем все элементы глитча
+    const loginForm = document.querySelector('.login-form');
+    const errorElement = document.getElementById('login-error');
+    
+    console.log('❌ АКТИВАЦИЯ АДСКОГО ГЛИТЧА ОКНА ЛОГИНА!');
+    
+    // ОШИБКА - АДСКИЙ ГЛИТЧ
+    errorElement.textContent = 'ДОСТУП ЗАПРЕЩЁН';
+    errorElement.style.color = '#ff0000';
+    errorElement.classList.remove('hidden');
+    
+    // Запускаем разрушение окна логина
+    destroyLoginForm(loginForm);
+    
+    // Остальные эффекты глитча
     const layers = [
         createGlitchElement('glitch-layer glitch-layer-1'),
         createGlitchElement('glitch-layer glitch-layer-2'),
@@ -114,9 +127,8 @@ function activateHellGlitch() {
     document.body.classList.add('rgb-split');
     
     // Глитч текста ошибки
-    const errorText = document.getElementById('login-error');
-    errorText.classList.add('text-glitch');
-    errorText.setAttribute('data-text', errorText.textContent);
+    errorElement.classList.add('text-glitch');
+    errorElement.setAttribute('data-text', errorElement.textContent);
     
     // Звуковой эффект
     playHellSound();
@@ -131,10 +143,13 @@ function activateHellGlitch() {
     
     // Убираем эффекты через 1.5 секунды
     setTimeout(() => {
+        // Восстанавливаем окно логина
+        restoreLoginForm(loginForm);
+        
         // Убираем классы
         document.body.classList.remove('screen-shake');
         document.body.classList.remove('rgb-split');
-        errorText.classList.remove('text-glitch');
+        errorElement.classList.remove('text-glitch');
         
         // Убираем фильтры
         document.body.style.filter = 'none';
@@ -150,6 +165,110 @@ function activateHellGlitch() {
         clearInterval(flashInterval);
         
     }, 1500);
+}
+
+// Разрушение окна логина
+function destroyLoginForm(loginForm) {
+    if (!loginForm) return;
+    
+    // Сохраняем оригинальные стили
+    loginForm.setAttribute('data-original-style', loginForm.getAttribute('style') || '');
+    loginForm.setAttribute('data-original-class', loginForm.className);
+    
+    // Добавляем класс безумия
+    loginForm.className = 'login-form login-form-glitch';
+    
+    // Глитч всех текстовых элементов
+    const textElements = loginForm.querySelectorAll('p, label, button, input');
+    textElements.forEach(el => {
+        el.classList.add('login-text-glitch');
+    });
+    
+    // Глитч кнопки
+    const loginBtn = document.getElementById('login-btn');
+    if (loginBtn) {
+        loginBtn.classList.add('btn-madness');
+    }
+    
+    // Глитч инпутов
+    const inputs = loginForm.querySelectorAll('input');
+    inputs.forEach(input => {
+        input.classList.add('input-madness');
+    });
+    
+    // Создаем осколки окна
+    createLoginPieces(loginForm);
+}
+
+// Создание осколков окна
+function createLoginPieces(loginForm) {
+    const rect = loginForm.getBoundingClientRect();
+    const pieces = 8; // Количество осколков
+    
+    for (let i = 0; i < pieces; i++) {
+        const piece = document.createElement('div');
+        piece.className = 'login-piece';
+        
+        // Случайные модификаторы для анимации
+        piece.style.setProperty('--x-mod', `${Math.random() * 100 - 50}px`);
+        piece.style.setProperty('--y-mod', `${Math.random() * 100 - 50}px`);
+        piece.style.setProperty('--rot-mod', `${Math.random() * 180 - 90}deg`);
+        
+        // Случайные размеры и позиция
+        const width = rect.width / 3 + Math.random() * 50;
+        const height = rect.height / 3 + Math.random() * 30;
+        const left = rect.left + Math.random() * rect.width;
+        const top = rect.top + Math.random() * rect.height;
+        
+        piece.style.width = `${width}px`;
+        piece.style.height = `${height}px`;
+        piece.style.left = `${left}px`;
+        piece.style.top = `${top}px`;
+        
+        document.body.appendChild(piece);
+        
+        // Удаляем осколок через время
+        setTimeout(() => {
+            if (document.body.contains(piece)) {
+                document.body.removeChild(piece);
+            }
+        }, 2000);
+    }
+}
+
+// Восстановление окна логина
+function restoreLoginForm(loginForm) {
+    if (!loginForm) return;
+    
+    // Восстанавливаем оригинальные стили
+    const originalStyle = loginForm.getAttribute('data-original-style');
+    const originalClass = loginForm.getAttribute('data-original-class');
+    
+    if (originalStyle) {
+        loginForm.setAttribute('style', originalStyle);
+    } else {
+        loginForm.removeAttribute('style');
+    }
+    
+    if (originalClass) {
+        loginForm.className = originalClass;
+    }
+    
+    // Убираем классы безумия
+    const textElements = loginForm.querySelectorAll('p, label, button, input');
+    textElements.forEach(el => {
+        el.classList.remove('login-text-glitch');
+    });
+    
+    const loginBtn = document.getElementById('login-btn');
+    if (loginBtn) {
+        loginBtn.classList.remove('btn-madness');
+    }
+    
+    const inputs = loginForm.querySelectorAll('input');
+    inputs.forEach(input => {
+        input.classList.remove('input-madness');
+    });
 }
 
 // Создание элемента глитча
