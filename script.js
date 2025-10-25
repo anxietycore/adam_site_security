@@ -85,26 +85,31 @@ function login() {
         }, 800);
     } else {
         console.log('❌ ОШИБКА ВХОДА!');
-        // ОШИБКА - МЕГА-ГЛИТЧ + "ДОСТУП ЗАПРЕЩЁН" красным
+        // ОШИБКА - НАСТОЯЩИЙ ГЛИТЧ С РАЗРЫВАМИ
         errorElement.textContent = 'ДОСТУП ЗАПРЕЩЁН';
         errorElement.style.color = '#ff0000';
         errorElement.classList.remove('hidden');
         
-        // Запускаем убер-глитч
+        // Создаем элементы глитча
+        const scanline = document.createElement('div');
+        scanline.className = 'glitch-scanline';
+        
+        const noise = document.createElement('div');
+        noise.className = 'glitch-noise';
+        
+        document.body.appendChild(scanline);
+        document.body.appendChild(noise);
+        
+        // Запускаем мега-глитч
         document.body.classList.add('glitch');
         
-        // Добавляем звуковой эффект (опционально)
-        playErrorSound();
-        
-        // Увеличиваем время глитча и добавляем доп эффекты
+        // Увеличиваем время глитча
         setTimeout(() => {
             document.body.classList.remove('glitch');
-            // Добавляем дополнительную тряску после глитча
-            document.body.style.animation = 'screen-shake 0.3s';
-            setTimeout(() => {
-                document.body.style.animation = '';
-            }, 300);
-        }, 800); // Глитч длится 0.8 секунд
+            // Удаляем элементы глитча
+            document.body.removeChild(scanline);
+            document.body.removeChild(noise);
+        }, 1000); // Глитч длится 1 секунду
         
         document.getElementById('password').value = '';
         document.getElementById('username').focus();
