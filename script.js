@@ -18,7 +18,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     console.log('DOM загружен');
     
-    // Остальной код без изменений...
+    // Обработчик кнопки запуска
     document.getElementById('start-btn').addEventListener('click', function() {
         console.log('Кнопка запуска нажата');
         startBootSequence();
@@ -85,14 +85,52 @@ function login() {
         }, 800);
     } else {
         console.log('❌ ОШИБКА ВХОДА!');
-        // ОШИБКА - глитч + "ДОСТУП ЗАПРЕЩЁН" красным
+        // ОШИБКА - МЕГА-ГЛИТЧ + "ДОСТУП ЗАПРЕЩЁН" красным
         errorElement.textContent = 'ДОСТУП ЗАПРЕЩЁН';
         errorElement.style.color = '#ff0000';
         errorElement.classList.remove('hidden');
+        
+        // Запускаем убер-глитч
         document.body.classList.add('glitch');
-        setTimeout(() => document.body.classList.remove('glitch'), 300);
+        
+        // Добавляем звуковой эффект (опционально)
+        playErrorSound();
+        
+        // Увеличиваем время глитча и добавляем доп эффекты
+        setTimeout(() => {
+            document.body.classList.remove('glitch');
+            // Добавляем дополнительную тряску после глитча
+            document.body.style.animation = 'screen-shake 0.3s';
+            setTimeout(() => {
+                document.body.style.animation = '';
+            }, 300);
+        }, 800); // Глитч длится 0.8 секунд
         
         document.getElementById('password').value = '';
         document.getElementById('username').focus();
+    }
+}
+
+// Функция для звукового эффекта (опционально)
+function playErrorSound() {
+    try {
+        // Создаем бип-звук через Web Audio API
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        oscillator.frequency.setValueAtTime(150, audioContext.currentTime);
+        oscillator.frequency.exponentialRampToValueAtTime(50, audioContext.currentTime + 0.3);
+        
+        gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+        
+        oscillator.start();
+        oscillator.stop(audioContext.currentTime + 0.3);
+    } catch (e) {
+        console.log('Audio not supported');
     }
 }
