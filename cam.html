@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { 
+            background: #0a0a0a; 
+            margin: 0; 
+            font-family: 'Courier New'; 
+            color: #ccc;
+        }
+        .monitor {
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            height: 100vh;
+        }
+        .main-screen {
+            background: #000;
+            position: relative;
+            border: 3px solid #333;
+            margin: 20px;
+        }
+        .camera-list {
+            background: #111;
+            padding: 20px;
+            border-left: 2px solid #333;
+            overflow-y: auto;
+        }
+        .camera-btn {
+            background: #222;
+            color: #ccc;
+            border: 1px solid #444;
+            padding: 15px;
+            margin: 5px 0;
+            cursor: pointer;
+            width: 100%;
+            text-align: left;
+        }
+        .camera-btn:hover {
+            background: #333;
+            border-color: #666;
+        }
+        .camera-btn.active {
+            background: #003300;
+            border-color: #00cc00;
+        }
+        .timestamp {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            color: #0f0;
+            font-size: 14px;
+        }
+        .camera-status {
+            color: #0f0;
+            position: absolute;
+            top: 10px;
+            right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="monitor">
+        <div class="main-screen" id="mainScreen">
+            <div class="camera-status">● LIVE</div>
+            <video id="mainVideo" width="100%" height="100%" controls></video>
+            <div class="timestamp" id="timestamp">00:00:00</div>
+        </div>
+        
+        <div class="camera-list">
+            <h3>СИСТЕМА НАБЛЮДЕНИЯ A.D.A.M.</h3>
+            <div class="camera-btn" data-video="cam1.mp4">CAM-001 • Сектор 3-D Марс</div>
+            <div class="camera-btn" data-video="cam2.mp4">CAM-002 • Лаборатория HELIX</div>
+            <div class="camera-btn" data-video="cam3.mp4">CAM-003 • Криокамера Йохана</div>
+            <div class="camera-btn" data-video="cam4.mp4">CAM-004 • Архив MONOLITH</div>
+            <div class="camera-btn" data-video="cam5.mp4">CAM-005 • Зона KATARHEY</div>
+            <!-- и т.д. -->
+        </div>
+    </div>
+
+    <script>
+        const cameras = [
+            { id: 'CAM-001', video: 'videos/mars_corridor.mp4', status: 'LIVE', location: 'Сектор 3-D Марс' },
+            { id: 'CAM-002', video: 'videos/helix_lab.mp4', status: 'REC', location: 'Лаборатория HELIX' },
+            { id: 'CAM-003', video: 'videos/cryo_chamber.mp4', status: 'ERROR', location: 'Криокамера Йохана' },
+            { id: 'CAM-004', video: 'videos/monolith_archive.mp4', status: 'LIVE', location: 'Архив MONOLITH' },
+            { id: 'CAM-005', video: 'videos/katarhey_zone.mp4', status: 'STATIC', location: 'Зона KATARHEY' }
+        ];
+
+        // Логика переключения камер
+        document.querySelectorAll('.camera-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const videoSrc = this.getAttribute('data-video');
+                document.getElementById('mainVideo').src = videoSrc;
+                
+                // Обновляем timestamp
+                setInterval(() => {
+                    const now = new Date();
+                    document.getElementById('timestamp').textContent = 
+                        now.toISOString().substr(11, 8);
+                }, 1000);
+            });
+        });
+    </script>
+</body>
+</html>
