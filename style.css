@@ -208,377 +208,197 @@ body {
     animation-delay: 18s;
 }
 
-/* ГЛИТЧ-ЭФФЕКТЫ ДЛЯ ВСЕГО ЭКРАНА */
-body::before {
-    content: '';
+/* Экран запуска */
+#start-screen {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background: linear-gradient(rgba(0, 255, 65, 0.03) 50%, rgba(0, 0, 0, 0.03) 50%);
-    background-size: 100% 4px;
-    z-index: 1000;
-    pointer-events: none;
-    opacity: 0.3;
-    animation: scanline 8s linear infinite;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: black;
+    z-index: 20;
 }
 
-@keyframes scanline {
-    0% { transform: translateY(0px); }
-    100% { transform: translateY(100vh); }
+.start-message {
+    text-align: center;
 }
 
-/* СЛУЧАЙНЫЕ ГЛИТЧ-ВСПЫШКИ */
-@keyframes glitchFlash {
-    0% { opacity: 0; }
-    5% { opacity: 0.3; }
-    10% { opacity: 0; }
-    100% { opacity: 0; }
+#start-btn {
+    background: black;
+    border: 1px solid #00FF41;
+    color: #00FF41;
+    padding: 15px 30px;
+    margin-top: 30px;
+    cursor: pointer;
+    font-family: 'Courier New', monospace;
+    text-transform: uppercase;
+    font-size: 16px;
 }
 
-.glitch-flash {
+#start-btn:hover {
+    background: #00FF41;
+    color: black;
+}
+
+/* Экран загрузки */
+#boot-screen {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background: #ff0000;
-    z-index: 999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: black;
+    z-index: 10;
+}
+
+.boot-message {
+    text-align: left;
+}
+
+.logo pre {
+    font-size: 12px;
+    margin-bottom: 30px;
+    text-align: center;
+}
+
+/* Скрываем текст загрузки изначально и делаем плавное появление */
+#boot-screen .boot-text p {
     opacity: 0;
-    pointer-events: none;
-    animation: glitchFlash 0.3s ease-out;
+    margin: 10px 0;
+    transition: opacity 0.5s ease-in-out;
 }
 
-/* ТЕРМИНАЛ */
-.terminal-container {
-    width: 100vw;
-    height: 100vh;
-    padding: 20px;
-    overflow-y: auto;
-    background: #000;
-    position: relative;
+/* Экран логина */
+#login-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: black;
+    z-index: 5;
 }
 
-#terminal {
-    max-width: 900px;
-    margin: 0 auto;
-    line-height: 1.4;
+.login-form {
+    text-align: center;
+    border: 1px solid #00FF41;
+    padding: 30px;
+    background: rgba(0, 0, 0, 0.8);
+}
+
+.login-prompt {
+    font-size: 18px;
+    margin-bottom: 20px;
+    text-transform: uppercase;
+}
+
+.input-group {
+    margin: 15px 0;
+    text-align: left;
+}
+
+.input-group label {
+    display: block;
+    margin-bottom: 5px;
     font-size: 14px;
-    position: relative;
-    z-index: 1;
+}
+
+.input-group input {
+    width: 250px;
+    background: black;
+    border: 1px solid #00FF41;
+    color: #00FF41;
+    padding: 8px;
+    font-family: 'Courier New', monospace;
+    outline: none;
+}
+
+.input-group input:focus {
+    border-color: #00FF41;
+    box-shadow: 0 0 10px #00FF41;
+}
+
+#login-btn {
+    background: black;
+    border: 1px solid #00FF41;
+    color: #00FF41;
+    padding: 10px 20px;
+    margin-top: 15px;
+    cursor: pointer;
+    font-family: 'Courier New', monospace;
+    text-transform: uppercase;
+}
+
+#login-btn:hover {
+    background: #00FF41;
+    color: black;
+}
+
+.error {
+    color: #ff0000;
+    margin-top: 10px;
+    font-size: 14px;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* Стили терминала */
+#terminal {
+    padding: 20px;
+    height: 100vh;
+    overflow-y: auto;
+    background: #0a0a0a;
 }
 
 .output {
-    margin-bottom: 5px;
-    text-shadow: 0 0 5px currentColor;
-    position: relative;
+    margin: 5px 0;
+    white-space: pre-wrap;
+    line-height: 1.4;
 }
 
 .command {
-    color: #00FF41;
-    font-weight: bold;
-    margin-bottom: 10px;
+    color: #FFFFFF;
+    margin: 5px 0;
+    line-height: 1.4;
+}
+
+.error {
+    color: #FF0000;
+    margin: 5px 0;
+    line-height: 1.4;
 }
 
 .input-line {
     display: flex;
     align-items: center;
-    margin-bottom: 5px;
-    position: relative;
+    margin: 10px 0;
 }
 
 .prompt {
     color: #00FF41;
-    margin-right: 8px;
-    font-weight: bold;
 }
 
 .cmd {
     color: #FFFFFF;
-    flex-grow: 1;
 }
 
 .cursor {
-    color: #00FF41;
-    animation: blink 1s infinite;
+    animation: blink 1s step-end infinite;
+    background-color: #00FF41;
     margin-left: 2px;
-    font-weight: bold;
 }
 
 @keyframes blink {
-    0%, 50% { opacity: 1; }
-    51%, 100% { opacity: 0; }
-}
-
-/* ЭФФЕКТЫ ДЕГРАДАЦИИ */
-.degradation-low {
-    text-shadow: 0 0 10px #00FF41;
-}
-
-.degradation-medium {
-    text-shadow: 0 0 15px #FFFF00, 0 0 5px #FF4444;
-    animation: textFlicker 2s infinite;
-}
-
-.degradation-high {
-    text-shadow: 0 0 20px #ff0000, 0 0 10px #ff0066;
-    animation: textGlitch 0.5s infinite;
-}
-
-@keyframes textFlicker {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.8; }
-}
-
-@keyframes textGlitch {
-    0% { transform: translateX(0); }
-    25% { transform: translateX(-1px); }
-    50% { transform: translateX(1px); }
-    75% { transform: translateX(-1px); }
-    100% { transform: translateX(0); }
-}
-
-/* СТИЛИ ДЛЯ КНОПОК АУДИО */
-button {
-    background: #333;
-    color: #00FF41;
-    border: 1px solid #00FF41;
-    padding: 5px 10px;
-    cursor: pointer;
-    font-family: 'Courier New', monospace;
-    font-size: 12px;
-    transition: all 0.3s ease;
-    text-shadow: 0 0 5px #00FF41;
-}
-
-button:hover {
-    background: #00FF41;
-    color: #000;
-    box-shadow: 0 0 10px #00FF41;
-}
-
-button:active {
-    transform: scale(0.95);
-}
-
-/* СКРОЛЛБАР */
-::-webkit-scrollbar {
-    width: 8px;
-}
-
-::-webkit-scrollbar-track {
-    background: #000;
-}
-
-::-webkit-scrollbar-thumb {
-    background: #00FF41;
-    border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-    background: #00cc33;
-    box-shadow: 0 0 10px #00FF41;
-}
-
-/* АДАПТИВНОСТЬ */
-@media (max-width: 768px) {
-    .terminal-container {
-        padding: 10px;
-    }
-    
-    #terminal {
-        font-size: 12px;
-    }
-}
-
-/* ЭФФЕКТЫ ПРИ ВЫСОКОЙ ДЕГРАДАЦИИ */
-.corrupted-text {
-    position: relative;
-    display: inline-block;
-}
-
-.corrupted-text::before {
-    content: attr(data-text);
-    position: absolute;
-    left: 2px;
-    text-shadow: -2px 0 #ff0000;
-    top: 0;
-    color: #00FF41;
-    background: #000;
-    overflow: hidden;
-    clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
-    animation: corruption 2s infinite linear alternate-reverse;
-}
-
-@keyframes corruption {
-    0% { clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%); }
-    50% { clip-path: polygon(0 10%, 100% 10%, 100% 20%, 0 20%); }
-    100% { clip-path: polygon(0 50%, 100% 50%, 100% 100%, 0 100%); }
-}
-
-/* ЖЕСТКИЕ ГЛИТЧ-ЭФФЕКТЫ */
-@keyframes hardGlitch {
-    0% { transform: translate(0); filter: hue-rotate(0deg); }
-    10% { transform: translate(-2px, 2px); filter: hue-rotate(90deg); }
-    20% { transform: translate(2px, -2px); filter: hue-rotate(180deg); }
-    30% { transform: translate(-3px, 1px); filter: hue-rotate(270deg); }
-    40% { transform: translate(1px, -3px); filter: hue-rotate(360deg); }
-    50% { transform: translate(-1px, 3px); filter: hue-rotate(45deg); }
-    60% { transform: translate(3px, -1px); filter: hue-rotate(135deg); }
-    70% { transform: translate(-2px, 2px); filter: hue-rotate(225deg); }
-    80% { transform: translate(2px, -2px); filter: hue-rotate(315deg); }
-    90% { transform: translate(-1px, 1px); filter: hue-rotate(0deg); }
-    100% { transform: translate(0); filter: hue-rotate(0deg); }
-}
-
-.hard-glitch {
-    animation: hardGlitch 0.5s infinite;
-    color: #ff0000 !important;
-    text-shadow: 0 0 20px #ff0000, 0 0 30px #ff0066 !important;
-}
-
-/* ЭФФЕКТ РАЗРУШЕНИЯ ЭКРАНА */
-@keyframes screenCrash {
-    0% { filter: brightness(1) contrast(1); }
-    10% { filter: brightness(1.5) contrast(2); }
-    20% { filter: brightness(0.5) contrast(0.5); }
-    30% { filter: brightness(2) contrast(3) hue-rotate(180deg); }
-    40% { filter: brightness(0.3) contrast(0.3) hue-rotate(90deg); }
-    50% { filter: brightness(3) contrast(4) hue-rotate(270deg); }
-    60% { filter: brightness(0.2) contrast(0.2) hue-rotate(0deg); }
-    70% { filter: brightness(4) contrast(5) hue-rotate(360deg); }
-    80% { filter: brightness(0.1) contrast(0.1); }
-    90% { filter: brightness(5) contrast(6); }
-    100% { filter: brightness(0) contrast(0); }
-}
-
-.screen-crash {
-    animation: screenCrash 2s forwards;
-}
-
-/* ЭФФЕКТ КРОВОТОЧЕНИЯ ТЕКСТА */
-.bleeding-text {
-    position: relative;
-    color: #ff0000 !important;
-    text-shadow: 
-        0 0 10px #ff0000,
-        0 0 20px #ff0000,
-        0 0 30px #ff0000,
-        0 0 40px #ff0000 !important;
-}
-
-.bleeding-text::after {
-    content: '';
-    position: absolute;
-    bottom: -5px;
-    left: 0;
-    width: 100%;
-    height: 2px;
-    background: linear-gradient(90deg, transparent, #ff0000, transparent);
-    animation: bleed 3s infinite;
-}
-
-@keyframes bleed {
-    0% { transform: translateX(-100%); opacity: 0; }
-    50% { transform: translateX(0%); opacity: 1; }
-    100% { transform: translateX(100%); opacity: 0; }
-}
-
-/* ЭФФЕКТ ЦИФРОВОГО ШУМА */
-.digital-noise {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: 
-        repeating-linear-gradient(0deg, 
-            rgba(0, 0, 0, 0.15) 0px, 
-            rgba(0, 0, 0, 0.15) 1px, 
-            transparent 1px, 
-            transparent 2px);
-    pointer-events: none;
-    z-index: 1001;
-    opacity: 0;
-    animation: noiseFlicker 0.1s infinite;
-}
-
-@keyframes noiseFlicker {
-    0%, 100% { opacity: 0.1; }
-    50% { opacity: 0.3; }
-}
-
-/* КРИТИЧЕСКИЕ ГЛИТЧИ - БЕЗ СПАМА */
-.critical-glitch {
-    position: relative;
-    overflow: hidden;
-    background: linear-gradient(45deg, #ff0000 25%, transparent 25%, transparent 50%, #ff0000 50%, #ff0000 75%, transparent 75%);
-    background-size: 10px 10px;
-    animation: criticalFlash 0.5s infinite;
-}
-
-@keyframes criticalFlash {
-    0%, 100% { opacity: 0.3; }
-    50% { opacity: 0.8; }
-}
-
-/* ЭФФЕКТ МИГАЮЩЕГО ТЕКСТА ПРИ КРИТИЧЕСКОМ СОСТОЯНИИ */
-.critical-text {
-    animation: criticalPulse 0.3s infinite;
-    color: #ff0000 !important;
-    font-weight: bold;
-}
-
-@keyframes criticalPulse {
-    0%, 100% { 
-        text-shadow: 0 0 10px #ff0000, 0 0 20px #ff0000;
-        opacity: 1;
-    }
-    50% { 
-        text-shadow: 0 0 5px #ff0000, 0 0 10px #ff0000;
-        opacity: 0.7;
-    }
-}
-
-/* ЭФФЕКТ ДРОЖАНИЯ ЭКРАНА */
-@keyframes screenShake {
-    0% { transform: translate(0, 0) rotate(0); }
-    10% { transform: translate(-2px, -2px) rotate(-0.5deg); }
-    20% { transform: translate(2px, 2px) rotate(0.5deg); }
-    30% { transform: translate(-3px, 1px) rotate(-0.3deg); }
-    40% { transform: translate(3px, -1px) rotate(0.3deg); }
-    50% { transform: translate(-1px, 3px) rotate(-0.2deg); }
-    60% { transform: translate(1px, -3px) rotate(0.2deg); }
-    70% { transform: translate(-2px, 2px) rotate(-0.1deg); }
-    80% { transform: translate(2px, -2px) rotate(0.1deg); }
-    90% { transform: translate(-1px, 1px) rotate(-0.05deg); }
-    100% { transform: translate(0, 0) rotate(0); }
-}
-
-.screen-shake {
-    animation: screenShake 0.5s infinite;
-}
-
-/* ЗАВЕРШАЮЩИЕ СТИЛИ ДЛЯ ТЕРМИНАЛА */
-.terminal-warning {
-    border: 2px solid #ff0000;
-    padding: 10px;
-    margin: 10px 0;
-    background: rgba(255, 0, 0, 0.1);
-    animation: warningPulse 2s infinite;
-}
-
-@keyframes warningPulse {
-    0%, 100% { border-color: #ff0000; box-shadow: 0 0 10px #ff0000; }
-    50% { border-color: #ff4444; box-shadow: 0 0 20px #ff0000; }
-}
-
-.system-alert {
-    background: linear-gradient(45deg, #330000, #660000, #330000);
-    border-left: 4px solid #ff0000;
-    padding: 8px 12px;
-    margin: 5px 0;
-    color: #ff6666;
-    text-shadow: 0 0 5px #ff0000;
+    50% { opacity: 0; }
 }
