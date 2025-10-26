@@ -744,7 +744,7 @@ if (dossier.audio) {
         document.getElementById(`audioStatus_${uniqueId}`).style.color = '#FF4444';
     });
 }
-        
+    }
     // Функция для открытия заметок
     async function openNote(noteId) {
         const notes = {
