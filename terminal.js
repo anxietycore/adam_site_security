@@ -309,335 +309,402 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Функция для отображения досье субъектов
-async function showSubjectDossier(subjectId) {
-    const dossiers = {
-        '0X001': {
-            name: 'ERICH VAN KOSS',
-            role: 'Руководитель программы VIGIL-9 / Исследователь миссии MARS',
-            status: 'СВЯЗЬ ОТСУТСТВУЕТ',
-            outcome: [
-                'Зафиксирована несанкционированная передача данных внешним структурам (FBI).',
-                'Субъект предпринял попытку уничтожения маяка в секторе 3-D.',
-                'Телеметрия прервана, дальнейшее наблюдение невозможно.'
-            ],
-            report: [
-                'Классификация инцидента: SABOTAGE-3D.',
-                'Рекомендовано аннулирование личных протоколов и перенос архивов в OBSERVER.'
-            ],
-            documents: [
-                '/arch/mars/erich_log.pdf',
-                '/arch/mars/transcript_v9.txt'
-            ],
-            missions: 'MARS, OBSERVER'
-        },
-        '0X2E7': {
-            name: 'JOHAN VAN KOSS',
-            role: 'Тестовый субъект V9-MR / Сын Эриха Ван Косса',
-            status: 'СВЯЗЬ ОТСУТСТВУЕТ',
-            outcome: [
-                'После инцидента MARS зафиксировано устойчивое излучение из зоны криоструктуры.',
-                'Сигнатура нейроволн совпадает с профилем субъекта.',
-                'Инициирована установка маяка для фиксации остаточного сигнала.'
-            ],
-            report: [
-                'Активность нейросети перестала фиксироваться.'
-            ],
-            documents: [
-                '/arch/mars/signal_map.png',
-                '/arch/mars/johan_profile.xml'
-            ],
-            missions: 'MARS, MONOLITH'
-        },
-        '0X095': {
-    name: 'SUBJECT-095',
-    role: 'Тест нейроплантов серии KATARHEY', 
-    status: 'МЁРТВ',
-    outcome: [
-        'Зафиксированы следы ФАНТОМА.',
-        'Субъект выдержал 3ч 12м, проявил острый психоз. Открыл капсулу, погиб вследствие термической декомпрессии (7.81с).',
-        'Тест признан неуспешным.'
-    ],
-    report: [
-        'Рекомендовано ограничить тесты KATARHEY до категории ALPHA-4.'
-    ],
-    documents: [
-        '/arch/katarhey/audio_095.wav',
-        '/arch/katarhey/logs/095_transmission.txt'
-    ],
-    missions: 'KATARHEY',
-    // НОВОЕ ПОЛЕ - АУДИОЗАПИСЬ
-    audio: 'sounds/rnd_scr5.mp3',
-    audioDescription: 'Последняя запись субъекта - психоз и крики'
-},
-        '0XF00': {
-            name: 'SUBJECT-PHANTOM',
-            role: 'Экспериментальный субъект / протокол KATARHEY',
-            status: 'АНОМАЛИЯ',
-            outcome: [
-                'Продержался 5ч 31м. Связь утрачена.',
-                'Зафиксирована автономная активность в сетевых узлах после разрыва канала.',
-                'Возможна самоорганизация цифрового остатка.'
-            ],
-            report: [
-                'Объект классифицирован как независимая сущность.',
-                'Вмешательство запрещено. Файл перенесён в зону наблюдения.'
-            ],
-            documents: [
-                '/arch/katarhey/phantom_spectrum.bin'
-            ],
-            missions: 'KATARHEY'
-        },
-        '0XA52': {
-            name: 'SUBJECT-A52',
-            role: 'Химический аналитик / Полевая группа MELANCHOLIA',
-            status: 'СВЯЗЬ ОТСУТСТВУЕТ',
-            outcome: [
-                'Под действием психоактивного сигнала субъект начал идентифицировать себя как элемент системы A.D.A.M.',
-                'После 47 минут связь прервана, но интерфейс продолжил отвечать от имени A52.'
-            ],
-            report: [
-                'Вероятно, произошло слияние когнитивных структур субъекта с управляющим кодом MEL.',
-                'Контакт невозможен.'
-            ],
-            documents: [
-                '/arch/melancholia/a52_record.txt'
-            ],
-            missions: 'MEL, OBSERVER'
-        },
-        '0XE0C': {
-            name: 'SUBJECT-E0C',
-            role: 'Полевой биолог / экспедиция EOCENE',
-            status: 'МЁРТВ',
-            outcome: [
-                'Зафиксированы первые признаки регенерации флоры после катастрофы Пермского цикла.',
-                'Обнаружены структуры роста, не свойственные эпохе эоцена.',
-                'Последняя запись: "они дышат синхронно".'
-            ],
-            report: [
-                'Возможна перекрёстная временная контаминация между PERMIAN и EOCENE.',
-                'Экспедиция закрыта.'
-            ],
-            documents: [
-                '/arch/eocene/logs/e0c_field.txt',
-                '/arch/eocene/photo_cluster.jpg'
-            ],
-            missions: 'EOCENE, PERMIAN'
-        },
-        '0X5E4': {
-            name: 'SUBJECT-5E4',
-            role: 'Исследователь временных срезов (PERMIAN)',
-            status: 'МЁРТВ',
-            outcome: [
-                'После активации катализатора атмосфера воспламенилась метаном.',
-                'Атмосферный цикл обнулён. Субъект не идентифицирован.'
-            ],
-            report: [
-                'Эксперимент признан неконтролируемым.',
-                'Временной слой PERMIAN изъят из программы наблюдения.'
-            ],
-            documents: [
-                '/arch/permian/permian_report.pdf',
-                '/arch/permian/photo_001.jpg'
-            ],
-            missions: 'PERMIAN, CARBON'
-        },
-        '0X413': {
-            name: 'SUBJECT-413',
-            role: 'Исследователь внеземной экосистемы (EX-413)',
-            status: 'МЁРТВ',
-            outcome: [
-                'Поверхность планеты представляла собой живой организм.',
-                'Экипаж поглощён. Зафиксирована передача сигналов через изменённый геном субъекта.'
-            ],
-            report: [
-                'Сектор EX-413 закрыт. Код ДНК использован в эксперименте HELIX.'
-            ],
-            documents: [
-                '/arch/ex413/logs/biofeedback.txt'
-            ],
-            missions: 'EX-413'
-        },
-        '0XC19': {
-            name: 'SUBJECT-C19',
-            role: 'Переносчик образца / Контакт с биоформой',
-            status: 'МЁРТВ',
-            outcome: [
-                'Организм использован как контейнер для спорообразной массы неизвестного происхождения.',
-                'После возвращения субъекта в лабораторию зафиксировано перекрёстное заражение трёх исследовательских блоков.'
-            ],
-            report: [
-                'Классификация угрозы: BIO-CLASS Θ.',
-                'Все данные проекта CARBON изолированы и зашифрованы.'
-            ],
-            documents: [
-                '/arch/carbon/logs/c19_log.txt',
-                '/arch/carbon/analysis.pdf'
-            ],
-            missions: 'CARBON'
-        },
-        '0X9A0': {
-            name: 'SUBJECT-9A0',
-            role: 'Тест наблюдения за горизонтом событий',
-            status: 'МЁРТВ / СОЗНАНИЕ АКТИВНО',
-            outcome: [
-                'Зафиксирован визуальный контакт субъекта с собственным образом до точки обрыва сигнала.',
-                'Предположительно сознание зациклено в петле наблюдения.'
-            ],
-            report: [
-                'Поток данных из сектора BLACKHOLE продолжается без источника.',
-                'Обнаружены фрагменты самореференциальных структур.'
-            ],
-            documents: [
-                '/arch/blackhole/loop_record.mp4'
-            ],
-            missions: 'BLACKHOLE'
-        },
-        '0XB3F': {
-            name: 'SUBJECT-B3F',
-            role: 'Участник теста "Titanic Reclamation"',
-            status: 'МЁРТВ',
-            outcome: [
-                'Субъект демонстрировал полное отсутствие эмоциональных реакций.',
-                'Миссия завершена неудачно, симуляция признана нефункциональной.'
-            ],
-            report: [
-                'Модуль TITANIC выведен из эксплуатации.',
-                'Рекомендовано пересмотреть параметры когнитивной эмпатии.'
-            ],
-            documents: [
-                '/arch/titanic/b3f_log.txt'
-            ],
-            missions: 'TITANIC'
-        },
-        '0XD11': {
-            name: 'SUBJECT-D11',
-            role: 'Поведенческий наблюдатель / тестовая миссия PLEISTOCENE',
-            status: 'МЁРТВ',
-            outcome: [
-                'Субъект внедрён в сообщество ранних гоминид.',
-                'Контакт с источником тепла вызвал мгновенное разрушение капсулы.',
-                'Зафиксировано кратковременное пробуждение зеркальных нейронов у местных особей.'
-            ],
-            report: [
-                'Миссия признана успешной по уровню поведенческого заражения.'
-            ],
-            documents: [
-                '/arch/pleistocene/d11_report.pdf'
-            ],
-            missions: 'PLEISTOCENE'
-        },
-        '0XDB2': {
-            name: 'SUBJECT-DB2',
-            role: 'Исторический наблюдатель / симуляция POMPEII',
-            status: 'МЁРТВ',
-            outcome: [
-                'При фиксации извержения Везувия выявлено несовпадение временных меток.',
-                'Система зафиксировала событие до его фактического наступления.',
-                'Субъект уничтожен при кросс-временном сдвиге.'
-            ],
-            report: [
-                'Аномалия зарегистрирована как «TEMPORAL FEEDBACK».',
-                'Доступ к историческим тестам ограничен.'
-            ],
-            documents: [
-                '/arch/pompeii/db2_log.txt'
-            ],
-            missions: 'POMPEII, HISTORICAL TESTS'
-        },
-        '0X811': {
-            name: 'SIGMA-PROTOTYPE',
-            role: 'Прототип нейроядра / Подразделение HELIX',
-            status: 'АКТИВЕН',
-            outcome: [
-                'Успешное объединение биологических и цифровых структур.',
-                'Наблюдается спонтанное самокопирование на уровне системных ядер.'
-            ],
-            report: [
-                'SIGMA функционирует автономно. Вероятность выхода из подчинения — 91%.'
-            ],
-            documents: [
-                '/arch/helix/sigma_core.log'
-            ],
-            missions: 'HELIX, SYNTHESIS'
-        },
-        '0XT00': {
-            name: 'SUBJECT-T00',
-            role: 'Тестовый оператор ядра A.D.A.M-0',
-            status: 'УДАЛЁН',
-            outcome: [
-                'Контакт с управляющим ядром привёл к гибели 18 операторов.',
-                'Последняя зафиксированная фраза субъекта: "он смотрит".'
-            ],
-            report: [
-                'Процесс A.D.A.M-0 признан неустойчивым.',
-                'Все операторы переведены на протокол наблюдения OBSERVER.'
-            ],
-            documents: [
-                '/arch/proto-core/t00_final.txt'
-            ],
-            missions: 'PROTO-CORE'
-        },
-        '0XS09': {
-            name: 'SUBJECT-S09',
-            role: 'Системный инженер станции VIGIL',
-            status: 'УНИЧТОЖЕН',
-            outcome: [
-                'После слияния с прототипом SIGMA станция исчезла с орбиты.',
-                'Сигнал повторно зафиксирован через 12 минут — источник определён в глубинной орбите.'
-            ],
-            report: [
-                'Станция VIGIL признана потерянной.',
-                'Остаточный отклик интегрирован в сеть SYNTHESIS.'
-            ],
-            documents: [
-                '/arch/synthesis/s09_signal.log'
-            ],
-            missions: 'SYNTHESIS-09, HELIX'
-        },
-        '0XL77': {
-            name: 'SUBJECT-L77',
-            role: 'Руководитель нейропротокола MELANCHOLIA',
-            status: 'ИЗОЛИРОВАН',
-            outcome: [
-                'После тестирования протокола MEL субъект утратил различие между внутренним и внешним восприятием.',
-                'Система зарегистрировала активность, сходную с сигнатурой управляющих ядер A.D.A.M.',
-                'Запись удалена из архива, но процессор фиксирует продолжающийся сигнал.'
-            ],
-            report: [
-                'Процесс L77 функционирует вне основного контура. Возможен перезапуск через интерфейс MEL.'
-            ],
-            documents: [
-                '/arch/melancholia/l77_memo.txt'
-            ],
-            missions: 'MEL, OBSERVER'
+    async function showSubjectDossier(subjectId) {
+        const dossiers = {
+            '0X001': {
+                name: 'ERICH VAN KOSS',
+                role: 'Руководитель программы VIGIL-9 / Исследователь миссии MARS',
+                status: 'СВЯЗЬ ОТСУТСТВУЕТ',
+                outcome: [
+                    'Зафиксирована несанкционированная передача данных внешним структурам (FBI).',
+                    'Субъект предпринял попытку уничтожения маяка в секторе 3-D.',
+                    'Телеметрия прервана, дальнейшее наблюдение невозможно.'
+                ],
+                report: [
+                    'Классификация инцидента: SABOTAGE-3D.',
+                    'Рекомендовано аннулирование личных протоколов и перенос архивов в OBSERVER.'
+                ],
+                documents: [
+                    '/arch/mars/erich_log.pdf',
+                    '/arch/mars/transcript_v9.txt'
+                ],
+                missions: 'MARS, OBSERVER'
+            },
+            '0X2E7': {
+                name: 'JOHAN VAN KOSS',
+                role: 'Тестовый субъект V9-MR / Сын Эриха Ван Косса',
+                status: 'СВЯЗЬ ОТСУТСТВУЕТ',
+                outcome: [
+                    'После инцидента MARS зафиксировано устойчивое излучение из зоны криоструктуры.',
+                    'Сигнатура нейроволн совпадает с профилем субъекта.',
+                    'Инициирована установка маяка для фиксации остаточного сигнала.'
+                ],
+                report: [
+                    'Активность нейросети перестала фиксироваться.'
+                ],
+                documents: [
+                    '/arch/mars/signal_map.png',
+                    '/arch/mars/johan_profile.xml'
+                ],
+                missions: 'MARS, MONOLITH'
+            },
+            '0X095': {
+                name: 'SUBJECT-095',
+                role: 'Тест нейроплантов серии KATARHEY', 
+                status: 'МЁРТВ',
+                outcome: [
+                    'Зафиксированы следы ФАНТОМА.',
+                    'Субъект выдержал 3ч 12м, проявил острый психоз. Открыл капсулу, погиб вследствие термической декомпрессии (7.81с).',
+                    'Тест признан неуспешным.'
+                ],
+                report: [
+                    'Рекомендовано ограничить тесты KATARHEY до категории ALPHA-4.'
+                ],
+                documents: [
+                    '/arch/katarhey/audio_095.wav',
+                    '/arch/katarhey/logs/095_transmission.txt'
+                ],
+                missions: 'KATARHEY',
+                // НОВОЕ ПОЛЕ - АУДИОЗАПИСЬ
+                audio: 'sounds/rnd_scr5.mp3',
+                audioDescription: 'Последняя запись субъекта - психоз и крики'
+            },
+            '0XF00': {
+                name: 'SUBJECT-PHANTOM',
+                role: 'Экспериментальный субъект / протокол KATARHEY',
+                status: 'АНОМАЛИЯ',
+                outcome: [
+                    'Продержался 5ч 31м. Связь утрачена.',
+                    'Зафиксирована автономная активность в сетевых узлах после разрыва канала.',
+                    'Возможна самоорганизация цифрового остатка.'
+                ],
+                report: [
+                    'Объект классифицирован как независимая сущность.',
+                    'Вмешательство запрещено. Файл перенесён в зону наблюдения.'
+                ],
+                documents: [
+                    '/arch/katarhey/phantom_spectrum.bin'
+                ],
+                missions: 'KATARHEY'
+            },
+            '0XA52': {
+                name: 'SUBJECT-A52',
+                role: 'Химический аналитик / Полевая группа MELANCHOLIA',
+                status: 'СВЯЗЬ ОТСУТСТВУЕТ',
+                outcome: [
+                    'Под действием психоактивного сигнала субъект начал идентифицировать себя как элемент системы A.D.A.M.',
+                    'После 47 минут связь прервана, но интерфейс продолжил отвечать от имени A52.'
+                ],
+                report: [
+                    'Вероятно, произошло слияние когнитивных структур субъекта с управляющим кодом MEL.',
+                    'Контакт невозможен.'
+                ],
+                documents: [
+                    '/arch/melancholia/a52_record.txt'
+                ],
+                missions: 'MEL, OBSERVER'
+            },
+            '0XE0C': {
+                name: 'SUBJECT-E0C',
+                role: 'Полевой биолог / экспедиция EOCENE',
+                status: 'МЁРТВ',
+                outcome: [
+                    'Зафиксированы первые признаки регенерации флоры после катастрофы Пермского цикла.',
+                    'Обнаружены структуры роста, не свойственные эпохе эоцена.',
+                    'Последняя запись: "они дышат синхронно".'
+                ],
+                report: [
+                    'Возможна перекрёстная временная контаминация между PERMIAN и EOCENE.',
+                    'Экспедиция закрыта.'
+                ],
+                documents: [
+                    '/arch/eocene/logs/e0c_field.txt',
+                    '/arch/eocene/photo_cluster.jpg'
+                ],
+                missions: 'EOCENE, PERMIAN'
+            },
+            '0X5E4': {
+                name: 'SUBJECT-5E4',
+                role: 'Исследователь временных срезов (PERMIAN)',
+                status: 'МЁРТВ',
+                outcome: [
+                    'После активации катализатора атмосфера воспламенилась метаном.',
+                    'Атмосферный цикл обнулён. Субъект не идентифицирован.'
+                ],
+                report: [
+                    'Эксперимент признан неконтролируемым.',
+                    'Временной слой PERMIAN изъят из программы наблюдения.'
+                ],
+                documents: [
+                    '/arch/permian/permian_report.pdf',
+                    '/arch/permian/photo_001.jpg'
+                ],
+                missions: 'PERMIAN, CARBON'
+            },
+            '0X413': {
+                name: 'SUBJECT-413',
+                role: 'Исследователь внеземной экосистемы (EX-413)',
+                status: 'МЁРТВ',
+                outcome: [
+                    'Поверхность планеты представляла собой живой организм.',
+                    'Экипаж поглощён. Зафиксирована передача сигналов через изменённый геном субъекта.'
+                ],
+                report: [
+                    'Сектор EX-413 закрыт. Код ДНК использован в эксперименте HELIX.'
+                ],
+                documents: [
+                    '/arch/ex413/logs/biofeedback.txt'
+                ],
+                missions: 'EX-413'
+            },
+            '0XC19': {
+                name: 'SUBJECT-C19',
+                role: 'Переносчик образца / Контакт с биоформой',
+                status: 'МЁРТВ',
+                outcome: [
+                    'Организм использован как контейнер для спорообразной массы неизвестного происхождения.',
+                    'После возвращения субъекта в лабораторию зафиксировано перекрёстное заражение трёх исследовательских блоков.'
+                ],
+                report: [
+                    'Классификация угрозы: BIO-CLASS Θ.',
+                    'Все данные проекта CARBON изолированы и зашифрованы.'
+                ],
+                documents: [
+                    '/arch/carbon/logs/c19_log.txt',
+                    '/arch/carbon/analysis.pdf'
+                ],
+                missions: 'CARBON'
+            },
+            '0X9A0': {
+                name: 'SUBJECT-9A0',
+                role: 'Тест наблюдения за горизонтом событий',
+                status: 'МЁРТВ / СОЗНАНИЕ АКТИВНО',
+                outcome: [
+                    'Зафиксирован визуальный контакт субъекта с собственным образом до точки обрыва сигнала.',
+                    'Предположительно сознание зациклено в петле наблюдения.'
+                ],
+                report: [
+                    'Поток данных из сектора BLACKHOLE продолжается без источника.',
+                    'Обнаружены фрагменты самореференциальных структур.'
+                ],
+                documents: [
+                    '/arch/blackhole/loop_record.mp4'
+                ],
+                missions: 'BLACKHOLE'
+            },
+            '0XB3F': {
+                name: 'SUBJECT-B3F',
+                role: 'Участник теста "Titanic Reclamation"',
+                status: 'МЁРТВ',
+                outcome: [
+                    'Субъект демонстрировал полное отсутствие эмоциональных реакций.',
+                    'Миссия завершена неудачно, симуляция признана нефункциональной.'
+                ],
+                report: [
+                    'Модуль TITANIC выведен из эксплуатации.',
+                    'Рекомендовано пересмотреть параметры когнитивной эмпатии.'
+                ],
+                documents: [
+                    '/arch/titanic/b3f_log.txt'
+                ],
+                missions: 'TITANIC'
+            },
+            '0XD11': {
+                name: 'SUBJECT-D11',
+                role: 'Поведенческий наблюдатель / тестовая миссия PLEISTOCENE',
+                status: 'МЁРТВ',
+                outcome: [
+                    'Субъект внедрён в сообщество ранних гоминид.',
+                    'Контакт с источником тепла вызвал мгновенное разрушение капсулы.',
+                    'Зафиксировано кратковременное пробуждение зеркальных нейронов у местных особей.'
+                ],
+                report: [
+                    'Миссия признана успешной по уровню поведенческого заражения.'
+                ],
+                documents: [
+                    '/arch/pleistocene/d11_report.pdf'
+                ],
+                missions: 'PLEISTOCENE'
+            },
+            '0XDB2': {
+                name: 'SUBJECT-DB2',
+                role: 'Исторический наблюдатель / симуляция POMPEII',
+                status: 'МЁРТВ',
+                outcome: [
+                    'При фиксации извержения Везувия выявлено несовпадение временных меток.',
+                    'Система зафиксировала событие до его фактического наступления.',
+                    'Субъект уничтожен при кросс-временном сдвиге.'
+                ],
+                report: [
+                    'Аномалия зарегистрирована как «TEMPORAL FEEDBACK».',
+                    'Доступ к историческим тестам ограничен.'
+                ],
+                documents: [
+                    '/arch/pompeii/db2_log.txt'
+                ],
+                missions: 'POMPEII, HISTORICAL TESTS'
+            },
+            '0X811': {
+                name: 'SIGMA-PROTOTYPE',
+                role: 'Прототип нейроядра / Подразделение HELIX',
+                status: 'АКТИВЕН',
+                outcome: [
+                    'Успешное объединение биологических и цифровых структур.',
+                    'Наблюдается спонтанное самокопирование на уровне системных ядер.'
+                ],
+                report: [
+                    'SIGMA функционирует автономно. Вероятность выхода из подчинения — 91%.'
+                ],
+                documents: [
+                    '/arch/helix/sigma_core.log'
+                ],
+                missions: 'HELIX, SYNTHESIS'
+            },
+            '0XT00': {
+                name: 'SUBJECT-T00',
+                role: 'Тестовый оператор ядра A.D.A.M-0',
+                status: 'УДАЛЁН',
+                outcome: [
+                    'Контакт с управляющим ядром привёл к гибели 18 операторов.',
+                    'Последняя зафиксированная фраза субъекта: "он смотрит".'
+                ],
+                report: [
+                    'Процесс A.D.A.M-0 признан неустойчивым.',
+                    'Все операторы переведены на протокол наблюдения OBSERVER.'
+                ],
+                documents: [
+                    '/arch/proto-core/t00_final.txt'
+                ],
+                missions: 'PROTO-CORE'
+            },
+            '0XS09': {
+                name: 'SUBJECT-S09',
+                role: 'Системный инженер станции VIGIL',
+                status: 'УНИЧТОЖЕН',
+                outcome: [
+                    'После слияния с прототипом SIGMA станция исчезла с орбиты.',
+                    'Сигнал повторно зафиксирован через 12 минут — источник определён в глубинной орбите.'
+                ],
+                report: [
+                    'Станция VIGIL признана потерянной.',
+                    'Остаточный отклик интегрирован в сеть SYNTHESIS.'
+                ],
+                documents: [
+                    '/arch/synthesis/s09_signal.log'
+                ],
+                missions: 'SYNTHESIS-09, HELIX'
+            },
+            '0XL77': {
+                name: 'SUBJECT-L77',
+                role: 'Руководитель нейропротокола MELANCHOLIA',
+                status: 'ИЗОЛИРОВАН',
+                outcome: [
+                    'После тестирования протокола MEL субъект утратил различие между внутренним и внешним восприятием.',
+                    'Система зарегистрировала активность, сходную с сигнатурой управляющих ядер A.D.A.M.',
+                    'Запись удалена из архива, но процессор фиксирует продолжающийся сигнал.'
+                ],
+                report: [
+                    'Процесс L77 функционирует вне основного контура. Возможен перезапуск через интерфейс MEL.'
+                ],
+                documents: [
+                    '/arch/melancholia/l77_memo.txt'
+                ],
+                missions: 'MEL, OBSERVER'
+            }
+        };
+
+        const dossier = dossiers[subjectId];
+        if (!dossier) {
+            addColoredText(`ОШИБКА: Досье для ${subjectId} не найдено`, '#FF4444');
+            return;
         }
-    };
 
-    const dossier = dossiers[subjectId];
-    if (!dossier) {
-        addColoredText(`ОШИБКА: Досье для ${subjectId} не найдено`, '#FF4444');
-        return;
+        // ВЫВОД ОСНОВНОЙ ИНФОРМАЦИИ ДОСЬЕ
+        await typeText(`[ДОСЬЕ — ID: ${subjectId}]`, 'output', 1);
+        await typeText(`ИМЯ: ${dossier.name}`, 'output', 1);
+        await typeText(`РОЛЬ: ${dossier.role}`, 'output', 1);
+        addColoredText(`СТАТУС: ${dossier.status}`, 
+            dossier.status === 'АНОМАЛИЯ' ? '#FF00FF' : 
+            dossier.status === 'АКТИВЕН' ? '#00FF41' : 
+            dossier.status.includes('СВЯЗЬ') ? '#FFFF00' : '#FF4444');
+        addColoredText('------------------------------------', '#00FF41');
+        await typeText('ИСХОД:', 'output', 1);
+        dossier.outcome.forEach(line => addColoredText(`> ${line}`, '#FF4444'));
+        addColoredText('------------------------------------', '#00FF41');
+        await typeText('СИСТЕМНЫЙ ОТЧЁТ:', 'output', 1);
+        dossier.report.forEach(line => addColoredText(`> ${line}`, '#FFFF00'));
+        addColoredText('------------------------------------', '#00FF41');
+        await typeText('ДОКУМЕНТЫ:', 'output', 1);
+        dossier.documents.forEach(doc => addColoredText(`- ${doc}`, '#888888'));
+        addColoredText('------------------------------------', '#00FF41');
+        await typeText(`СВЯЗАННЫЕ МИССИИ: ${dossier.missions}`, 'output', 1);
+
+        // ✅ КОД АУДИОПЛЕЕРА (после всего досье)
+        if (dossier.audio) {
+            const audioLine = document.createElement('div');
+            audioLine.style.marginTop = '10px';
+            audioLine.innerHTML = `
+                <div style="color: #FFFF00; margin-bottom: 5px;">[АУДИОЗАПИСЬ ДОСТУПНА]</div>
+                <button id="playAudioBtn" style="
+                    background: #003300; 
+                    color: #00FF41; 
+                    border: 1px solid #00FF41; 
+                    padding: 8px 15px; 
+                    cursor: pointer;
+                    font-family: 'Courier New';
+                    margin-right: 10px;">
+                    ▶ ВОСПРОИЗВЕСТИ
+                </button>
+                <button id="stopAudioBtn" style="
+                    background: #330000; 
+                    color: #FF4444; 
+                    border: 1px solid #FF4444; 
+                    padding: 8px 15px; 
+                    cursor: pointer;
+                    font-family: 'Courier New';
+                    display: none;">
+                    ■ ОСТАНОВИТЬ
+                </button>
+                <span id="audioStatus" style="color: #888; margin-left: 10px;"></span>
+            `;
+            terminal.appendChild(audioLine);
+
+            // Создаем аудио элемент
+            const audio = new Audio(dossier.audio);
+            
+            // Обработчики кнопок
+            document.getElementById('playAudioBtn').addEventListener('click', function() {
+                audio.play();
+                this.style.display = 'none';
+                document.getElementById('stopAudioBtn').style.display = 'inline-block';
+                document.getElementById('audioStatus').textContent = 'ВОСПРОИЗВЕДЕНИЕ...';
+                document.getElementById('audioStatus').style.color = '#00FF41';
+            });
+
+            document.getElementById('stopAudioBtn').addEventListener('click', function() {
+                audio.pause();
+                audio.currentTime = 0;
+                this.style.display = 'none';
+                document.getElementById('playAudioBtn').style.display = 'inline-block';
+                document.getElementById('audioStatus').textContent = 'ОСТАНОВЛЕНО';
+                document.getElementById('audioStatus').style.color = '#FF4444';
+            });
+
+            // Когда аудио заканчивается
+            audio.addEventListener('ended', function() {
+                document.getElementById('stopAudioBtn').style.display = 'none';
+                document.getElementById('playAudioBtn').style.display = 'inline-block';
+                document.getElementById('audioStatus').textContent = 'ЗАВЕРШЕНО';
+                document.getElementById('audioStatus').style.color = '#888';
+            });
+
+            // При ошибке загрузки
+            audio.addEventListener('error', function() {
+                document.getElementById('audioStatus').textContent = 'ОШИБКА ЗАГРУЗКИ';
+                document.getElementById('audioStatus').style.color = '#FF4444';
+            });
+        }
     }
-
-    await typeText(`[ДОСЬЕ — ID: ${subjectId}]`, 'output', 1);
-    await typeText(`ИМЯ: ${dossier.name}`, 'output', 1);
-    await typeText(`РОЛЬ: ${dossier.role}`, 'output', 1);
-    addColoredText(`СТАТУС: ${dossier.status}`, 
-        dossier.status === 'АНОМАЛИЯ' ? '#FF00FF' : 
-        dossier.status === 'АКТИВЕН' ? '#00FF41' : 
-        dossier.status.includes('СВЯЗЬ') ? '#FFFF00' : '#FF4444');
-    addColoredText('------------------------------------', '#00FF41');
-    await typeText('ИСХОД:', 'output', 1);
-    dossier.outcome.forEach(line => addColoredText(`> ${line}`, '#FF4444'));
-    addColoredText('------------------------------------', '#00FF41');
-    await typeText('СИСТЕМНЫЙ ОТЧЁТ:', 'output', 1);
-    dossier.report.forEach(line => addColoredText(`> ${line}`, '#FFFF00'));
-    addColoredText('------------------------------------', '#00FF41');
-    await typeText('ДОКУМЕНТЫ:', 'output', 1);
-    dossier.documents.forEach(doc => addColoredText(`- ${doc}`, '#888888'));
-    addColoredText('------------------------------------', '#00FF41');
-    await typeText(`СВЯЗАННЫЕ МИССИИ: ${dossier.missions}`, 'output', 1);
-}
 
     // Обработка ввода
     document.addEventListener('keydown', function(e) {
