@@ -2,24 +2,24 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>A.D.A.M. TERMINAL // VIGIL-9</title>
+    <title>A.D.A.M. TERMINAL // VIGIL-99</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="scanline"></div>
-<!-- ЭПИЧНЫЙ КОСМИЧЕСКИЙ ПОРТАЛ -->
-<div class="noise">
-    <div class="nebula nebula-1"></div>
-    <div class="nebula nebula-2"></div>
-    <div class="nebula nebula-3"></div>
-    <div class="gravity-lens gravity-lens-1"></div>
-    <div class="gravity-lens gravity-lens-2"></div>
-    <div class="neural-network"></div>
-    <div class="anomaly-1"></div>
-    <div class="anomaly-2"></div>
-    <div class="anomaly-3"></div>
-    <div class="anomaly-4"></div>
-</div>
+    <!-- ЭПИЧНЫЙ КОСМИЧЕСКИЙ ПОРТАЛ -->
+    <div class="noise">
+        <div class="nebula nebula-1"></div>
+        <div class="nebula nebula-2"></div>
+        <div class="nebula nebula-3"></div>
+        <div class="gravity-lens gravity-lens-1"></div>
+        <div class="gravity-lens gravity-lens-2"></div>
+        <div class="neural-network"></div>
+        <div class="anomaly-1"></div>
+        <div class="anomaly-2"></div>
+        <div class="anomaly-3"></div>
+        <div class="anomaly-4"></div>
+    </div>
     
     <div id="terminal">
         <!-- Терминал будет заполняться через JavaScript -->
@@ -31,6 +31,11 @@
         window.onpopstate = function() {
             history.go(1);
         };
+
+        // Добавляем элемент для случайных глитч-эффектов
+        const glitches = document.createElement('div');
+        glitches.className = 'glitches';
+        document.body.appendChild(glitches);
     </script>
     <script src="terminal.js"></script>
 </body>
