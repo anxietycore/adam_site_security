@@ -672,77 +672,78 @@ document.addEventListener('DOMContentLoaded', function() {
         await typeText(`СВЯЗАННЫЕ МИССИИ: ${dossier.missions}`, 'output', 1);
 
         // АУДИОПЛЕЕР
-        if (dossier.audio) {
-            const audioLine = document.createElement('div');
-            audioLine.style.marginTop = '10px';
-            audioLine.innerHTML = `
-                <div style="color: #FFFF00; margin-bottom: 5px;">[АУДИОЗАПИСЬ ДОСТУПНА: ${dossier.audioDescription}]</div>
-                <button id="playAudioBtn" style="
-                    background: #003300; 
-                    color: #00FF41; 
-                    border: 1px solid #00FF41; 
-                    padding: 8px 15px; 
-                    cursor: pointer;
-                    font-family: 'Courier New';
-                    margin-right: 10px;">
-                    ▶ ВОСПРОИЗВЕСТИ
-                </button>
-                <button id="stopAudioBtn" style="
-                    background: #330000; 
-                    color: #FF4444; 
-                    border: 1px solid #FF4444; 
-                    padding: 8px 15px; 
-                    cursor: pointer;
-                    font-family: 'Courier New';
-                    display: none;">
-                    ■ ОСТАНОВИТЬ
-                </button>
-                <span id="audioStatus" style="color: #888; margin-left: 10px;"></span>
-            `;
-            terminal.appendChild(audioLine);
+if (dossier.audio) {
+    const audioLine = document.createElement('div');
+    audioLine.style.marginTop = '10px';
+    const uniqueId = `audio_${subjectId.replace('0X', '')}`; // Создаем уникальный ID
+    
+    audioLine.innerHTML = `
+        <div style="color: #FFFF00; margin-bottom: 5px;">[АУДИОЗАПИСЬ ДОСТУПНА: ${dossier.audioDescription}]</div>
+        <button id="playAudioBtn_${uniqueId}" style="
+            background: #003300; 
+            color: #00FF41; 
+            border: 1px solid #00FF41; 
+            padding: 8px 15px; 
+            cursor: pointer;
+            font-family: 'Courier New';
+            margin-right: 10px;">
+            ▶ ВОСПРОИЗВЕСТИ
+        </button>
+        <button id="stopAudioBtn_${uniqueId}" style="
+            background: #330000; 
+            color: #FF4444; 
+            border: 1px solid #FF4444; 
+            padding: 8px 15px; 
+            cursor: pointer;
+            font-family: 'Courier New';
+            display: none;">
+            ■ ОСТАНОВИТЬ
+        </button>
+        <span id="audioStatus_${uniqueId}" style="color: #888; margin-left: 10px;"></span>
+    `;
+    terminal.appendChild(audioLine);
 
-            // Останавливаем предыдущее аудио
-            if (currentAudio) {
-                currentAudio.pause();
-                currentAudio.currentTime = 0;
-            }
-
-            // Создаем аудио элемент
-            currentAudio = new Audio(dossier.audio);
-            
-            // Обработчики кнопок
-            document.getElementById('playAudioBtn').addEventListener('click', function() {
-                currentAudio.play();
-                this.style.display = 'none';
-                document.getElementById('stopAudioBtn').style.display = 'inline-block';
-                document.getElementById('audioStatus').textContent = 'ВОСПРОИЗВЕДЕНИЕ...';
-                document.getElementById('audioStatus').style.color = '#00FF41';
-            });
-
-            document.getElementById('stopAudioBtn').addEventListener('click', function() {
-                currentAudio.pause();
-                currentAudio.currentTime = 0;
-                this.style.display = 'none';
-                document.getElementById('playAudioBtn').style.display = 'inline-block';
-                document.getElementById('audioStatus').textContent = 'ОСТАНОВЛЕНО';
-                document.getElementById('audioStatus').style.color = '#FF4444';
-            });
-
-            // Когда аудио заканчивается
-            currentAudio.addEventListener('ended', function() {
-                document.getElementById('stopAudioBtn').style.display = 'none';
-                document.getElementById('playAudioBtn').style.display = 'inline-block';
-                document.getElementById('audioStatus').textContent = 'ЗАВЕРШЕНО';
-                document.getElementById('audioStatus').style.color = '#888';
-            });
-
-            // При ошибке загрузки
-            currentAudio.addEventListener('error', function() {
-                document.getElementById('audioStatus').textContent = 'ОШИБКА ЗАГРУЗКИ';
-                document.getElementById('audioStatus').style.color = '#FF4444';
-            });
-        }
+    // Останавливаем предыдущее аудио
+    if (currentAudio) {
+        currentAudio.pause();
+        currentAudio.currentTime = 0;
     }
+
+    // Создаем аудио элемент
+    currentAudio = new Audio(dossier.audio);
+    
+    // Обработчики кнопок с уникальными ID
+    document.getElementById(`playAudioBtn_${uniqueId}`).addEventListener('click', function() {
+        currentAudio.play();
+        this.style.display = 'none';
+        document.getElementById(`stopAudioBtn_${uniqueId}`).style.display = 'inline-block';
+        document.getElementById(`audioStatus_${uniqueId}`).textContent = 'ВОСПРОИЗВЕДЕНИЕ...';
+        document.getElementById(`audioStatus_${uniqueId}`).style.color = '#00FF41';
+    });
+
+    document.getElementById(`stopAudioBtn_${uniqueId}`).addEventListener('click', function() {
+        currentAudio.pause();
+        currentAudio.currentTime = 0;
+        this.style.display = 'none';
+        document.getElementById(`playAudioBtn_${uniqueId}`).style.display = 'inline-block';
+        document.getElementById(`audioStatus_${uniqueId}`).textContent = 'ОСТАНОВЛЕНО';
+        document.getElementById(`audioStatus_${uniqueId}`).style.color = '#FF4444';
+    });
+
+    // Когда аудио заканчивается
+    currentAudio.addEventListener('ended', function() {
+        document.getElementById(`stopAudioBtn_${uniqueId}`).style.display = 'none';
+        document.getElementById(`playAudioBtn_${uniqueId}`).style.display = 'inline-block';
+        document.getElementById(`audioStatus_${uniqueId}`).textContent = 'ЗАВЕРШЕНО';
+        document.getElementById(`audioStatus_${uniqueId}`).style.color = '#888';
+    });
+
+    // При ошибке загрузки
+    currentAudio.addEventListener('error', function() {
+        document.getElementById(`audioStatus_${uniqueId}`).textContent = 'ОШИБКА ЗАГРУЗКИ';
+        document.getElementById(`audioStatus_${uniqueId}`).style.color = '#FF4444';
+    });
+}
 
     // Функция для открытия заметок
     async function openNote(noteId) {
