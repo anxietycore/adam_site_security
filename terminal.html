@@ -2,69 +2,36 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>A.D.A.M. TERMINAL // VIGIL-9</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <!-- ЭПИЧНЫЙ КОСМИЧЕСКИЙ ПОРТАЛ -->
-    <div class="noise">
-        <div class="neural-network"></div>
-        <div class="anomaly-1"></div>
-        <div class="anomaly-2"></div>
-        <div class="anomaly-3"></div>
-        <div class="anomaly-4"></div>
+    <div class="scanline"></div>
+<!-- ЭПИЧНЫЙ КОСМИЧЕСКИЙ ПОРТАЛ -->
+<div class="noise">
+    <div class="nebula nebula-1"></div>
+    <div class="nebula nebula-2"></div>
+    <div class="nebula nebula-3"></div>
+    <div class="gravity-lens gravity-lens-1"></div>
+    <div class="gravity-lens gravity-lens-2"></div>
+    <div class="neural-network"></div>
+    <div class="anomaly-1"></div>
+    <div class="anomaly-2"></div>
+    <div class="anomaly-3"></div>
+    <div class="anomaly-4"></div>
+</div>
+    
+    <div id="terminal">
+        <!-- Терминал будет заполняться через JavaScript -->
     </div>
 
-    <div class="terminal-container">
-        <div id="terminal"></div>
-    </div>
-    
-    <script src="terminal.js"></script>
-    
     <script>
-        // СЛУЧАЙНЫЕ ГЛИТЧ-ВСПЫШКИ ПРИ ВЫСОКОЙ ДЕГРАДАЦИИ
-        setInterval(() => {
-            if (Math.random() > 0.97) {
-                const flash = document.createElement('div');
-                flash.className = 'glitch-flash';
-                document.body.appendChild(flash);
-                setTimeout(() => flash.remove(), 300);
-            }
-        }, 1000);
-
-        // ЦИФРОВОЙ ШУМ ПРИ ВЫСОКОЙ ДЕГРАДАЦИИ
-        let noiseElement = null;
-        function toggleDigitalNoise(enable) {
-            if (enable && !noiseElement) {
-                noiseElement = document.createElement('div');
-                noiseElement.className = 'digital-noise';
-                document.body.appendChild(noiseElement);
-            } else if (!enable && noiseElement) {
-                noiseElement.remove();
-                noiseElement = null;
-            }
-        }
-
-        // ЭКСПОРТ ФУНКЦИЙ ДЛЯ terminal.js
-        window.terminalEffects = {
-            toggleDigitalNoise: toggleDigitalNoise,
-            triggerScreenShake: function() {
-                document.body.classList.add('screen-shake');
-                setTimeout(() => {
-                    document.body.classList.remove('screen-shake');
-                }, 500);
-            },
-            triggerCriticalGlitch: function() {
-                const elements = document.querySelectorAll('.output, .command');
-                elements.forEach(el => {
-                    el.classList.add('critical-text');
-                    setTimeout(() => {
-                        el.classList.remove('critical-text');
-                    }, 2000);
-                });
-            }
+        // Защита от кнопки "Назад"
+        history.pushState(null, null, location.href);
+        window.onpopstate = function() {
+            history.go(1);
         };
     </script>
+    <script src="terminal.js"></script>
 </body>
 </html>
