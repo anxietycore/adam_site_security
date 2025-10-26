@@ -349,23 +349,26 @@ async function showSubjectDossier(subjectId) {
             missions: 'MARS, MONOLITH'
         },
         '0X095': {
-            name: 'SUBJECT-095',
-            role: 'Тест нейроплантов серии KATARHEY',
-            status: 'МЁРТВ',
-            outcome: [
-                'Зафиксированы следы ФАНТОМА.',
-                'Субъект выдержал 3ч 12м, проявил острый психоз. Открыл капсулу, погиб вследствие термической декомпрессии (7.81с).',
-                'Тест признан неуспешным.'
-            ],
-            report: [
-                'Рекомендовано ограничить тесты KATARHEY до категории ALPHA-4.'
-            ],
-            documents: [
-                '/arch/katarhey/audio_095.wav',
-                '/arch/katarhey/logs/095_transmission.txt'
-            ],
-            missions: 'KATARHEY'
-        },
+    name: 'SUBJECT-095',
+    role: 'Тест нейроплантов серии KATARHEY', 
+    status: 'МЁРТВ',
+    outcome: [
+        'Зафиксированы следы ФАНТОМА.',
+        'Субъект выдержал 3ч 12м, проявил острый психоз. Открыл капсулу, погиб вследствие термической декомпрессии (7.81с).',
+        'Тест признан неуспешным.'
+    ],
+    report: [
+        'Рекомендовано ограничить тесты KATARHEY до категории ALPHA-4.'
+    ],
+    documents: [
+        '/arch/katarhey/audio_095.wav',
+        '/arch/katarhey/logs/095_transmission.txt'
+    ],
+    missions: 'KATARHEY',
+    // НОВОЕ ПОЛЕ - АУДИОЗАПИСЬ
+    audio: 'sounds/rnd_scr5.mp3',
+    audioDescription: 'Последняя запись субъекта - психоз и крики'
+},
         '0XF00': {
             name: 'SUBJECT-PHANTOM',
             role: 'Экспериментальный субъект / протокол KATARHEY',
