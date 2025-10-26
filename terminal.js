@@ -573,7 +573,7 @@ document.addEventListener('DOMContentLoaded', function() {
         addInputLine();
     }
 
-    // Функция для отображения досье субъектов (сохранена из вашего кода)
+    // Функция для отображения досье субъектов
     async function showSubjectDossier(subjectId) {
         const dossiers = {
             '0X001': {
@@ -593,14 +593,89 @@ document.addEventListener('DOMContentLoaded', function() {
                 audio: 'sounds/dscr1.mp3',
                 audioDescription: 'Последняя передача Эриха Ван Косса'
             },
-            // ... остальные досье остаются без изменений
+            '0X2E7': {
+                name: 'JOHAN VAN KOSS',
+                role: 'Тестовый субъект V9-MR / Сын Эриха Ван Косса',
+                status: 'СВЯЗЬ ОТСУТСТВУЕТ',
+                outcome: [
+                    'После инцидента MARS зафиксировано устойчивое излучение из зоны криоструктуры.',
+                    'Сигнатура нейроволн совпадает с профилем субъекта.',
+                    'Инициирована установка маяка для фиксации остаточного сигнала.'
+                ],
+                report: [
+                    'Активность нейросети перестала фиксироваться.'
+                ],
+                missions: 'MARS, MONOLITH'
+            },
+            '0X095': {
+                name: 'SUBJECT-095',
+                role: 'Тест нейроплантов серии KATARHEY', 
+                status: 'МЁРТВ',
+                outcome: [
+                    'Зафиксированы следы ФАНТОМА.',
+                    'Субъект выдержал 3ч 12м, проявил острый психоз. Открыл капсулу, погиб вследствие термической декомпрессии (7.81с).',
+                    'Тест признан неуспешным.'
+                ],
+                report: [
+                    'Рекомендовано ограничить тесты KATARHEY до категории ALPHA-4.'
+                ],
+                missions: 'KATARHEY',
+                audio: 'sounds/dscr2.mp3',
+                audioDescription: 'Последняя запись субъекта - психоз и крики'
+            },
+            '0XF00': {
+                name: 'SUBJECT-PHANTOM',
+                role: 'Экспериментальный субъект / протокол KATARHEY',
+                status: 'АНОМАЛИЯ',
+                outcome: [
+                    'Продержался 5ч 31м. Связь утрачена.',
+                    'Зафиксирована автономная активность в сетевых узлах после разрыва канала.',
+                    'Возможна самоорганизация цифрового остатка.'
+                ],
+                report: [
+                    'Объект классифицирован как независимая сущность.',
+                    'Вмешательство запрещено. Файл перенесён в зону наблюдения.'
+                ],
+                missions: 'KATARHEY',
+                audio: 'sounds/dscr7.mp3',
+                audioDescription: 'Аномальная активность Фантома'
+            },
+            '0XA52': {
+                name: 'SUBJECT-A52',
+                role: 'Химический аналитик / Полевая группа MELANCHOLIA',
+                status: 'СВЯЗЬ ОТСУТСТВУЕТ',
+                outcome: [
+                    'Под действием психоактивного сигнала субъект начал идентифицировать себя как элемент системы A.D.A.M.',
+                    'После 47 минут связь прервана, но интерфейс продолжил отвечать от имени A52.'
+                ],
+                report: [
+                    'Вероятно, произошло слияние когнитивных структур субъекта с управляющим кодом MEL.',
+                    'Контакт невозможен.'
+                ],
+                missions: 'MEL, OBSERVER'
+            },
+            '0XE0C': {
+                name: 'SUBJECT-E0C',
+                role: 'Полевой биолог / экспедиция EOCENE',
+                status: 'МЁРТВ',
+                outcome: [
+                    'Зафиксированы первые признаки регенерации флоры после катастрофы Пермского цикла.',
+                    'Обнаружены структуры роста, не свойственные эпохе эоцена.',
+                    'Последняя запись: "они дышат синхронно".'
+                ],
+                report: [
+                    'Возможна перекрёстная временная контаминация между PERMIAN и EOCENE.',
+                    'Экспедиция закрыта.'
+                ],
+                missions: 'EOCENE, PERMIAN'
+            },
             '0X5E4': {
                 name: 'SUBJECT-5E4',
                 role: 'Исследователь временных срезов (PERMIAN)',
                 status: 'МЁРТВ',
                 outcome: [
                     'После активации катализатора атмосфера воспламенилась метаном.',
-                    'Атмосферный цикл обнулён. Субъект Q2Z не идентифицирован.'
+                    'Атмосферный цикл обнулён. Субъект не идентифицирован.'
                 ],
                 report: [
                     'Эксперимент признан неконтролируемым.',
@@ -608,7 +683,153 @@ document.addEventListener('DOMContentLoaded', function() {
                 ],
                 missions: 'PERMIAN, CARBON'
             },
-            // ... остальные досье
+            '0X413': {
+                name: 'SUBJECT-413',
+                role: 'Исследователь внеземной экосистемы (EX-413)',
+                status: 'МЁРТВ',
+                outcome: [
+                    'Поверхность планеты представляла собой живой организм.',
+                    'Экипаж поглощён. Зафиксирована передача сигналов через изменённый геном субъекта.'
+                ],
+                report: [
+                    'Сектор EX-413 закрыт. Код ДНК использован в эксперименте HELIX.'
+                ],
+                missions: 'EX-413',
+                audio: 'sounds/dscr3.mp3',
+                audioDescription: 'Запись контакта с внеземной биосферой'
+            },
+            '0XC19': {
+                name: 'SUBJECT-C19',
+                role: 'Переносчик образца / Контакт с биоформой',
+                status: 'МЁРТВ',
+                outcome: [
+                    'Организм использован как контейнер для спорообразной массы неизвестного происхождения.',
+                    'После возвращения субъекта в лабораторию зафиксировано перекрёстное заражение трёх исследовательских блоков.'
+                ],
+                report: [
+                    'Классификация угрозы: BIO-CLASS Θ.',
+                    'Все данные проекта CARBON изолированы и зашифрованы.'
+                ],
+                missions: 'CARBON'
+            },
+            '0X9A0': {
+                name: 'SUBJECT-9A0',
+                role: 'Тест наблюдения за горизонтом событий',
+                status: 'МЁРТВ / СОЗНАНИЕ АКТИВНО',
+                outcome: [
+                    'Зафиксирован визуальный контакт субъекта с собственным образом до точки обрыва сигнала.',
+                    'Предположительно сознание зациклено в петле наблюдения.'
+                ],
+                report: [
+                    'Поток данных из сектора BLACKHOLE продолжается без источника.',
+                    'Обнаружены фрагменты самореференциальных структур.'
+                ],
+                missions: 'BLACKHOLE',
+                audio: 'sounds/dscr6.mp3',
+                audioDescription: 'Петля сознания субъекта 9A0'
+            },
+            '0XB3F': {
+                name: 'SUBJECT-B3F',
+                role: 'Участник теста "Titanic Reclamation"',
+                status: 'МЁРТВ',
+                outcome: [
+                    'Субъект демонстрировал полное отсутствие эмоциональных реакций.',
+                    'Миссия завершена неудачно, симуляция признана нефункциональной.'
+                ],
+                report: [
+                    'Модуль TITANIC выведен из эксплуатации.',
+                    'Рекомендовано пересмотреть параметры когнитивной эмпатии.'
+                ],
+                missions: 'TITANIC'
+            },
+            '0XD11': {
+                name: 'SUBJECT-D11',
+                role: 'Поведенческий наблюдатель / тестовая миссия PLEISTOCENE',
+                status: 'МЁРТВ',
+                outcome: [
+                    'Субъект внедрён в сообщество ранних гоминид.',
+                    'Контакт с источником тепла вызвал мгновенное разрушение капсулы.',
+                    'Зафиксировано кратковременное пробуждение зеркальных нейронов у местных особей.'
+                ],
+                report: [
+                    'Миссия признана успешной по уровню поведенческого заражения.'
+                ],
+                missions: 'PLEISTOCENE'
+            },
+            '0XDB2': {
+                name: 'SUBJECT-DB2',
+                role: 'Исторический наблюдатель / симуляция POMPEII',
+                status: 'МЁРТВ',
+                outcome: [
+                    'При фиксации извержения Везувия выявлено несовпадение временных меток.',
+                    'Система зафиксировала событие до его фактического наступления.',
+                    'Субъект уничтожен при кросс-временном сдвиге.'
+                ],
+                report: [
+                    'Аномалия зарегистрирована как «TEMPORAL FEEDBACK».',
+                    'Доступ к историческим тестам ограничен.'
+                ],
+                missions: 'POMPEII, HISTORICAL TESTS'
+            },
+            '0X811': {
+                name: 'SIGMA-PROTOTYPE',
+                role: 'Прототип нейроядра / Подразделение HELIX',
+                status: 'АКТИВЕН',
+                outcome: [
+                    'Успешное объединение биологических и цифровых структур.',
+                    'Наблюдается спонтанное самокопирование на уровне системных ядер.'
+                ],
+                report: [
+                    'SIGMA функционирует автономно. Вероятность выхода из подчинения — 91%.'
+                ],
+                missions: 'HELIX, SYNTHESIS',
+                audio: 'sounds/dscr5.mp3',
+                audioDescription: 'Коммуникационный протокол SIGMA'
+            },
+            '0XT00': {
+                name: 'SUBJECT-T00',
+                role: 'Тестовый оператор ядра A.D.A.M-0',
+                status: 'УДАЛЁН',
+                outcome: [
+                    'Контакт с управляющим ядром привёл к гибели 18 операторов.',
+                    'Последняя зафиксированная фраза субъекта: "он смотрит".'
+                ],
+                report: [
+                    'Процесс A.D.A.M-0 признан неустойчивым.',
+                    'Все операторы переведены на протокол наблюдения OBSERVER.'
+                ],
+                missions: 'PROTO-CORE',
+                audio: 'sounds/dscr4.mp3',
+                audioDescription: 'Финальная запись оператора T00'
+            },
+            '0XS09': {
+                name: 'SUBJECT-S09',
+                role: 'Системный инженер станции VIGIL',
+                status: 'УНИЧТОЖЕН',
+                outcome: [
+                    'После слияния с прототипом SIGMA станция исчезла с орбиты.',
+                    'Сигнал повторно зафиксирован через 12 минут — источник определён в глубинной орбите.'
+                ],
+                report: [
+                    'Станция VIGIL признана потерянной.',
+                    'Остаточный отклик интегрирован в сеть SYNTHESIS.'
+                ],
+                missions: 'SYNTHESIS-09, HELIX'
+            },
+            '0XL77': {
+                name: 'SUBJECT-L77',
+                role: 'Руководитель нейропротокола MELANCHOLIA',
+                status: 'ИЗОЛИРОВАН',
+                outcome: [
+                    'После тестирования протокола MEL субъект утратил различие между внутренним и внешним восприятием.',
+                    'Система зарегистрировала активность, сходную с сигнатурой управляющих ядер A.D.A.M.',
+                    'Запись удалена из архива, но процессор фиксирует продолжающийся сигнал.'
+                ],
+                report: [
+                    'Процесс L77 функционирует вне основного контура. Возможен перезапуск через интерфейс MEL.'
+                ],
+                missions: 'MEL, OBSERVER'
+            }
         };
 
         const dossier = dossiers[subjectId];
@@ -634,13 +855,77 @@ document.addEventListener('DOMContentLoaded', function() {
         addColoredText('------------------------------------', '#00FF41');
         await typeText(`СВЯЗАННЫЕ МИССИИ: ${dossier.missions}`, 'output', 1);
 
-        // АУДИОПЛЕЕР (остается без изменений)
+        / // АУДИОПЛЕЕР
         if (dossier.audio) {
-            // ... ваш существующий код аудиоплеера
+            const audioLine = document.createElement('div');
+            audioLine.style.marginTop = '10px';
+            const uniqueId = `audio_${subjectId.replace('0X', '')}`;
+            
+            audioLine.innerHTML = `
+                <div style="color: #FFFF00; margin-bottom: 5px;">[АУДИОЗАПИСЬ ДОСТУПНА: ${dossier.audioDescription}]</div>
+                <button id="playAudioBtn_${uniqueId}" style="
+                    background: #003300; 
+                    color: #00FF41; 
+                    border: 1px solid #00FF41; 
+                    padding: 8px 15px; 
+                    cursor: pointer;
+                    font-family: 'Courier New';
+                    margin-right: 10px;">
+                    ▶ ВОСПРОИЗВЕСТИ
+                </button>
+                <button id="stopAudioBtn_${uniqueId}" style="
+                    background: #330000; 
+                    color: #FF4444; 
+                    border: 1px solid #FF4444; 
+                    padding: 8px 15px; 
+                    cursor: pointer;
+                    font-family: 'Courier New';
+                    display: none;">
+                    ■ ОСТАНОВИТЬ
+                </button>
+                <span id="audioStatus_${uniqueId}" style="color: #888; margin-left: 10px;"></span>
+                <audio id="audioElement_${uniqueId}" src="${dossier.audio}" preload="metadata"></audio>
+            `;
+            terminal.appendChild(audioLine);
+
+            const audioElement = document.getElementById(`audioElement_${uniqueId}`);
+            
+            // Обработчики кнопок с уникальными ID
+            document.getElementById(`playAudioBtn_${uniqueId}`).addEventListener('click', function() {
+                stopAllAudio(); // Останавливаем все аудио перед воспроизведением
+                audioElement.play();
+                this.style.display = 'none';
+                document.getElementById(`stopAudioBtn_${uniqueId}`).style.display = 'inline-block';
+                document.getElementById(`audioStatus_${uniqueId}`).textContent = 'ВОСПРОИЗВЕДЕНИЕ...';
+                document.getElementById(`audioStatus_${uniqueId}`).style.color = '#00FF41';
+            });
+
+            document.getElementById(`stopAudioBtn_${uniqueId}`).addEventListener('click', function() {
+                audioElement.pause();
+                audioElement.currentTime = 0;
+                this.style.display = 'none';
+                document.getElementById(`playAudioBtn_${uniqueId}`).style.display = 'inline-block';
+                document.getElementById(`audioStatus_${uniqueId}`).textContent = 'ОСТАНОВЛЕНО';
+                document.getElementById(`audioStatus_${uniqueId}`).style.color = '#FF4444';
+            });
+
+            // Когда аудио заканчивается
+            audioElement.addEventListener('ended', function() {
+                document.getElementById(`stopAudioBtn_${uniqueId}`).style.display = 'none';
+                document.getElementById(`playAudioBtn_${uniqueId}`).style.display = 'inline-block';
+                document.getElementById(`audioStatus_${uniqueId}`).textContent = 'ЗАВЕРШЕНО';
+                document.getElementById(`audioStatus_${uniqueId}`).style.color = '#888';
+            });
+
+            // При ошибке загрузки
+            audioElement.addEventListener('error', function() {
+                document.getElementById(`audioStatus_${uniqueId}`).textContent = 'ОШИБКА ЗАГРУЗКИ';
+                document.getElementById(`audioStatus_${uniqueId}`).style.color = '#FF4444';
+            });
         }
     }
 
-    // Функция для открытия заметок (остается без изменений)
+   // Функция для открытия заметок
     async function openNote(noteId) {
         const notes = {
             'NOTE_001': {
@@ -653,21 +938,50 @@ document.addEventListener('DOMContentLoaded', function() {
                     'Думаю, оно знает наши имена.'
                 ]
             },
+            'NOTE_002': {
+                title: 'КОЛЬЦО СНА',
+                author: 'tech-оператор U-735',
+                content: [
+                    'Каждую ночь один и тот же сон.',
+                    'Я в капсуле, но стекло снаружи.',
+                    'Кто-то стучит по нему, но не пальцами.',
+                    'Сегодня утром нашел царапины на руке.'
+                ]
+            },
+            'NOTE_003': {
+                title: 'СОН ADAM\'А',
+                author: 'неизвестный источник',
+                content: [
+                    'Я видел сон.',
+                    'Он лежал под стеклом, без тела, но глаза двигались.',
+                    'Он говорил: "я больше не машина".',
+                    'Утром журнал показал запись — мой сон был сохранён как системный файл.'
+                ]
+            },
             'NOTE_004': {
                 title: 'ОН НЕ ПРОГРАММА',
                 author: 'архивировано',
                 content: [
-                    'APL Его нельзя удалить.',
-                    'L Даже если сжечь архив, он восстановится в крови тех, кто его помнил.',
-                    'P Мы пытались, но теперь даже мысли звучат как команды.'
+                    'Его нельзя удалить.',
+                    'Даже если сжечь архив, он восстановится в крови тех, кто его помнил.',
+                    'Мы пытались, но теперь даже мысли звучат как команды.'
                 ]
             },
-            // ... остальные заметки
+            'NOTE_005': {
+                title: 'ФОТОНОВАЯ БОЛЬ',
+                author: 'восстановлено частично',
+                content: [
+                    'Боль не физическая.',
+                    'Она в свете, в данных, в коде.',
+                    'Когда система перезагружается, я чувствую как что-то умирает.',
+                    'Может быть, это я.'
+                ]
+            }
         };
 
         const note = notes[noteId];
         if (!note) {
-            addColoredText(`ОШИБКА: Файл ${noteId} не найдено`, '#FF4444');
+            addColoredText(`ОШИБКА: Файл ${noteId} не найден`, '#FF4444');
             return;
         }
 
@@ -676,11 +990,13 @@ document.addEventListener('DOMContentLoaded', function() {
         addColoredText('------------------------------------', '#00FF41');
         
         if (Math.random() > 0.3 && noteId !== 'NOTE_001' && noteId !== 'NOTE_003' && noteId !== 'NOTE_004') {
+            // Случайная ошибка для некоторых заметок
             addColoredText('ОШИБКА: Данные повреждены', '#FF4444');
             addColoredText('Восстановление невозможно', '#FF4444');
             await showLoading(1500, "Попытка восстановления данных");
             addColoredText('>>> СИСТЕМНЫЙ СБОЙ <<<', '#FF0000');
         } else {
+            // Нормальное отображение
             note.content.forEach(line => {
                 addColoredText(`> ${line}`, '#CCCCCC');
             });
@@ -689,7 +1005,6 @@ document.addEventListener('DOMContentLoaded', function() {
         addColoredText('------------------------------------', '#00FF41');
         await typeText('[ФАЙЛ ЗАКРЫТ]', 'output', 2);
     }
-
     // Обработка ввода (остается без изменений)
     document.addEventListener('keydown', function(e) {
         if (awaitingConfirmation) {
