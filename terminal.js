@@ -272,7 +272,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 addColoredText('------------------------------------', '#00FF41');
                 await typeText('NOTE_001 — "ВЫ ЕГО ЧУВСТВУЕТЕ?" / автор: Dr. Rehn', 'output', 1);
                 await typeText('NOTE_002 — "КОЛЬЦО СНА" / автор: tech-оператор U-735', 'output', 1);
-                await typeText('NOTE_003 — "СОН ADAM\'А" / неизвестный источник', 'output', 1);
+                await typeText('NOTE_003 — "СОН ADAM" / неизвестный источник', 'output', 1);
                 await typeText('NOTE_004 — "ОН НЕ ПРОГРАММА" / архивировано', 'output', 1);
                 await typeText('NOTE_005 — "ФОТОНОВАЯ БОЛЬ" / восстановлено частично', 'output', 1);
                 addColoredText('------------------------------------', '#00FF41');
