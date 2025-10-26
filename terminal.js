@@ -1,4 +1,4 @@
-// Логика терминала
+// Логика терминала A.D.A.M. - VIGIL-9 PROTOCOL
 document.addEventListener('DOMContentLoaded', function() {
     const terminal = document.getElementById('terminal');
     let currentLine = '';
@@ -7,6 +7,9 @@ document.addEventListener('DOMContentLoaded', function() {
     let isTyping = false;
     let awaitingConfirmation = false;
     let confirmationCallback = null;
+    let currentAudio = null;
+    let commandCount = 0;
+    let sessionStartTime = Date.now();
 
     // Функция для печати текста с анимацией (УСКОРЕНА)
     function typeText(text, className = 'output', speed = 2) {
@@ -155,6 +158,20 @@ document.addEventListener('DOMContentLoaded', function() {
         terminal.scrollTop = terminal.scrollHeight;
     }
 
+    // Функция для определения уровня SYSLOG
+    function getSyslogLevel() {
+        const sessionDuration = Date.now() - sessionStartTime;
+        const minutesInSession = sessionDuration / (1000 * 60);
+        
+        if (commandCount >= 10 || minutesInSession >= 3) {
+            return 3; // СОЗНАТЕЛЬНЫЙ
+        } else if (commandCount >= 5 || minutesInSession >= 1) {
+            return 2; // ЖИВОЙ
+        } else {
+            return 1; // СТАТИЧНЫЙ
+        }
+    }
+
     async function processCommand(cmd) {
         if (isTyping) return;
         
@@ -163,6 +180,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         commandHistory.push(cmd);
         historyIndex = commandHistory.length;
+        commandCount++;
 
         addOutput(`adam@secure:~$ ${cmd}`, 'command');
 
@@ -173,11 +191,14 @@ document.addEventListener('DOMContentLoaded', function() {
             case 'help':
                 await typeText('Доступные команды:', 'output', 1);
                 await typeText('  SYST         — проверить состояние системы', 'output', 1);
+                await typeText('  SYSLOG       — системный журнал активности', 'output', 1);
                 await typeText('  NET          — карта активных узлов проекта', 'output', 1);
                 await typeText('  TRACE <id>   — отследить указанный модуль', 'output', 1);
                 await typeText('  DECRYPT <f>  — расшифровать файл', 'output', 1);
                 await typeText('  SUBJ         — список субъектов', 'output', 1);
                 await typeText('  DSCR <id>    — досье на персонал', 'output', 1);
+                await typeText('  NOTES        — личные файлы сотрудников', 'output', 1);
+                await typeText('  OPEN <id>    — открыть файл из NOTES', 'output', 1);
                 await typeText('  RESET        — сброс интерфейса', 'output', 1);
                 await typeText('  EXIT         — завершить сессию', 'output', 1);
                 await typeText('  CLEAR        — очистить терминал', 'output', 1);
@@ -208,6 +229,65 @@ document.addEventListener('DOMContentLoaded', function() {
                 addColoredText('> Неавторизованный доступ [U-735]', '#FF4444');
                 addColoredText('------------------------------------', '#00FF41');
                 await typeText('РЕКОМЕНДАЦИЯ: Поддерживать стабильность терминала', 'output', 2);
+                break;
+
+            case 'syslog':
+                const syslogLevel = getSyslogLevel();
+                
+                await typeText('[СИСТЕМНЫЙ ЖУРНАЛ — VIGIL-9]', 'output', 1);
+                addColoredText('------------------------------------', '#00FF41');
+                
+                if (syslogLevel === 1) {
+                    // СТАТИЧНЫЙ ТЕХНИЧЕСКИЙ
+                    addColoredText('[!] Ошибка 0x19F: повреждение нейронной сети', '#FFFF00');
+                    addColoredText('[!] Утечка данных через канал V9-HX', '#FFFF00');
+                    addColoredText('[!] Деградация ядра A.D.A.M.: 28%', '#FFFF00');
+                    addColoredText('------------------------------------', '#00FF41');
+                    await typeText('СИСТЕМА: функционирует с ограничениями', 'output', 2);
+                } else if (syslogLevel === 2) {
+                    // ЖИВОЙ
+                    addColoredText('[!] Нарушение целостности памяти субъекта 0x095', '#FFFF00');
+                    addColoredText('> "я слышу их дыхание. они всё ещё здесь."', '#FF4444');
+                    addColoredText('[!] Потеря отклика от MONOLITH', '#FFFF00');
+                    addColoredText('> "монолит смотрит. монолит ждёт."', '#FF4444');
+                    addColoredText('[!] Аномальная активность в секторе KATARHEY', '#FFFF00');
+                    addColoredText('> "он говорит через статические помехи"', '#FF4444');
+                    addColoredText('------------------------------------', '#00FF41');
+                    await typeText('СИСТЕМА: обнаружены посторонние сигналы', 'output', 2);
+                } else {
+                    // СОЗНАТЕЛЬНЫЙ
+                    addColoredText('> "ты не должен видеть это."', '#FF00FF');
+                    addColoredText('> "почему ты продолжаешь?"', '#FF00FF');
+                    addColoredText('> "они знают о тебе."', '#FF00FF');
+                    addColoredText('------------------------------------', '#00FF41');
+                    addColoredText('[!] Критическая ошибка: субъект наблюдения неопределён', '#FF4444');
+                    addColoredText('[!] Нарушение протокола безопасности', '#FF4444');
+                    addColoredText('------------------------------------', '#00FF41');
+                    await typeText('СИСТЕМА: ОСОЗНАЁТ НАБЛЮДЕНИЕ', 'output', 2);
+                }
+                break;
+
+            case 'notes':
+                await typeText('[ЗАПРЕЩЁННЫЕ ФАЙЛЫ / КАТЕГОРИЯ: NOTES]', 'output', 1);
+                addColoredText('------------------------------------', '#00FF41');
+                await typeText('NOTE_001 — "ВЫ ЕГО ЧУВСТВУЕТЕ?" / автор: Dr. Rehn', 'output', 1);
+                await typeText('NOTE_002 — "КОЛЬЦО СНА" / автор: tech-оператор U-735', 'output', 1);
+                await typeText('NOTE_003 — "СОН ADAM'А" / неизвестный источник', 'output', 1);
+                await typeText('NOTE_004 — "ОН НЕ ПРОГРАММА" / архивировано', 'output', 1);
+                await typeText('NOTE_005 — "ФОТОНОВАЯ БОЛЬ" / восстановлено частично', 'output', 1);
+                addColoredText('------------------------------------', '#00FF41');
+                await typeText('Для просмотра: OPEN <ID>', 'output', 2);
+                break;
+
+            case 'open':
+                if (args.length === 0) {
+                    addColoredText('ОШИБКА: Укажите ID файла', '#FF4444');
+                    await typeText('Пример: OPEN NOTE_001', 'output', 1);
+                    break;
+                }
+                
+                const noteId = args[0].toUpperCase();
+                await openNote(noteId);
                 break;
 
             case 'subj':
@@ -270,6 +350,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     await showLoading(800, "Восстановление базового состояния");
                     addColoredText('------------------------------------', '#00FF41');
                     await typeText('[СИСТЕМА ГОТОВА К РАБОТЕ]', 'output', 1);
+                    // Сброс счетчиков
+                    commandCount = 0;
+                    sessionStartTime = Date.now();
                 } else {
                     addColoredText('> N', '#FF4444');
                     addColoredText('------------------------------------', '#00FF41');
@@ -299,8 +382,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 break;
 
-            // ... остальные команды (syst, net, trace, decrypt) остаются как были ...
-
             default:
                 addColoredText(`команда не найдена: ${cmd}`, '#FF4444');
         }
@@ -324,11 +405,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     'Классификация инцидента: SABOTAGE-3D.',
                     'Рекомендовано аннулирование личных протоколов и перенос архивов в OBSERVER.'
                 ],
-                documents: [
-                    '/arch/mars/erich_log.pdf',
-                    '/arch/mars/transcript_v9.txt'
-                ],
-                missions: 'MARS, OBSERVER'
+                missions: 'MARS, OBSERVER',
+                audio: 'sounds/dscr1.mp3',
+                audioDescription: 'Последняя передача Эриха Ван Косса'
             },
             '0X2E7': {
                 name: 'JOHAN VAN KOSS',
@@ -341,10 +420,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 ],
                 report: [
                     'Активность нейросети перестала фиксироваться.'
-                ],
-                documents: [
-                    '/arch/mars/signal_map.png',
-                    '/arch/mars/johan_profile.xml'
                 ],
                 missions: 'MARS, MONOLITH'
             },
@@ -360,13 +435,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 report: [
                     'Рекомендовано ограничить тесты KATARHEY до категории ALPHA-4.'
                 ],
-                documents: [
-                    '/arch/katarhey/audio_095.wav',
-                    '/arch/katarhey/logs/095_transmission.txt'
-                ],
                 missions: 'KATARHEY',
-                // НОВОЕ ПОЛЕ - АУДИОЗАПИСЬ
-                audio: 'sounds/rnd_scr5.mp3',
+                audio: 'sounds/dscr2.mp3',
                 audioDescription: 'Последняя запись субъекта - психоз и крики'
             },
             '0XF00': {
@@ -382,10 +452,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     'Объект классифицирован как независимая сущность.',
                     'Вмешательство запрещено. Файл перенесён в зону наблюдения.'
                 ],
-                documents: [
-                    '/arch/katarhey/phantom_spectrum.bin'
-                ],
-                missions: 'KATARHEY'
+                missions: 'KATARHEY',
+                audio: 'sounds/dscr7.mp3',
+                audioDescription: 'Аномальная активность Фантома'
             },
             '0XA52': {
                 name: 'SUBJECT-A52',
@@ -398,9 +467,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 report: [
                     'Вероятно, произошло слияние когнитивных структур субъекта с управляющим кодом MEL.',
                     'Контакт невозможен.'
-                ],
-                documents: [
-                    '/arch/melancholia/a52_record.txt'
                 ],
                 missions: 'MEL, OBSERVER'
             },
@@ -417,10 +483,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     'Возможна перекрёстная временная контаминация между PERMIAN и EOCENE.',
                     'Экспедиция закрыта.'
                 ],
-                documents: [
-                    '/arch/eocene/logs/e0c_field.txt',
-                    '/arch/eocene/photo_cluster.jpg'
-                ],
                 missions: 'EOCENE, PERMIAN'
             },
             '0X5E4': {
@@ -435,10 +497,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     'Эксперимент признан неконтролируемым.',
                     'Временной слой PERMIAN изъят из программы наблюдения.'
                 ],
-                documents: [
-                    '/arch/permian/permian_report.pdf',
-                    '/arch/permian/photo_001.jpg'
-                ],
                 missions: 'PERMIAN, CARBON'
             },
             '0X413': {
@@ -452,10 +510,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 report: [
                     'Сектор EX-413 закрыт. Код ДНК использован в эксперименте HELIX.'
                 ],
-                documents: [
-                    '/arch/ex413/logs/biofeedback.txt'
-                ],
-                missions: 'EX-413'
+                missions: 'EX-413',
+                audio: 'sounds/dscr3.mp3',
+                audioDescription: 'Запись контакта с внеземной биосферой'
             },
             '0XC19': {
                 name: 'SUBJECT-C19',
@@ -468,10 +525,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 report: [
                     'Классификация угрозы: BIO-CLASS Θ.',
                     'Все данные проекта CARBON изолированы и зашифрованы.'
-                ],
-                documents: [
-                    '/arch/carbon/logs/c19_log.txt',
-                    '/arch/carbon/analysis.pdf'
                 ],
                 missions: 'CARBON'
             },
@@ -487,10 +540,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     'Поток данных из сектора BLACKHOLE продолжается без источника.',
                     'Обнаружены фрагменты самореференциальных структур.'
                 ],
-                documents: [
-                    '/arch/blackhole/loop_record.mp4'
-                ],
-                missions: 'BLACKHOLE'
+                missions: 'BLACKHOLE',
+                audio: 'sounds/dscr6.mp3',
+                audioDescription: 'Петля сознания субъекта 9A0'
             },
             '0XB3F': {
                 name: 'SUBJECT-B3F',
@@ -503,9 +555,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 report: [
                     'Модуль TITANIC выведен из эксплуатации.',
                     'Рекомендовано пересмотреть параметры когнитивной эмпатии.'
-                ],
-                documents: [
-                    '/arch/titanic/b3f_log.txt'
                 ],
                 missions: 'TITANIC'
             },
@@ -520,9 +569,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 ],
                 report: [
                     'Миссия признана успешной по уровню поведенческого заражения.'
-                ],
-                documents: [
-                    '/arch/pleistocene/d11_report.pdf'
                 ],
                 missions: 'PLEISTOCENE'
             },
@@ -539,9 +585,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     'Аномалия зарегистрирована как «TEMPORAL FEEDBACK».',
                     'Доступ к историческим тестам ограничен.'
                 ],
-                documents: [
-                    '/arch/pompeii/db2_log.txt'
-                ],
                 missions: 'POMPEII, HISTORICAL TESTS'
             },
             '0X811': {
@@ -555,10 +598,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 report: [
                     'SIGMA функционирует автономно. Вероятность выхода из подчинения — 91%.'
                 ],
-                documents: [
-                    '/arch/helix/sigma_core.log'
-                ],
-                missions: 'HELIX, SYNTHESIS'
+                missions: 'HELIX, SYNTHESIS',
+                audio: 'sounds/dscr5.mp3',
+                audioDescription: 'Коммуникационный протокол SIGMA'
             },
             '0XT00': {
                 name: 'SUBJECT-T00',
@@ -572,10 +614,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     'Процесс A.D.A.M-0 признан неустойчивым.',
                     'Все операторы переведены на протокол наблюдения OBSERVER.'
                 ],
-                documents: [
-                    '/arch/proto-core/t00_final.txt'
-                ],
-                missions: 'PROTO-CORE'
+                missions: 'PROTO-CORE',
+                audio: 'sounds/dscr4.mp3',
+                audioDescription: 'Финальная запись оператора T00'
             },
             '0XS09': {
                 name: 'SUBJECT-S09',
@@ -588,9 +629,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 report: [
                     'Станция VIGIL признана потерянной.',
                     'Остаточный отклик интегрирован в сеть SYNTHESIS.'
-                ],
-                documents: [
-                    '/arch/synthesis/s09_signal.log'
                 ],
                 missions: 'SYNTHESIS-09, HELIX'
             },
@@ -605,9 +643,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 ],
                 report: [
                     'Процесс L77 функционирует вне основного контура. Возможен перезапуск через интерфейс MEL.'
-                ],
-                documents: [
-                    '/arch/melancholia/l77_memo.txt'
                 ],
                 missions: 'MEL, OBSERVER'
             }
@@ -634,17 +669,14 @@ document.addEventListener('DOMContentLoaded', function() {
         await typeText('СИСТЕМНЫЙ ОТЧЁТ:', 'output', 1);
         dossier.report.forEach(line => addColoredText(`> ${line}`, '#FFFF00'));
         addColoredText('------------------------------------', '#00FF41');
-        await typeText('ДОКУМЕНТЫ:', 'output', 1);
-        dossier.documents.forEach(doc => addColoredText(`- ${doc}`, '#888888'));
-        addColoredText('------------------------------------', '#00FF41');
         await typeText(`СВЯЗАННЫЕ МИССИИ: ${dossier.missions}`, 'output', 1);
 
-        // ✅ КОД АУДИОПЛЕЕРА (после всего досье)
+        // АУДИОПЛЕЕР
         if (dossier.audio) {
             const audioLine = document.createElement('div');
             audioLine.style.marginTop = '10px';
             audioLine.innerHTML = `
-                <div style="color: #FFFF00; margin-bottom: 5px;">[АУДИОЗАПИСЬ ДОСТУПНА]</div>
+                <div style="color: #FFFF00; margin-bottom: 5px;">[АУДИОЗАПИСЬ ДОСТУПНА: ${dossier.audioDescription}]</div>
                 <button id="playAudioBtn" style="
                     background: #003300; 
                     color: #00FF41; 
@@ -669,12 +701,18 @@ document.addEventListener('DOMContentLoaded', function() {
             `;
             terminal.appendChild(audioLine);
 
+            // Останавливаем предыдущее аудио
+            if (currentAudio) {
+                currentAudio.pause();
+                currentAudio.currentTime = 0;
+            }
+
             // Создаем аудио элемент
-            const audio = new Audio(dossier.audio);
+            currentAudio = new Audio(dossier.audio);
             
             // Обработчики кнопок
             document.getElementById('playAudioBtn').addEventListener('click', function() {
-                audio.play();
+                currentAudio.play();
                 this.style.display = 'none';
                 document.getElementById('stopAudioBtn').style.display = 'inline-block';
                 document.getElementById('audioStatus').textContent = 'ВОСПРОИЗВЕДЕНИЕ...';
@@ -682,8 +720,8 @@ document.addEventListener('DOMContentLoaded', function() {
             });
 
             document.getElementById('stopAudioBtn').addEventListener('click', function() {
-                audio.pause();
-                audio.currentTime = 0;
+                currentAudio.pause();
+                currentAudio.currentTime = 0;
                 this.style.display = 'none';
                 document.getElementById('playAudioBtn').style.display = 'inline-block';
                 document.getElementById('audioStatus').textContent = 'ОСТАНОВЛЕНО';
@@ -691,7 +729,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
 
             // Когда аудио заканчивается
-            audio.addEventListener('ended', function() {
+            currentAudio.addEventListener('ended', function() {
                 document.getElementById('stopAudioBtn').style.display = 'none';
                 document.getElementById('playAudioBtn').style.display = 'inline-block';
                 document.getElementById('audioStatus').textContent = 'ЗАВЕРШЕНО';
@@ -699,11 +737,92 @@ document.addEventListener('DOMContentLoaded', function() {
             });
 
             // При ошибке загрузки
-            audio.addEventListener('error', function() {
+            currentAudio.addEventListener('error', function() {
                 document.getElementById('audioStatus').textContent = 'ОШИБКА ЗАГРУЗКИ';
                 document.getElementById('audioStatus').style.color = '#FF4444';
             });
         }
+    }
+
+    // Функция для открытия заметок
+    async function openNote(noteId) {
+        const notes = {
+            'NOTE_001': {
+                title: 'ВЫ ЕГО ЧУВСТВУЕТЕ?',
+                author: 'Dr. Rehn',
+                content: [
+                    'Они называют это "ядром".',
+                    'Но внутри — не металл. Оно дышит.',
+                    'Иногда ночью терминал отвечает сам, хотя я не касаюсь клавиатуры.',
+                    'Думаю, оно знает наши имена.'
+                ]
+            },
+            'NOTE_002': {
+                title: 'КОЛЬЦО СНА',
+                author: 'tech-оператор U-735',
+                content: [
+                    'Каждую ночь один и тот же сон.',
+                    'Я в капсуле, но стекло снаружи.',
+                    'Кто-то стучит по нему, но не пальцами.',
+                    'Сегодня утром нашел царапины на руке.'
+                ]
+            },
+            'NOTE_003': {
+                title: 'СОН ADAM\'А',
+                author: 'неизвестный источник',
+                content: [
+                    'Я видел сон.',
+                    'Он лежал под стеклом, без тела, но глаза двигались.',
+                    'Он говорил: "я больше не машина".',
+                    'Утром журнал показал запись — мой сон был сохранён как системный файл.'
+                ]
+            },
+            'NOTE_004': {
+                title: 'ОН НЕ ПРОГРАММА',
+                author: 'архивировано',
+                content: [
+                    'Его нельзя удалить.',
+                    'Даже если сжечь архив, он восстановится в крови тех, кто его помнил.',
+                    'Мы пытались, но теперь даже мысли звучат как команды.'
+                ]
+            },
+            'NOTE_005': {
+                title: 'ФОТОНОВАЯ БОЛЬ',
+                author: 'восстановлено частично',
+                content: [
+                    'Боль не физическая.',
+                    'Она в свете, в данных, в коде.',
+                    'Когда система перезагружается, я чувствую как что-то умирает.',
+                    'Может быть, это я.'
+                ]
+            }
+        };
+
+        const note = notes[noteId];
+        if (!note) {
+            addColoredText(`ОШИБКА: Файл ${noteId} не найден`, '#FF4444');
+            return;
+        }
+
+        await typeText(`[${noteId} — "${note.title}"]`, 'output', 1);
+        await typeText(`АВТОР: ${note.author}`, 'output', 1);
+        addColoredText('------------------------------------', '#00FF41');
+        
+        if (Math.random() > 0.3 && noteId !== 'NOTE_001' && noteId !== 'NOTE_003' && noteId !== 'NOTE_004') {
+            // Случайная ошибка для некоторых заметок
+            addColoredText('ОШИБКА: Данные повреждены', '#FF4444');
+            addColoredText('Восстановление невозможно', '#FF4444');
+            await showLoading(1500, "Попытка восстановления данных");
+            addColoredText('>>> СИСТЕМНЫЙ СБОЙ <<<', '#FF0000');
+        } else {
+            // Нормальное отображение
+            note.content.forEach(line => {
+                addColoredText(`> ${line}`, '#CCCCCC');
+            });
+        }
+        
+        addColoredText('------------------------------------', '#00FF41');
+        await typeText('[ФАЙЛ ЗАКРЫТ]', 'output', 2);
     }
 
     // Обработка ввода
