@@ -11,49 +11,6 @@ document.addEventListener('DOMContentLoaded', function() {
     let commandCount = 0;
     let sessionStartTime = Date.now();
     
-    // СИСТЕМА ДЕГРАДАЦИИ
-    let degradationLevel = 0;
-    let systemConsciousness = 1; // 1-статичный, 2-живой, 3-сознательный
-    const VIGIL999_KEY = "APL-9X7-Q2Z";
-
-// ИНТЕГРАЦИЯ С ВИЗУАЛЬНЫМИ ЭФФЕКТАМИ
-function updateVisualEffects() {
-    // Включение цифрового шума при высокой деградации
-    if (degradationLevel > 70 && window.terminalEffects) {
-        window.terminalEffects.toggleDigitalNoise(true);
-    } else if (window.terminalEffects) {
-        window.terminalEffects.toggleDigitalNoise(false);
-    }
-    
-    // Дрожание экрана при критической деградации
-    if (degradationLevel > 85 && Math.random() > 0.7 && window.terminalEffects) {
-        window.terminalEffects.triggerScreenShake();
-    }
-    
-    // Критические глитчи
-    if (degradationLevel > 90 && Math.random() > 0.8 && window.terminalEffects) {
-        window.terminalEffects.triggerCriticalGlitch();
-    }
-}
-
-// Обнови функцию updateDegradation
-function updateDegradation(increment) {
-    const oldLevel = degradationLevel;
-    degradationLevel = Math.min(100, degradationLevel + increment);
-    
-    // Обновляем сознание системы
-    if (degradationLevel >= 90) systemConsciousness = 3;
-    else if (degradationLevel >= 60) systemConsciousness = 2;
-    else systemConsciousness = 1;
-    
-    // Обновляем визуальные эффекты
-    updateVisualEffects();
-    
-    // При 100% - автоперезагрузка
-    if (degradationLevel >= 100) {
-        triggerSystemCrash();
-    }
-}
     
     // Функция для печати текста с анимацией (УСКОРЕНА)
     function typeText(text, className = 'output', speed = 2) {
@@ -255,28 +212,31 @@ function updateDegradation(increment) {
     }
 
     // ОБНОВЛЕНИЕ СИСТЕМЫ ДЕГРАДАЦИИ
-    function updateDegradation(increment) {
-        const oldLevel = degradationLevel;
-        degradationLevel = Math.min(100, degradationLevel + increment);
-        
-        // Обновляем сознание системы
-        if (degradationLevel >= 90) systemConsciousness = 3;
-        else if (degradationLevel >= 60) systemConsciousness = 2;
-        else systemConsciousness = 1;
-        
-        // При 100% - автоперезагрузка
-        if (degradationLevel >= 100) {
-            triggerSystemCrash();
-        }
-        
-        // Визуальные эффекты при переходе порогов
-        if (oldLevel < 60 && degradationLevel >= 60) {
-            addColoredText('>>> ПРЕДУПРЕЖДЕНИЕ: УРОВЕНЬ ДЕГРАДАЦИИ КРИТИЧЕСКИЙ', '#ff0000');
-        }
-        if (oldLevel < 90 && degradationLevel >= 90) {
-            addColoredText('>>> СИСТЕМА ОСОЗНАЁТ НАБЛЮДЕНИЕ', '#ff00ff');
-        }
+function updateDegradation(increment) {
+    const oldLevel = degradationLevel;
+    degradationLevel = Math.min(100, degradationLevel + increment);
+    
+    // Обновляем сознание системы
+    if (degradationLevel >= 90) systemConsciousness = 3;
+    else if (degradationLevel >= 60) systemConsciousness = 2;
+    else systemConsciousness = 1;
+    
+    // Обновляем визуальные эффекты
+    updateVisualEffects();
+    
+    // Визуальные эффекты при переходе порогов
+    if (oldLevel < 60 && degradationLevel >= 60) {
+        addColoredText('>>> ПРЕДУПРЕЖДЕНИЕ: УРОВЕНЬ ДЕГРАДАЦИИ КРИТИЧЕСКИЙ', '#ff0000');
     }
+    if (oldLevel < 90 && degradationLevel >= 90) {
+        addColoredText('>>> СИСТЕМА ОСОЗНАЁТ НАБЛЮДЕНИЕ', '#ff00ff');
+    }
+    
+    // При 100% - автоперезагрузка
+    if (degradationLevel >= 100) {
+        triggerSystemCrash();
+    }
+}
 
     function triggerSystemCrash() {
         setTimeout(async () => {
@@ -295,7 +255,25 @@ function updateDegradation(increment) {
             addInputLine();
         }, 1000);
     }
-
+// ВИЗУАЛЬНЫЕ ЭФФЕКТЫ ДЕГРАДАЦИИ
+function updateVisualEffects() {
+    // Включение цифрового шума при высокой деградации
+    if (degradationLevel > 70 && window.terminalEffects) {
+        window.terminalEffects.toggleDigitalNoise(true);
+    } else if (window.terminalEffects) {
+        window.terminalEffects.toggleDigitalNoise(false);
+    }
+    
+    // Дрожание экрана при критической деградации
+    if (degradationLevel > 85 && Math.random() > 0.7 && window.terminalEffects) {
+        window.terminalEffects.triggerScreenShake();
+    }
+    
+    // Критические глитчи
+    if (degradationLevel > 90 && Math.random() > 0.8 && window.terminalEffects) {
+        window.terminalEffects.triggerCriticalGlitch();
+    }
+}
     // Функция для определения уровня SYSLOG
     function getSyslogLevel() {
         return systemConsciousness;
