@@ -6,7 +6,9 @@
 */
 
 (function () {
-    // конфигурация
+    'use strict';
+
+    // базовые тексты для boot sequence + ошибки
     const BOOT_LINES_BASE = [
         ">> ИНИЦИАЛИЗАЦИЯ ПРОТОКОЛА БЕЗОПАСНОСТИ A.D.A.M...",
         ">> ЗАГРУЗКА ПОДСИСТЕМЫ VIGIL-9...",
@@ -23,9 +25,10 @@
         "ATTEMPT: эмуляция нейросигнала... [успешно]"
     ];
 
+    // креды — можно поменять
     const VALID_CREDENTIALS = { username: "qq", password: "ww" };
 
-    // DOM
+    // DOM refs
     const startBtn = document.getElementById('start-btn');
     const startScreen = document.getElementById('start-screen');
     const bootScreen = document.getElementById('boot-screen');
@@ -40,8 +43,9 @@
     const degradationHint = document.getElementById('degradation-hint');
     const degradationPanel = document.getElementById('degradation-panel');
     const ambientHint = document.getElementById('ambient-hint');
+    const echoMemory = document.getElementById('echo-memory');
 
-    // state
+    // state: visits + degradation persisted
     let visits = parseInt(localStorage.getItem('adam_visits') || '0', 10);
     visits = isNaN(visits) ? 0 : visits;
     visits++;
@@ -51,25 +55,57 @@
     degradation = isNaN(degradation) ? 0 : degradation;
     setDegradationUI(degradation);
 
+    // small helper: create ephemeral echo-memory phrases (visual only)
+    const ECHO_PHRASES = [
+        "load consciousness...",
+        "subject lost...",
+        "не смотри",
+        "they remember",
+        "я помню тебя"
+    ];
+    function spawnEchoPhrase() {
+        if (!echoMemory) return;
+        const s = document.createElement('span');
+        s.className = 'echo-phrase';
+        s.textContent = ECHO_PHRASES[Math.floor(Math.random() * ECHO_PHRASES.length)];
+        // random position
+        s.style.left = (10 + Math.random() * 80) + '%';
+        s.style.top = (10 + Math.random() * 80) + '%';
+        s.style.fontSize = (12 + Math.floor(Math.random() * 10)) + 'px';
+        s.style.opacity = '0';
+        echoMemory.appendChild(s);
+        // animate in/out via CSS keyframes
+        setTimeout(() => { s.remove(); }, 3200 + Math.random() * 2000);
+    }
+    // schedule a few echoes (sparse)
+    (function scheduleEchoes() {
+        spawnEchoPhrase();
+        const t = 5000 + Math.random() * 15000;
+        setTimeout(scheduleEchoes, t);
+    })();
+
     // Start button
-    startBtn.addEventListener('click', () => startBootSequence());
-    document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !bootScreen.classList.contains('hidden') === false) startBootSequence(); });
+    if (startBtn) startBtn.addEventListener('click', () => startBootSequence());
+    document.addEventListener('keydown', (e) => {
+        if ((e.key === 'Enter' || e.key === 'Return') && startScreen && !startScreen.classList.contains('hidden')) {
+            startBootSequence();
+        }
+    });
 
     // Boot sequence
     function startBootSequence() {
+        if (!startScreen || !bootScreen) return;
         startScreen.classList.add('hidden');
         bootScreen.classList.remove('hidden');
-        bootText.innerHTML = '';
-        bootBar.style.width = '0%';
+        if (bootText) bootText.innerHTML = '';
+        if (bootBar) bootBar.style.width = '0%';
 
-        // create boot lines with a slight randomization based on visits
         const lines = buildBootLines(visits);
         let idx = 0;
         const total = lines.length;
 
         function step() {
             if (idx >= total) {
-                // finished
                 setTimeout(() => showLoginScreen(), 700);
                 return;
             }
@@ -77,111 +113,119 @@
             line.className = 'boot-line fade-in';
             line.textContent = lines[idx];
             bootText.appendChild(line);
-            // progress
-            const pct = Math.round(((idx + 1) / total) * 100);
-            bootBar.style.width = pct + '%';
 
-            // variable delay (simulate hang sometimes)
-            let delay = 800 + Math.floor(Math.random() * 800);
-            if (Math.random() < 0.12) delay += 800 + Math.floor(Math.random() * 1200); // rare hang
+            // progress bar update
+            const pct = Math.round(((idx + 1) / total) * 100);
+            if (bootBar) bootBar.style.width = pct + '%';
+
+            // variable delay: occasional hangs on cryptomodule lines
+            let delay = 700 + Math.floor(Math.random() * 800);
+            if (lines[idx].toLowerCase().includes('крипто') && Math.random() < 0.6) {
+                delay += 600 + Math.floor(Math.random() * 900);
+            }
+            // rare dramatic hang
+            if (Math.random() < 0.08) delay += 900 + Math.floor(Math.random() * 1200);
+
             idx++;
             setTimeout(step, delay);
         }
+
         setTimeout(step, 300);
     }
 
     function buildBootLines(visitsCount) {
-        // copy base
         const base = BOOT_LINES_BASE.slice();
-        // insert 1-2 error lines randomly
         const add = Math.random() < 0.85 ? 1 : 2;
         for (let i=0;i<add;i++) {
             const pos = 1 + Math.floor(Math.random() * (base.length - 1));
             const err = BOOT_ERRORS[Math.floor(Math.random() * BOOT_ERRORS.length)];
             base.splice(pos, 0, err);
         }
-        // customize by visits
         if (visitsCount === 1) base.unshift(">> ПЕРВОЕ ПОДКЛЮЧЕНИЕ: ИНИЦИАЛИЗАЦИЯ ЯДРА...");
         else if (visitsCount === 2) base.unshift(">> ПОВТОРНОЕ ПОДКЛЮЧЕНИЕ ОБНАРУЖЕНО // PROCESS: UNSTABLE");
         else base.unshift(">> ОБНАРУЖЕНО: ПОВТОРНЫЙ ДОСТУП // кто вы? // состав проверяется");
-
-        // Add a small chance to delay on cryptomodule line for drama
         return base;
     }
 
     // Show login screen
     function showLoginScreen() {
+        if (!bootScreen || !loginScreen) return;
         bootScreen.classList.add('hidden');
         loginScreen.classList.remove('hidden');
-        usernameInput.focus();
+        if (usernameInput) usernameInput.focus();
 
-        // occasional ambient hint — random and subtle
-        setTimeout(randomAmbientHint, 2000);
+        // occasional ambient hint scheduling
+        setTimeout(randomAmbientHint, 1600);
 
-        // if visits big -> wobble UI
+        // visits-based small eerie hint
         if (visits >= 3) {
-            // small visual disturb: show short ambient message
             ambientMessage("A.D.A.M. помнит предыдущие сессии...");
         }
     }
 
     // Login handling
-    loginBtn.addEventListener('click', login);
-    document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !loginScreen.classList.contains('hidden')) login(); });
+    if (loginBtn) loginBtn.addEventListener('click', login);
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && loginScreen && !loginScreen.classList.contains('hidden')) login();
+    });
 
     let loginBlocked = false;
     function login() {
         if (loginBlocked) return;
-        const u = usernameInput.value.trim();
-        const p = passwordInput.value;
-        loginError.classList.add('hidden');
+        const u = usernameInput ? usernameInput.value.trim() : '';
+        const p = passwordInput ? passwordInput.value : '';
+        if (loginError) loginError.classList.add('hidden');
 
-        // show scanning micro-animation (fake)
-        loginBtn.disabled = true;
-        loginBtn.textContent = "идентификация...";
+        if (loginBtn) {
+            loginBtn.disabled = true;
+            loginBtn.textContent = "идентификация...";
+        }
+
         setTimeout(() => {
-            if (u === VALID_CREDENTIALS.username && p === VALID_CREDENTIALS.password) {
-                // success
-                loginError.classList.remove('hidden');
-                loginError.style.color = 'rgb(100,255,130)';
-                loginError.textContent = 'ИДЕНТИФИКАЦИЯ ПОДТВЕРЖДЕНА // нейроскан завершён';
-                // store residual degradation to be used by terminal (already stored)
-                // short delay then redirect to terminal.html
+            const okUser = u === VALID_CREDENTIALS.username;
+            const okPass = p === VALID_CREDENTIALS.password;
+
+            if (okUser && okPass) {
+                if (loginError) {
+                    loginError.classList.remove('hidden');
+                    loginError.style.color = 'rgb(100,255,130)';
+                    loginError.textContent = 'ИДЕНТИФИКАЦИЯ ПОДТВЕРЖДЕНА // нейроскан завершён';
+                }
+                // short delay then redirect
                 setTimeout(() => {
-                    // fade out
                     document.body.style.transition = 'opacity 0.6s ease';
                     document.body.style.opacity = '0';
                     setTimeout(()=> window.location.href = 'terminal.html', 700);
-                }, 800);
+                }, 700);
             } else {
-                // fail with "ritual"
-                loginError.classList.remove('hidden');
-                loginError.style.color = '#D83F47';
-                loginError.textContent = 'ИДЕНТИФИКАЦИЯ ОТКЛОНЕНА // след оставлен [#735]';
-                // block attempts for 4 sec
+                if (loginError) {
+                    loginError.classList.remove('hidden');
+                    loginError.style.color = '#D83F47';
+                    loginError.textContent = 'ИДЕНТИФИКАЦИЯ ОТКЛОНЕНА // след оставлен [#735]';
+                }
                 loginBlocked = true;
-                loginBtn.textContent = "ОТКАЗ";
+                if (loginBtn) loginBtn.textContent = "ОТКАЗ";
                 setTimeout(()=> {
                     loginBlocked = false;
-                    loginBtn.disabled = false;
-                    loginBtn.textContent = "АУТЕНТИФИКАЦИЯ";
-                    passwordInput.value = '';
-                    usernameInput.focus();
+                    if (loginBtn) {
+                        loginBtn.disabled = false;
+                        loginBtn.textContent = "АУТЕНТИФИКАЦИЯ";
+                    }
+                    if (passwordInput) passwordInput.value = '';
+                    if (usernameInput) usernameInput.focus();
                 }, 4000);
             }
         }, 900 + Math.floor(Math.random()*900));
     }
 
-    // Degradation UI helpers
+    // Degradation UI helpers (keeps localStorage sync)
     function setDegradationUI(value) {
         degradation = Math.max(0, Math.min(100, parseInt(value || 0, 10)));
-        degradationFill.style.width = `${degradation}%`;
-        localStorage.setItem('adam_degradation', degradation);
+        if (degradationFill) degradationFill.style.width = `${degradation}%`;
+        localStorage.setItem('adam_degradation', String(degradation));
         // hint visibility from 60%
-        if (degradation >= 60) {
-            degradationHint.style.opacity = '1';
-        } else {
-            degradationHint.style.opacity = '0';
+        if (degradationHint) {
+            degradationHint.style.opacity = (degradation >= 60) ? '1' : '0';
         }
     }
 
@@ -200,6 +244,7 @@
     }
 
     function ambientMessage(text, ms = 2000) {
+        if (!ambientHint) return;
         ambientHint.textContent = text;
         ambientHint.classList.remove('hidden');
         ambientHint.style.opacity = '1';
@@ -210,10 +255,10 @@
         }, ms);
     }
 
-    // initial ui apply
+    // Initial UI
     setDegradationUI(degradation);
 
-    // expose to window for debugging (optional)
+    // expose debug helpers
     window.__ADAM_DEBUG = {
         getVisits: () => visits,
         getDegradation: () => degradation,
