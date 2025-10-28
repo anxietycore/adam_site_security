@@ -3,7 +3,7 @@
    Положи рядом с index.html.
 */
 
-/* Сброс */
+/* ========== RESET ========== */
 * { margin:0; padding:0; box-sizing:border-box; }
 html,body { height:100%; }
 body {
@@ -21,6 +21,8 @@ body {
     position: fixed;
     inset: 0;
     pointer-events: none;
+    z-index: 0;
+    overflow: hidden;
 }
 
 /* нейронный базовый слой (пульсирует) */
@@ -28,25 +30,28 @@ body {
     position: absolute;
     inset: 0;
     background:
-        radial-gradient(circle at 30% 35%, rgba(100,255,130,0.03), transparent 15%),
+        radial-gradient(circle at 30% 35%, rgba(100,255,130,0.03), transparent 12%),
         radial-gradient(circle at 70% 65%, rgba(100,255,130,0.02), transparent 18%),
-        linear-gradient(180deg, rgba(0,0,0,0.0), rgba(0,0,0,0.35));
+        linear-gradient(180deg, rgba(0,0,0,0.0), rgba(0,0,0,0.45));
     mix-blend-mode: screen;
     animation: neural-breath 14s ease-in-out infinite;
     z-index: 1;
+    transform-origin: center center;
 }
 
-/* маленькие искры/импульсы */
+/* маленькие искры/импульсы поверх нейрона */
 .neural-layer::after {
     content:"";
     position:absolute;
     inset:0;
-    background-image: radial-gradient(circle at 10% 20%, rgba(100,255,130,0.05) 0, transparent 5%),
-                      radial-gradient(circle at 80% 40%, rgba(100,255,130,0.04) 0, transparent 6%),
-                      radial-gradient(circle at 50% 80%, rgba(240,215,120,0.03) 0, transparent 8%);
+    background-image:
+      radial-gradient(circle at 10% 20%, rgba(100,255,130,0.05) 0, transparent 5%),
+      radial-gradient(circle at 80% 40%, rgba(240,215,120,0.04) 0, transparent 6%),
+      radial-gradient(circle at 50% 80%, rgba(200,100,255,0.03) 0, transparent 8%);
     pointer-events:none;
-    opacity:0.8;
+    opacity:0.9;
     filter: blur(1px);
+    animation: sparks-fade 6s linear infinite;
 }
 
 /* echo memory — редкие призрачные фразы */
@@ -55,14 +60,16 @@ body {
     inset:0;
     z-index:2;
     pointer-events:none;
+    overflow:visible;
 }
-.echo-memory span {
+.echo-memory span, .echo-phrase {
     position:absolute;
     color: rgba(200,200,200,0.06);
     font-size:14px;
     transform:translate(-50%,-50%);
     white-space:nowrap;
-    animation: echo-flicker 6s linear infinite;
+    animation: echo-flicker 3.2s linear both;
+    will-change: opacity, transform;
 }
 
 /* VHS overlay: полоски, шум, мелкие царапины */
@@ -75,11 +82,11 @@ body {
         linear-gradient(rgba(0,0,0,0.02) 1px, transparent 1px),
         repeating-linear-gradient(90deg, rgba(100,255,130,0.01), rgba(100,255,130,0.01) 2px, transparent 2px, transparent 6px);
     mix-blend-mode: overlay;
-    opacity:0.25;
+    opacity:0.20;
     animation: vhs-flicker 8s infinite;
 }
 
-/* scanline */
+/* scanline (thin) */
 .scanline {
     position:absolute;
     inset:0;
@@ -92,9 +99,28 @@ body {
     );
     opacity:0.25;
     pointer-events:none;
+    mix-blend-mode: multiply;
 }
 
-/* =========== ПАНЕЛИ ЭКРАНОВ =========== */
+/* ambient hint — small top overlay */
+.ambient-hint {
+    position: fixed;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 140;
+    background: rgba(0,0,0,0.45);
+    color: rgba(200,200,200,0.88);
+    border: 1px solid rgba(100,255,130,0.06);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-family: 'VT323', monospace;
+    font-size: 13px;
+    pointer-events: none;
+    transition: opacity .18s;
+}
+
+/* =========== PANELS / SCREENS =========== */
 .screen {
     position:fixed;
     inset:0;
@@ -106,7 +132,6 @@ body {
 }
 .hidden { display:none !important; }
 
-/* панель контента */
 .panel {
     width: 920px;
     max-width: calc(100% - 40px);
@@ -122,15 +147,12 @@ body {
     overflow:visible;
 }
 
-/* логотип */
 .logo { font-size:18px; line-height:18px; color: rgba(100,255,130,0.95); margin-bottom:12px; }
 .logo.small { font-size:12px }
-
-/* подписи */
 .caption { color: rgba(200,200,200,0.25); margin-top:4px; margin-bottom:18px; font-size:14px; }
 .subhint { color: rgba(200,200,200,0.18); font-size:12px; margin-top:8px; }
 
-/* кнопки */
+/* buttons */
 .btn {
     background: transparent;
     color: rgb(100,255,130);
@@ -144,7 +166,7 @@ body {
 }
 .btn:hover { transform: translateY(-2px); background: rgba(100,255,130,0.04); }
 
-/* login panel specifics */
+/* login specifics */
 .login-panel { width:420px; padding:20px 26px; text-align:left; }
 .input-group { margin:12px 0; }
 .input-group label { font-size:13px; color: rgba(200,200,200,0.45); display:block; margin-bottom:6px; }
@@ -161,7 +183,6 @@ body {
 }
 .input-group input:focus { box-shadow: 0 0 10px rgba(100,255,130,0.06); border-color: rgba(100,255,130,0.28); }
 
-/* muted / error */
 .muted { color: rgba(200,200,200,0.14); font-size:12px; margin-top:8px; }
 .error { color:#D83F47; margin-top:10px; }
 
@@ -185,7 +206,7 @@ body {
     min-width:160px;
 }
 
-/* bar */
+/* small bar */
 #degradation-bar {
     width: 140px;
     height: 10px;
@@ -205,54 +226,62 @@ body {
 /* hint under bar */
 #degradation-hint { color:#EFD76C; font-size:12px; opacity:0; transform: translateY(-2px); transition: opacity .3s; }
 
-/* color states (for injecting classes) */
+/* color states (if you add / remove classes) */
 .terminal-output-stable { color: rgb(100,255,130); }
 .terminal-output-unstable { color: #EFD76C; }
 .terminal-output-critical { color: #D83F47; }
 .terminal-output-terminal { color: #C000FF; }
 
-/* =========== ANIMATIONS =========== */
+/* =========== BOOT / PROGRESS / LINES =========== */
+.boot-text { text-align:left; color: rgba(180,255,190,0.9); font-family:'VT323', monospace; font-size:14px; margin: 8px 0 12px 0; max-height: 40vh; overflow-y:auto; padding-right:6px; }
+.boot-line { margin: 6px 0; white-space: pre-wrap; line-height:1.3; }
+.boot-progress { margin-top: 12px; width:100%; display:flex; justify-content:center; }
+.boot-bar-wrapper { width:90%; max-width:720px; background:#060606; border-radius:6px; border:1px solid rgba(255,255,255,0.03); height:8px; overflow:hidden; }
+.boot-bar { height:100%; width:0%; background: linear-gradient(90deg, rgba(100,255,130,0.9), rgba(239,215,108,0.9)); box-shadow: 0 0 8px rgba(100,255,130,0.06) inset; transition: width 400ms linear; }
+
+/* =========== GLITCH / EFFECT HELPERS =========== */
 @keyframes neural-breath {
-    0% { transform: scale(1); opacity: 0.28; filter: blur(0.6px) }
-    50% { transform: scale(1.02); opacity: 0.9; filter: blur(0.2px) }
-    100% { transform: scale(1); opacity: 0.28; filter: blur(0.6px) }
+    0% { transform: scale(1); opacity: 0.28; filter: blur(0.7px) }
+    50% { transform: scale(1.02); opacity: 0.85; filter: blur(0.26px) }
+    100% { transform: scale(1); opacity: 0.28; filter: blur(0.7px) }
 }
-
+@keyframes sparks-fade {
+    0% { opacity:0.0; transform: translateY(0px) scale(0.98) }
+    20% { opacity:0.8; transform: translateY(-4px) scale(1.02) }
+    100% { opacity:0.0; transform: translateY(0px) scale(1) }
+}
 @keyframes vhs-flicker {
-    0% { opacity: 0.22; transform: translateY(0px); }
-    25% { opacity: 0.26; transform: translateY(-0.6px); }
-    50% { opacity: 0.18; transform: translateY(0.6px); }
-    75% { opacity: 0.24; transform: translateY(-0.4px); }
-    100% { opacity: 0.22; transform: translateY(0px); }
+    0% { opacity: 0.20; transform: translateY(0px); }
+    25% { opacity: 0.25; transform: translateY(-0.6px); }
+    50% { opacity: 0.16; transform: translateY(0.6px); }
+    75% { opacity: 0.22; transform: translateY(-0.4px); }
+    100% { opacity: 0.20; transform: translateY(0px); }
 }
-
 @keyframes echo-flicker {
-    0% { opacity: 0; transform: translateY(0px) scale(1); }
-    5% { opacity: 1; transform: translateY(-6px) scale(1.02); }
-    30% { opacity: 0; transform: translateY(0px); }
+    0% { opacity: 0; transform: translateY(6px) scale(0.98); }
+    6% { opacity: 1; transform: translateY(-6px) scale(1.02); }
+    35% { opacity: 0; transform: translateY(0px) scale(1); }
     100% { opacity: 0; }
 }
 
-/* small glitch shards (used by JS to add glitch class) */
-.glitch-shift {
-    transform: translateX(-1px);
-    text-shadow: 1px 0 0 rgba(200,0,80,0.08), -1px 0 0 rgba(0,200,120,0.06);
-}
-.glitch-heavy {
-    filter: hue-rotate(15deg) contrast(120%) saturate(120%);
-    transform: translateY(-1px) skewX(-0.6deg);
-}
+/* small glitch shards */
+.glitch-shift { transform: translateX(-1px); text-shadow: 1px 0 0 rgba(200,0,80,0.08), -1px 0 0 rgba(0,200,120,0.06); }
+.glitch-heavy { filter: hue-rotate(15deg) contrast(120%) saturate(120%); transform: translateY(-1px) skewX(-0.6deg); }
 
-/* вспомогательные: плавное появление текста */
+/* fade-in helper */
 .fade-in { animation: fade-in 350ms ease both; }
 @keyframes fade-in { from { opacity:0; transform: translateY(4px);} to {opacity:1; transform:none;} }
 
-/* утилиты */
 .hidden { display:none !important; }
 .center { display:flex; align-items:center; justify-content:center; }
 
-/* responsive */
+/* responsive adjustments */
+@media (max-width:920px) {
+    .panel { width: calc(100% - 36px); padding:18px; }
+    .login-panel { width: calc(100% - 36px); }
+    .boot-bar-wrapper { width: 94%; }
+}
 @media (max-width:640px) {
-    .panel { width: calc(100% - 28px); padding:18px; }
+    .panel { width: calc(100% - 28px); padding:14px; }
     #degradation-panel { right:10px; top:10px; min-width:140px; }
 }
