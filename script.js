@@ -1,14 +1,6 @@
-/* script.js — логика старт/boot/login и управление показом деградации
-   Полностью готов к вставке. Работает с terminal.html (редирект).
-   ВАЖНО: terminal.js остаётся в проекте и использует localStorage ключи:
-     - adam_visits
-     - adam_degradation
-*/
-
 (function () {
     'use strict';
 
-    // базовые тексты для boot sequence + ошибки
     const BOOT_LINES_BASE = [
         ">> ИНИЦИАЛИЗАЦИЯ ПРОТОКОЛА БЕЗОПАСНОСТИ A.D.A.M...",
         ">> ЗАГРУЗКА ПОДСИСТЕМЫ VIGIL-9...",
@@ -24,11 +16,8 @@
         "ALERT: неопознанный отклик // воспр.",
         "ATTEMPT: эмуляция нейросигнала... [успешно]"
     ];
-
-    // креды — можно поменять
     const VALID_CREDENTIALS = { username: "qq", password: "ww" };
 
-    // DOM refs
     const startBtn = document.getElementById('start-btn');
     const startScreen = document.getElementById('start-screen');
     const bootScreen = document.getElementById('boot-screen');
@@ -41,64 +30,45 @@
     const loginError = document.getElementById('login-error');
     const degradationFill = document.getElementById('degradation-fill');
     const degradationHint = document.getElementById('degradation-hint');
-    const degradationPanel = document.getElementById('degradation-panel');
     const ambientHint = document.getElementById('ambient-hint');
     const echoMemory = document.getElementById('echo-memory');
 
-    // state: visits + degradation persisted
-    let visits = parseInt(localStorage.getItem('adam_visits') || '0', 10);
-    visits = isNaN(visits) ? 0 : visits;
+    let visits = parseInt(localStorage.getItem('adam_visits') || '0', 10) || 0;
     visits++;
     localStorage.setItem('adam_visits', visits);
 
-    let degradation = parseInt(localStorage.getItem('adam_degradation') || '0', 10);
-    degradation = isNaN(degradation) ? 0 : degradation;
+    let degradation = parseInt(localStorage.getItem('adam_degradation') || '0', 10) || 0;
     setDegradationUI(degradation);
 
-    // small helper: create ephemeral echo-memory phrases (visual only)
-    const ECHO_PHRASES = [
-        "load consciousness...",
-        "subject lost...",
-        "не смотри",
-        "they remember",
-        "я помню тебя"
-    ];
+    const ECHO_PHRASES = ["load consciousness...", "subject lost...", "не смотри", "they remember", "я помню тебя"];
     function spawnEchoPhrase() {
         if (!echoMemory) return;
         const s = document.createElement('span');
         s.className = 'echo-phrase';
         s.textContent = ECHO_PHRASES[Math.floor(Math.random() * ECHO_PHRASES.length)];
-        // random position
         s.style.left = (10 + Math.random() * 80) + '%';
         s.style.top = (10 + Math.random() * 80) + '%';
         s.style.fontSize = (12 + Math.floor(Math.random() * 10)) + 'px';
-        s.style.opacity = '0';
         echoMemory.appendChild(s);
-        // animate in/out via CSS keyframes
-        setTimeout(() => { s.remove(); }, 3200 + Math.random() * 2000);
+        setTimeout(() => s.remove(), 3200 + Math.random() * 2000);
     }
-    // schedule a few echoes (sparse)
     (function scheduleEchoes() {
         spawnEchoPhrase();
-        const t = 5000 + Math.random() * 15000;
-        setTimeout(scheduleEchoes, t);
+        setTimeout(scheduleEchoes, 5000 + Math.random() * 15000);
     })();
 
-    // Start button
-    if (startBtn) startBtn.addEventListener('click', () => startBootSequence());
+    if (startBtn) startBtn.addEventListener('click', startBootSequence);
     document.addEventListener('keydown', (e) => {
-        if ((e.key === 'Enter' || e.key === 'Return') && startScreen && !startScreen.classList.contains('hidden')) {
+        if ((e.key === 'Enter') && startScreen && !startScreen.classList.contains('hidden')) {
             startBootSequence();
         }
     });
 
-    // Boot sequence
     function startBootSequence() {
-        if (!startScreen || !bootScreen) return;
         startScreen.classList.add('hidden');
         bootScreen.classList.remove('hidden');
-        if (bootText) bootText.innerHTML = '';
-        if (bootBar) bootBar.style.width = '0%';
+        bootText.innerHTML = '';
+        bootBar.style.width = '0%';
 
         const lines = buildBootLines(visits);
         let idx = 0;
@@ -106,37 +76,30 @@
 
         function step() {
             if (idx >= total) {
-                setTimeout(() => showLoginScreen(), 700);
+                setTimeout(showLoginScreen, 700);
                 return;
             }
             const line = document.createElement('div');
             line.className = 'boot-line fade-in';
             line.textContent = lines[idx];
             bootText.appendChild(line);
-
-            // progress bar update
             const pct = Math.round(((idx + 1) / total) * 100);
-            if (bootBar) bootBar.style.width = pct + '%';
+            bootBar.style.width = pct + '%';
 
-            // variable delay: occasional hangs on cryptomodule lines
             let delay = 700 + Math.floor(Math.random() * 800);
-            if (lines[idx].toLowerCase().includes('крипто') && Math.random() < 0.6) {
-                delay += 600 + Math.floor(Math.random() * 900);
-            }
-            // rare dramatic hang
-            if (Math.random() < 0.08) delay += 900 + Math.floor(Math.random() * 1200);
+            if (lines[idx].toLowerCase().includes('крипто') && Math.random() < 0.6) delay += 800;
+            if (Math.random() < 0.08) delay += 1000;
 
             idx++;
             setTimeout(step, delay);
         }
-
         setTimeout(step, 300);
     }
 
     function buildBootLines(visitsCount) {
         const base = BOOT_LINES_BASE.slice();
         const add = Math.random() < 0.85 ? 1 : 2;
-        for (let i=0;i<add;i++) {
+        for (let i = 0; i < add; i++) {
             const pos = 1 + Math.floor(Math.random() * (base.length - 1));
             const err = BOOT_ERRORS[Math.floor(Math.random() * BOOT_ERRORS.length)];
             base.splice(pos, 0, err);
@@ -147,23 +110,14 @@
         return base;
     }
 
-    // Show login screen
     function showLoginScreen() {
-        if (!bootScreen || !loginScreen) return;
         bootScreen.classList.add('hidden');
         loginScreen.classList.remove('hidden');
         if (usernameInput) usernameInput.focus();
-
-        // occasional ambient hint scheduling
         setTimeout(randomAmbientHint, 1600);
-
-        // visits-based small eerie hint
-        if (visits >= 3) {
-            ambientMessage("A.D.A.M. помнит предыдущие сессии...");
-        }
+        if (visits >= 3) ambientMessage("A.D.A.M. помнит предыдущие сессии...");
     }
 
-    // Login handling
     if (loginBtn) loginBtn.addEventListener('click', login);
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && loginScreen && !loginScreen.classList.contains('hidden')) login();
@@ -182,20 +136,16 @@
         }
 
         setTimeout(() => {
-            const okUser = u === VALID_CREDENTIALS.username;
-            const okPass = p === VALID_CREDENTIALS.password;
-
-            if (okUser && okPass) {
+            if (u === VALID_CREDENTIALS.username && p === VALID_CREDENTIALS.password) {
                 if (loginError) {
                     loginError.classList.remove('hidden');
-                    loginError.style.color = 'rgb(100,255,130)';
+                    loginError.style.color = '#8aff99';
                     loginError.textContent = 'ИДЕНТИФИКАЦИЯ ПОДТВЕРЖДЕНА // нейроскан завершён';
                 }
-                // short delay then redirect
                 setTimeout(() => {
                     document.body.style.transition = 'opacity 0.6s ease';
                     document.body.style.opacity = '0';
-                    setTimeout(()=> window.location.href = 'terminal.html', 700);
+                    setTimeout(() => window.location.href = 'terminal.html', 700);
                 }, 700);
             } else {
                 if (loginError) {
@@ -205,7 +155,7 @@
                 }
                 loginBlocked = true;
                 if (loginBtn) loginBtn.textContent = "ОТКАЗ";
-                setTimeout(()=> {
+                setTimeout(() => {
                     loginBlocked = false;
                     if (loginBtn) {
                         loginBtn.disabled = false;
@@ -215,32 +165,24 @@
                     if (usernameInput) usernameInput.focus();
                 }, 4000);
             }
-        }, 900 + Math.floor(Math.random()*900));
+        }, 900 + Math.floor(Math.random() * 900));
     }
 
-    // Degradation UI helpers (keeps localStorage sync)
     function setDegradationUI(value) {
         degradation = Math.max(0, Math.min(100, parseInt(value || 0, 10)));
         if (degradationFill) degradationFill.style.width = `${degradation}%`;
         localStorage.setItem('adam_degradation', String(degradation));
-        // hint visibility from 60%
         if (degradationHint) {
             degradationHint.style.opacity = (degradation >= 60) ? '1' : '0';
         }
     }
 
-    // Ambient messages (random life)
     function randomAmbientHint() {
-        const hints = [
-            "[отклик неизвестного источника]",
-            "[ошибка канала связи]",
-            "[пользователь не идентифицирован]"
-        ];
+        const hints = ["[отклик неизвестного источника]", "[ошибка канала связи]", "[пользователь не идентифицирован]"];
         if (Math.random() < 0.45) {
             ambientMessage(hints[Math.floor(Math.random() * hints.length)]);
         }
-        // schedule next
-        setTimeout(randomAmbientHint, 8000 + Math.random()*12000);
+        setTimeout(randomAmbientHint, 8000 + Math.random() * 12000);
     }
 
     function ambientMessage(text, ms = 2000) {
@@ -248,21 +190,17 @@
         ambientHint.textContent = text;
         ambientHint.classList.remove('hidden');
         ambientHint.style.opacity = '1';
-        ambientHint.style.transition = 'opacity 0.2s';
         setTimeout(() => {
             ambientHint.style.opacity = '0';
-            setTimeout(()=> ambientHint.classList.add('hidden'), 400);
+            setTimeout(() => ambientHint.classList.add('hidden'), 400);
         }, ms);
     }
 
-    // Initial UI
     setDegradationUI(degradation);
 
-    // expose debug helpers
     window.__ADAM_DEBUG = {
         getVisits: () => visits,
         getDegradation: () => degradation,
         setDegradation: (v) => setDegradationUI(v)
     };
-
 })();
