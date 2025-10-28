@@ -1,22 +1,29 @@
-/* style.css — полный стиль терминала A.D.A.M.
-   Версия: готовый файл для замены. Все анимации и эффекты включены.
-   Положи рядом с index.html.
+/* style.css — A.D.A.M. TERMINAL // VIGIL-9
+   Полностью переписан под концепцию "больной, живой системы"
+   Версия: FINAL // 29 октября 2025
 */
 
 /* ========== RESET ========== */
-* { margin:0; padding:0; box-sizing:border-box; }
-html,body { height:100%; }
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+html, body {
+    height: 100%;
+    overflow: hidden;
+}
 body {
     background: #000;
-    color: rgb(100,255,130);
+    color: #8aff99;
     font-family: 'VT323', 'Courier New', monospace;
-    letter-spacing: -0.4px;
-    overflow: hidden;
+    letter-spacing: -0.2px;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    position: relative;
 }
 
-/* =========== ФОНОВЫЕ СЛОИ =========== */
+/* ========== ЖИВОЙ ФОН — НЕЙРОННАЯ ТКАНЬ ========== */
 .background-root {
     position: fixed;
     inset: 0;
@@ -25,84 +32,281 @@ body {
     overflow: hidden;
 }
 
-/* нейронный базовый слой (пульсирует) */
+/* Основной слой — медленно дышащая биолюминесцентная ткань */
 .neural-layer {
     position: absolute;
     inset: 0;
     background:
-        radial-gradient(circle at 30% 35%, rgba(100,255,130,0.03), transparent 12%),
-        radial-gradient(circle at 70% 65%, rgba(100,255,130,0.02), transparent 18%),
-        linear-gradient(180deg, rgba(0,0,0,0.0), rgba(0,0,0,0.45));
+        radial-gradient(circle at 30% 35%, rgba(138, 255, 153, 0.04), transparent 15%),
+        radial-gradient(circle at 70% 65%, rgba(239, 215, 108, 0.03), transparent 20%),
+        radial-gradient(circle at 50% 20%, rgba(255, 107, 138, 0.02), transparent 25%),
+        linear-gradient(180deg, rgba(0,0,0,0.0), rgba(0,0,0,0.5));
     mix-blend-mode: screen;
-    animation: neural-breath 14s ease-in-out infinite;
+    animation: neural-breath 16s ease-in-out infinite;
     z-index: 1;
-    transform-origin: center center;
+    transform-origin: center;
 }
 
-/* маленькие искры/импульсы поверх нейрона */
-.neural-layer::after {
-    content:"";
-    position:absolute;
-    inset:0;
+/* Импульсы — короткие биологические вспышки */
+.neural-sparks {
+    position: absolute;
+    inset: 0;
     background-image:
-      radial-gradient(circle at 10% 20%, rgba(100,255,130,0.05) 0, transparent 5%),
-      radial-gradient(circle at 80% 40%, rgba(240,215,120,0.04) 0, transparent 6%),
-      radial-gradient(circle at 50% 80%, rgba(200,100,255,0.03) 0, transparent 8%);
-    pointer-events:none;
-    opacity:0.9;
-    filter: blur(1px);
-    animation: sparks-fade 6s linear infinite;
+        radial-gradient(circle at 15% 25%, rgba(138, 255, 153, 0.08) 0, transparent 6%),
+        radial-gradient(circle at 85% 50%, rgba(239, 215, 108, 0.07) 0, transparent 7%),
+        radial-gradient(circle at 40% 90%, rgba(255, 107, 138, 0.06) 0, transparent 9%);
+    pointer-events: none;
+    opacity: 0.85;
+    filter: blur(1.2px);
+    animation: sparks-pulse 7s linear infinite;
 }
 
-/* echo memory — редкие призрачные фразы */
-.echo-memory {
-    position:absolute;
-    inset:0;
-    z-index:2;
-    pointer-events:none;
-    overflow:visible;
-}
-.echo-memory span, .echo-phrase {
-    position:absolute;
-    color: rgba(200,200,200,0.06);
-    font-size:14px;
-    transform:translate(-50%,-50%);
-    white-space:nowrap;
-    animation: echo-flicker 3.2s linear both;
-    will-change: opacity, transform;
-}
-
-/* VHS overlay: полоски, шум, мелкие царапины */
+/* VHS-шум — лёгкая текстура, не доминирующая */
 .vhs-overlay {
-    position:absolute;
-    inset:0;
-    z-index:5;
-    pointer-events:none;
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    pointer-events: none;
     background-image:
-        linear-gradient(rgba(0,0,0,0.02) 1px, transparent 1px),
-        repeating-linear-gradient(90deg, rgba(100,255,130,0.01), rgba(100,255,130,0.01) 2px, transparent 2px, transparent 6px);
+        linear-gradient(rgba(0,0,0,0.015) 1px, transparent 1px),
+        repeating-linear-gradient(90deg, rgba(138,255,153,0.008), transparent 4px);
     mix-blend-mode: overlay;
-    opacity:0.20;
-    animation: vhs-flicker 8s infinite;
+    opacity: 0.08;
+    animation: vhs-flicker 10s infinite;
 }
 
-/* scanline (thin) */
+/* Scanline — тонкие полосы */
 .scanline {
-    position:absolute;
-    inset:0;
-    z-index:6;
+    position: absolute;
+    inset: 0;
+    z-index: 4;
     background: repeating-linear-gradient(
         to bottom,
         rgba(0,0,0,0) 0px,
-        rgba(0,0,0,0.12) 1px,
+        rgba(0,0,0,0.1) 1px,
         rgba(0,0,0,0) 2px
     );
-    opacity:0.25;
-    pointer-events:none;
+    opacity: 0.2;
+    pointer-events: none;
     mix-blend-mode: multiply;
 }
 
-/* ambient hint — small top overlay */
+/* Эхо-память — призрачные фразы */
+.echo-memory {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+}
+.echo-phrase {
+    position: absolute;
+    color: rgba(200, 200, 200, 0.07);
+    font-size: 14px;
+    transform: translate(-50%, -50%);
+    white-space: nowrap;
+    animation: echo-flicker 3.5s linear both;
+    font-family: 'VT323', monospace;
+}
+
+/* ========== ТЕРМИНАЛ ========== */
+#terminal-container {
+    position: fixed;
+    inset: 0;
+    padding: 20px;
+    z-index: 50;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+#terminal {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 10px;
+    font-family: 'VT323', monospace;
+    font-size: 16px;
+    line-height: 1.4;
+    color: #8aff99;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(100,255,130,0.2) transparent;
+}
+#terminal::-webkit-scrollbar {
+    width: 8px;
+}
+#terminal::-webkit-scrollbar-track {
+    background: transparent;
+}
+#terminal::-webkit-scrollbar-thumb {
+    background: rgba(100, 255, 130, 0.15);
+    border-radius: 4px;
+    transition: background 0.3s;
+}
+#terminal::-webkit-scrollbar-thumb:hover {
+    background: rgba(100, 255, 130, 0.3);
+}
+
+/* ========== ПАНЕЛИ ========== */
+.screen {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 40;
+    transition: opacity 0.25s ease;
+}
+.hidden { display: none !important; }
+
+.panel {
+    width: 920px;
+    max-width: calc(100% - 40px);
+    padding: 26px;
+    background: linear-gradient(180deg, rgba(0,0,0,0.88), rgba(0,0,0,0.75));
+    border: 1px solid rgba(100,255,130,0.12);
+    box-shadow: 0 0 40px rgba(0,0,0,0.6), inset 0 0 18px rgba(0,0,0,0.6);
+    color: #8aff99;
+    text-align: center;
+    position: relative;
+    z-index: 60;
+    border-radius: 6px;
+    overflow: visible;
+    font-family: 'VT323', monospace;
+}
+
+.logo { 
+    font-size: 18px; 
+    line-height: 18px; 
+    color: rgba(138, 255, 153, 0.95); 
+    margin-bottom: 12px; 
+    white-space: pre;
+}
+.logo.small { font-size: 12px; }
+.caption { color: rgba(200,200,200,0.25); margin: 4px 0 18px; font-size: 14px; }
+.subhint { color: rgba(200,200,200,0.18); font-size: 12px; margin-top: 8px; }
+
+/* Кнопки */
+.btn {
+    background: transparent;
+    color: #8aff99;
+    border: 1px solid rgba(100,255,130,0.18);
+    padding: 12px 22px;
+    cursor: pointer;
+    font-family: 'VT323', monospace;
+    font-size: 16px;
+    transition: transform 0.12s, background 0.12s;
+    border-radius: 4px;
+}
+.btn:hover {
+    transform: translateY(-2px);
+    background: rgba(100,255,130,0.04);
+}
+
+/* Логин */
+.login-panel { 
+    width: 420px; 
+    padding: 20px 26px; 
+    text-align: left; 
+}
+.input-group { margin: 12px 0; }
+.input-group label { 
+    font-size: 13px; 
+    color: rgba(200,200,200,0.45); 
+    display: block; 
+    margin-bottom: 6px; 
+}
+.input-group input {
+    width: 100%;
+    padding: 10px;
+    background: rgba(0,0,0,0.7);
+    border: 1px solid rgba(100,255,130,0.08);
+    color: #8aff99;
+    font-family: 'VT323', monospace;
+    font-size: 16px;
+    outline: none;
+    border-radius: 3px;
+}
+.input-group input:focus {
+    box-shadow: 0 0 10px rgba(100,255,130,0.06);
+    border-color: rgba(100,255,130,0.28);
+}
+
+.muted { color: rgba(200,200,200,0.14); font-size: 12px; margin-top: 8px; }
+.error { color: #D83F47; margin-top: 10px; }
+
+/* ========== ДЕГРАДАЦИЯ ========== */
+#degradation-panel {
+    position: fixed;
+    top: 14px;
+    right: 18px;
+    z-index: 120;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+    background: rgba(0,0,0,0.5);
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(100,255,130,0.08);
+    color: rgba(200,200,200,0.7);
+    font-family: 'VT323', monospace;
+    font-size: 13px;
+    min-width: 160px;
+}
+#degradation-bar {
+    width: 140px;
+    height: 10px;
+    background: #0b0b0b;
+    border: 1px solid rgba(255,255,255,0.03);
+    overflow: hidden;
+    border-radius: 4px;
+}
+#degradation-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #8aff99, #EFD76C, #D83F47, #C000FF);
+    transition: width 450ms linear;
+    box-shadow: inset 0 0 6px rgba(0,0,0,0.4);
+}
+#degradation-hint {
+    color: #EFD76C;
+    font-size: 12px;
+    opacity: 0;
+    transform: translateY(-2px);
+    transition: opacity 0.3s;
+}
+
+/* Цвета вывода */
+.terminal-output-stable { color: #8aff99; }
+.terminal-output-unstable { color: #EFD76C; }
+.terminal-output-critical { color: #D83F47; }
+.terminal-output-terminal { color: #C000FF; }
+
+/* ========== АНИМАЦИИ ========== */
+@keyframes neural-breath {
+    0% { transform: scale(1); opacity: 0.3; filter: blur(0.8px); }
+    50% { transform: scale(1.025); opacity: 0.9; filter: blur(0.2px); }
+    100% { transform: scale(1); opacity: 0.3; filter: blur(0.8px); }
+}
+@keyframes sparks-pulse {
+    0% { opacity: 0; transform: scale(0.95); }
+    10% { opacity: 0.9; transform: scale(1.05); }
+    100% { opacity: 0; transform: scale(1); }
+}
+@keyframes vhs-flicker {
+    0% { opacity: 0.08; }
+    25% { opacity: 0.12; }
+    50% { opacity: 0.06; }
+    75% { opacity: 0.10; }
+    100% { opacity: 0.08; }
+}
+@keyframes echo-flicker {
+    0% { opacity: 0; transform: translate(-50%, -40px) scale(0.95); }
+    8% { opacity: 1; transform: translate(-50%, -50px) scale(1.03); }
+    35% { opacity: 0; transform: translate(-50%, -50px) scale(1); }
+    100% { opacity: 0; }
+}
+
+/* ========== ВСПОМОГАТЕЛЬНЫЕ ========== */
 .ambient-hint {
     position: fixed;
     top: 10px;
@@ -117,171 +321,22 @@ body {
     font-family: 'VT323', monospace;
     font-size: 13px;
     pointer-events: none;
-    transition: opacity .18s;
+    transition: opacity 0.18s;
+}
+.fade-in {
+    animation: fade-in 350ms ease both;
+}
+@keyframes fade-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: none; }
 }
 
-/* =========== PANELS / SCREENS =========== */
-.screen {
-    position:fixed;
-    inset:0;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    z-index:50;
-    transition: opacity 0.25s ease;
-}
-.hidden { display:none !important; }
-
-.panel {
-    width: 920px;
-    max-width: calc(100% - 40px);
-    padding: 26px;
-    background: linear-gradient(180deg, rgba(0,0,0,0.85), rgba(0,0,0,0.72));
-    border: 1px solid rgba(100,255,130,0.12);
-    box-shadow: 0 0 40px rgba(0,0,0,0.6), inset 0 0 18px rgba(0,0,0,0.6);
-    color: rgb(100,255,130);
-    text-align:center;
-    position:relative;
-    z-index:60;
-    border-radius:6px;
-    overflow:visible;
-}
-
-.logo { font-size:18px; line-height:18px; color: rgba(100,255,130,0.95); margin-bottom:12px; }
-.logo.small { font-size:12px }
-.caption { color: rgba(200,200,200,0.25); margin-top:4px; margin-bottom:18px; font-size:14px; }
-.subhint { color: rgba(200,200,200,0.18); font-size:12px; margin-top:8px; }
-
-/* buttons */
-.btn {
-    background: transparent;
-    color: rgb(100,255,130);
-    border: 1px solid rgba(100,255,130,0.18);
-    padding: 12px 22px;
-    cursor: pointer;
-    font-family: 'VT323', monospace;
-    font-size:16px;
-    transition: transform 0.12s ease, background 0.12s ease, color 0.12s ease;
-    border-radius:4px;
-}
-.btn:hover { transform: translateY(-2px); background: rgba(100,255,130,0.04); }
-
-/* login specifics */
-.login-panel { width:420px; padding:20px 26px; text-align:left; }
-.input-group { margin:12px 0; }
-.input-group label { font-size:13px; color: rgba(200,200,200,0.45); display:block; margin-bottom:6px; }
-.input-group input {
-    width:100%;
-    padding:10px;
-    background: rgba(0,0,0,0.7);
-    border: 1px solid rgba(100,255,130,0.08);
-    color: rgb(100,255,130);
-    font-family:'VT323', monospace;
-    font-size:16px;
-    outline:none;
-    border-radius:3px;
-}
-.input-group input:focus { box-shadow: 0 0 10px rgba(100,255,130,0.06); border-color: rgba(100,255,130,0.28); }
-
-.muted { color: rgba(200,200,200,0.14); font-size:12px; margin-top:8px; }
-.error { color:#D83F47; margin-top:10px; }
-
-/* =========== DEGRADATION PANEL =========== */
-#degradation-panel {
-    position: fixed;
-    top: 14px;
-    right: 18px;
-    z-index:120;
-    display:flex;
-    flex-direction:column;
-    align-items:flex-end;
-    gap:6px;
-    background: rgba(0,0,0,0.5);
-    padding:8px 10px;
-    border-radius:6px;
-    border:1px solid rgba(100,255,130,0.08);
-    color: rgba(200,200,200,0.7);
-    font-family:'VT323', monospace;
-    font-size:13px;
-    min-width:160px;
-}
-
-/* small bar */
-#degradation-bar {
-    width: 140px;
-    height: 10px;
-    background: #0b0b0b;
-    border: 1px solid rgba(255,255,255,0.03);
-    overflow:hidden;
-    border-radius:4px;
-}
-#degradation-fill {
-    height:100%;
-    width:0%;
-    background: linear-gradient(90deg, rgb(100,255,130), #EFD76C, #D83F47, #C000FF);
-    transition: width 450ms linear;
-    box-shadow: inset 0 0 6px rgba(0,0,0,0.4);
-}
-
-/* hint under bar */
-#degradation-hint { color:#EFD76C; font-size:12px; opacity:0; transform: translateY(-2px); transition: opacity .3s; }
-
-/* color states (if you add / remove classes) */
-.terminal-output-stable { color: rgb(100,255,130); }
-.terminal-output-unstable { color: #EFD76C; }
-.terminal-output-critical { color: #D83F47; }
-.terminal-output-terminal { color: #C000FF; }
-
-/* =========== BOOT / PROGRESS / LINES =========== */
-.boot-text { text-align:left; color: rgba(180,255,190,0.9); font-family:'VT323', monospace; font-size:14px; margin: 8px 0 12px 0; max-height: 40vh; overflow-y:auto; padding-right:6px; }
-.boot-line { margin: 6px 0; white-space: pre-wrap; line-height:1.3; }
-.boot-progress { margin-top: 12px; width:100%; display:flex; justify-content:center; }
-.boot-bar-wrapper { width:90%; max-width:720px; background:#060606; border-radius:6px; border:1px solid rgba(255,255,255,0.03); height:8px; overflow:hidden; }
-.boot-bar { height:100%; width:0%; background: linear-gradient(90deg, rgba(100,255,130,0.9), rgba(239,215,108,0.9)); box-shadow: 0 0 8px rgba(100,255,130,0.06) inset; transition: width 400ms linear; }
-
-/* =========== GLITCH / EFFECT HELPERS =========== */
-@keyframes neural-breath {
-    0% { transform: scale(1); opacity: 0.28; filter: blur(0.7px) }
-    50% { transform: scale(1.02); opacity: 0.85; filter: blur(0.26px) }
-    100% { transform: scale(1); opacity: 0.28; filter: blur(0.7px) }
-}
-@keyframes sparks-fade {
-    0% { opacity:0.0; transform: translateY(0px) scale(0.98) }
-    20% { opacity:0.8; transform: translateY(-4px) scale(1.02) }
-    100% { opacity:0.0; transform: translateY(0px) scale(1) }
-}
-@keyframes vhs-flicker {
-    0% { opacity: 0.20; transform: translateY(0px); }
-    25% { opacity: 0.25; transform: translateY(-0.6px); }
-    50% { opacity: 0.16; transform: translateY(0.6px); }
-    75% { opacity: 0.22; transform: translateY(-0.4px); }
-    100% { opacity: 0.20; transform: translateY(0px); }
-}
-@keyframes echo-flicker {
-    0% { opacity: 0; transform: translateY(6px) scale(0.98); }
-    6% { opacity: 1; transform: translateY(-6px) scale(1.02); }
-    35% { opacity: 0; transform: translateY(0px) scale(1); }
-    100% { opacity: 0; }
-}
-
-/* small glitch shards */
-.glitch-shift { transform: translateX(-1px); text-shadow: 1px 0 0 rgba(200,0,80,0.08), -1px 0 0 rgba(0,200,120,0.06); }
-.glitch-heavy { filter: hue-rotate(15deg) contrast(120%) saturate(120%); transform: translateY(-1px) skewX(-0.6deg); }
-
-/* fade-in helper */
-.fade-in { animation: fade-in 350ms ease both; }
-@keyframes fade-in { from { opacity:0; transform: translateY(4px);} to {opacity:1; transform:none;} }
-
-.hidden { display:none !important; }
-.center { display:flex; align-items:center; justify-content:center; }
-
-/* responsive adjustments */
-@media (max-width:920px) {
-    .panel { width: calc(100% - 36px); padding:18px; }
+/* ========== АДАПТИВНОСТЬ ========== */
+@media (max-width: 920px) {
+    .panel { width: calc(100% - 36px); padding: 18px; }
     .login-panel { width: calc(100% - 36px); }
-    .boot-bar-wrapper { width: 94%; }
 }
-@media (max-width:640px) {
-    .panel { width: calc(100% - 28px); padding:14px; }
-    #degradation-panel { right:10px; top:10px; min-width:140px; }
+@media (max-width: 640px) {
+    .panel { width: calc(100% - 28px); padding: 14px; }
+    #degradation-panel { right: 10px; top: 10px; min-width: 140px; }
 }
