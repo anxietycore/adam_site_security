@@ -13,7 +13,7 @@
     <!-- main CSS (обязательно в той же папке, что и index.html) -->
     <link rel="stylesheet" href="style.css">
 
-    <!-- Примечание: аналитика (если нужна) — оставляю как есть; при особой CSP можно удалить -->
+    <!-- Аналитика (опционально, можно удалить при строгом CSP) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-M30NK9KWVH"></script>
     <script>
       window.dataLayer = window.dataLayer || [];
@@ -23,16 +23,16 @@
     </script>
 </head>
 <body>
-    <!-- Живой фон / слои -->
-    <div class="background-root">
-        <div class="neural-layer" aria-hidden="true"></div>
-        <div class="echo-memory" aria-hidden="true"></div>
-        <div class="vhs-overlay" aria-hidden="true"></div>
-        <div class="scanline" aria-hidden="true"></div>
-        <div id="ambient-hint" class="hidden" aria-hidden="true"></div>
+    <!-- ===== фон / слои ===== -->
+    <div class="background-root" aria-hidden="true">
+        <div class="neural-layer"></div>
+        <div class="echo-memory" id="echo-memory"></div>
+        <div class="vhs-overlay"></div>
+        <div class="scanline"></div>
+        <div id="ambient-hint" class="ambient-hint hidden" aria-hidden="true"></div>
     </div>
 
-    <!-- START SCREEN -->
+    <!-- ===== START SCREEN ===== -->
     <div id="start-screen" class="screen">
         <div class="panel">
             <pre class="logo">
@@ -46,7 +46,7 @@
         </div>
     </div>
 
-    <!-- BOOT SCREEN -->
+    <!-- ===== BOOT SCREEN ===== -->
     <div id="boot-screen" class="screen hidden">
         <div class="panel">
             <pre class="logo small">
@@ -55,13 +55,16 @@
  _/  _\ ___/ _/  _\ _|  _|
             </pre>
             <div class="boot-text" id="boot-text" aria-live="polite"></div>
+
             <div class="boot-progress" id="boot-progress" aria-hidden="true">
-                <div class="boot-bar" id="boot-bar"></div>
+                <div class="boot-bar-wrapper">
+                    <div class="boot-bar" id="boot-bar" style="width:0%"></div>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- LOGIN SCREEN -->
+    <!-- ===== LOGIN SCREEN ===== -->
     <div id="login-screen" class="screen hidden">
         <div class="panel login-panel" role="form" aria-labelledby="login-title">
             <p id="login-title" class="login-prompt">ДОСТУП К ТЕРМИНАЛУ</p>
@@ -79,14 +82,14 @@
         </div>
     </div>
 
-    <!-- Degradation preview (persist between pages) -->
+    <!-- ===== Degradation preview (persist between pages) ===== -->
     <div id="degradation-panel" aria-hidden="true">
         <div class="label">DEGR:</div>
         <div id="degradation-bar"><div id="degradation-fill"></div></div>
         <div id="degradation-hint" class="muted">Команда RESET для стабилизации</div>
     </div>
 
-    <!-- скрипт -->
+    <!-- main script (boot/login). terminal.js остаётся отдельным файлом — не трогать -->
     <script src="script.js?v=5"></script>
 </body>
 </html>
