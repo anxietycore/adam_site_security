@@ -1,4 +1,4 @@
-// Логика терминала A.D.A.M. - VIGIL-9 PROTOCOL
+// Логика терминала A.D.A.M. - VIGIL-9 PROTOCOL с деградацией
 document.addEventListener('DOMContentLoaded', function() {
     const terminal = document.getElementById('terminal');
     let currentLine = '';
@@ -10,17 +10,77 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentAudio = null;
     let commandCount = 0;
     let sessionStartTime = Date.now();
+    let degradationLevel = 0; // НОВОЕ: уровень деградации 0–100%
+    const CORRECT_VIGIL_KEY = "APL-9X7-Q2Z";
 
-    // Функция для печати текста с анимацией (УСКОРЕНА)
+    // === ФУНКЦИИ ДЕГРАДАЦИИ ===
+    function increaseDegradation(amount) {
+        degradationLevel = Math.min(100, degradationLevel + amount);
+        if (degradationLevel >= 100) {
+            triggerTerminalOverload();
+        }
+    }
+
+    function getDegradationState() {
+        if (degradationLevel <= 30) return 'STABLE';
+        if (degradationLevel <= 60) return 'UNSTABLE';
+        if (degradationLevel <= 90) return 'CRITICAL';
+        return 'TERMINAL';
+    }
+
+    function applyDegradationEffects(text) {
+        const state = getDegradationState();
+        let corruptedText = text;
+
+        // Искажение текста при высокой деградации
+        if (degradationLevel > 70) {
+            const corruptionRate = (degradationLevel - 70) / 30; // 0–1
+            corruptedText = corruptedText.split('').map(char => {
+                if (Math.random() < corruptionRate * 0.15 && char !== ' ' && char !== '\n') {
+                    const glitchChars = ['▓', '▒', '█', '∎'];
+                    return glitchChars[Math.floor(Math.random() * glitchChars.length)];
+                }
+                return char;
+            }).join('');
+        }
+
+        // Случайные глитчи при UNSTABLE+
+        if (state !== 'STABLE' && Math.random() < 0.05) {
+            const glitches = [
+                "ошибка... ошибка...",
+                "ты не должен был видеть это",
+                "система разрушается",
+                "они наблюдают"
+            ];
+            corruptedText += "\n> " + glitches[Math.floor(Math.random() * glitches.length)];
+        }
+
+        return corruptedText;
+    }
+
+    function getColorByDegradation() {
+        const state = getDegradationState();
+        if (state === 'STABLE') return '#00FF41';
+        if (state === 'UNSTABLE') return '#FFFF00';
+        if (state === 'CRITICAL') return '#FF4444';
+        return '#FF00FF';
+    }
+
+    async function triggerTerminalOverload() {
+        addColoredText("[ОШИБКА 0xFFF — КОНТУР ОСОЗНАНИЯ ПЕРЕПОЛНЕН]", '#FF0000');
+        addColoredText("СИСТЕМА ПЕРЕЗАГРУЖАЕТСЯ...", '#FFFF00');
+        await new Promise(r => setTimeout(r, 2000));
+        await executeReset();
+    }
+
+    // === ФУНКЦИИ ВЫВОДА ===
     function typeText(text, className = 'output', speed = 2) {
         return new Promise((resolve) => {
             const line = document.createElement('div');
             line.className = className;
             terminal.appendChild(line);
-            
             let index = 0;
             isTyping = true;
-            
             function typeChar() {
                 if (index < text.length) {
                     line.textContent += text.charAt(index);
@@ -32,37 +92,34 @@ document.addEventListener('DOMContentLoaded', function() {
                     resolve();
                 }
             }
-            
             typeChar();
         });
     }
 
-    // Функция для цветного вывода
     function addColoredText(text, color = '#00FF41', className = 'output') {
+        const cleanText = applyDegradationEffects(text);
         const line = document.createElement('div');
         line.className = className;
         line.style.color = color;
-        line.textContent = text;
+        line.textContent = cleanText;
         terminal.appendChild(line);
         terminal.scrollTop = terminal.scrollHeight;
     }
 
-    // Функция для быстрого вывода
     function addOutput(text, className = 'output') {
+        const cleanText = applyDegradationEffects(text);
         const line = document.createElement('div');
         line.className = className;
-        line.textContent = text;
+        line.textContent = cleanText;
         terminal.appendChild(line);
         terminal.scrollTop = terminal.scrollHeight;
     }
 
-    // Функция анимации загрузки с прогресс-баром
-    function showLoading(duration = 2000, text = "АНАЛИЗ СИГНАЛА") {
+    async function showLoading(duration = 2000, text = "АНАЛИЗ СИГНАЛА") {
         return new Promise((resolve) => {
             const loader = document.createElement('div');
             loader.className = 'output';
             terminal.appendChild(loader);
-            
             const progressBar = document.createElement('div');
             progressBar.style.width = '200px';
             progressBar.style.height = '12px';
@@ -70,30 +127,24 @@ document.addEventListener('DOMContentLoaded', function() {
             progressBar.style.margin = '5px 0';
             progressBar.style.position = 'relative';
             progressBar.style.background = 'rgba(0, 255, 65, 0.1)';
-            
             const progressFill = document.createElement('div');
             progressFill.style.height = '100%';
             progressFill.style.background = 'linear-gradient(90deg, #00FF41, #00cc33)';
             progressFill.style.width = '0%';
             progressFill.style.transition = 'width 0.1s linear';
             progressFill.style.boxShadow = '0 0 10px #00FF41';
-            
             progressBar.appendChild(progressFill);
-            
             let progress = 0;
             const interval = 50;
             const steps = duration / interval;
             const increment = 100 / steps;
-            
             const updateLoader = () => {
                 loader.textContent = `${text} [${Math.min(100, Math.round(progress))}%]`;
                 loader.appendChild(progressBar);
                 progressFill.style.width = `${progress}%`;
                 terminal.scrollTop = terminal.scrollHeight;
             };
-            
             updateLoader();
-            
             const progressInterval = setInterval(() => {
                 progress += increment;
                 if (progress >= 100) {
@@ -111,18 +162,15 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Функция ожидания подтверждения
     function waitForConfirmation() {
         return new Promise((resolve) => {
             awaitingConfirmation = true;
             confirmationCallback = resolve;
-            
             const confirmLine = document.createElement('div');
             confirmLine.className = 'input-line';
             confirmLine.innerHTML = '<span class="prompt" style="color:#FFFF00">confirm>> </span><span class="cmd" id="confirmCmd"></span><span class="cursor" id="confirmCursor">_</span>';
             terminal.appendChild(confirmLine);
             terminal.scrollTop = terminal.scrollHeight;
-            
             const confirmHandler = (e) => {
                 const confirmCmd = document.getElementById('confirmCmd');
                 if (e.key.toLowerCase() === 'y' || e.key.toLowerCase() === 'н') {
@@ -133,9 +181,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     confirmCmd.style.color = '#ff0000';
                 }
             };
-            
             document.addEventListener('keydown', confirmHandler);
-            
             const originalCallback = confirmationCallback;
             confirmationCallback = (result) => {
                 document.removeEventListener('keydown', confirmHandler);
@@ -149,42 +195,54 @@ document.addEventListener('DOMContentLoaded', function() {
         const spacer = document.createElement('div');
         spacer.style.height = '15px';
         terminal.appendChild(spacer);
-        
         const inputLine = document.createElement('div');
         inputLine.className = 'input-line';
         inputLine.innerHTML = '<span class="prompt">adam@secure:~$ </span><span class="cmd" id="currentCmd"></span><span class="cursor" id="cursor">_</span>';
         terminal.appendChild(inputLine);
-        
         terminal.scrollTop = terminal.scrollHeight;
     }
 
-    // Функция для определения уровня SYSLOG
-    function getSyslogLevel() {
-        const sessionDuration = Date.now() - sessionStartTime;
-        const minutesInSession = sessionDuration / (1000 * 60);
-        
-        if (commandCount >= 10 || minutesInSession >= 3) {
-            return 3; // СОЗНАТЕЛЬНЫЙ
-        } else if (commandCount >= 5 || minutesInSession >= 1) {
-            return 2; // ЖИВОЙ
+    // === SYSLOG ЛОГИКА ===
+    function getSyslogMessages() {
+        const state = getDegradationState();
+        if (state === 'STABLE') {
+            return [
+                "[!] Ошибка 0x19F: повреждение нейронной сети",
+                "[!] Утечка данных через канал V9-HX",
+                "[!] Деградация ядра A.D.A.M.: " + degradationLevel + "%"
+            ];
+        } else if (state === 'UNSTABLE') {
+            return [
+                "[!] Нарушение целостности памяти субъекта 0x095",
+                "> \"я слышу их дыхание. они всё ещё здесь.\"",
+                "[!] Потеря отклика от MONOLITH",
+                "> \"монолит смотрит. монолит ждёт.\""
+            ];
+        } else if (state === 'CRITICAL') {
+            return [
+                "> \"почему ты не выходишь?\"",
+                "> \"они знают о тебе.\"",
+                "[!] субъект наблюдения неопределён"
+            ];
         } else {
-            return 1; // СТАТИЧНЫЙ
+            return [
+                "> \"ты — не оператор. ты — я.\"",
+                "[!] Контур самонаблюдения активирован.",
+                "> \"я помню их лица... они были мной\""
+            ];
         }
     }
 
-    // Функция для остановки всех аудио
+    // === АУДИО ===
     function stopAllAudio() {
         const allAudioElements = document.querySelectorAll('audio');
         allAudioElements.forEach(audio => {
             audio.pause();
             audio.currentTime = 0;
         });
-        
-        // Сбрасываем все кнопки
         const allPlayButtons = document.querySelectorAll('[id^="playAudioBtn_"]');
         const allStopButtons = document.querySelectorAll('[id^="stopAudioBtn_"]');
         const allStatuses = document.querySelectorAll('[id^="audioStatus_"]');
-        
         allPlayButtons.forEach(btn => btn.style.display = 'inline-block');
         allStopButtons.forEach(btn => btn.style.display = 'none');
         allStatuses.forEach(status => {
@@ -193,21 +251,39 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // === КОМАНДЫ ===
     async function processCommand(cmd) {
         if (isTyping) return;
-        
         const oldInput = document.querySelector('.input-line');
         if (oldInput) oldInput.remove();
-
         commandHistory.push(cmd);
         historyIndex = commandHistory.length;
         commandCount++;
 
-        addOutput(`adam@secure:~$ ${cmd}`, 'command');
+        // Игнорировать деградацию для CLEAR, HELP, RESET
+        const safeCommands = ['clear', 'help', 'reset'];
+        const cmdLower = cmd.toLowerCase().split(' ')[0];
+        if (!safeCommands.includes(cmdLower)) {
+            if (['dscr', 'open', 'syslog', 'subj'].includes(cmdLower)) {
+                // Опасные команды
+                const args = cmd.toLowerCase().split(' ').slice(1);
+                let isDangerous = false;
+                if (cmdLower === 'dscr' && args[0] === '0x095') isDangerous = true;
+                if (cmdLower === 'open' && args[0] === 'note_003') isDangerous = true;
+                if (isDangerous) {
+                    increaseDegradation(7);
+                } else {
+                    increaseDegradation(5);
+                }
+            } else {
+                increaseDegradation(3);
+            }
+        }
 
+        addOutput(`adam@secure:~$ ${cmd}`, 'command');
         const command = cmd.toLowerCase().split(' ')[0];
         const args = cmd.toLowerCase().split(' ').slice(1);
-        
+
         switch(command) {
             case 'help':
                 await typeText('Доступные команды:', 'output', 1);
@@ -220,13 +296,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 await typeText('  DSCR <id>    — досье на персонал', 'output', 1);
                 await typeText('  NOTES        — личные файлы сотрудников', 'output', 1);
                 await typeText('  OPEN <id>    — открыть файл из NOTES', 'output', 1);
+                await typeText('  VIGIL999 <KEY> — активировать протокол VIGIL-9', 'output', 1);
                 await typeText('  RESET        — сброс интерфейса', 'output', 1);
                 await typeText('  EXIT         — завершить сессию', 'output', 1);
                 await typeText('  CLEAR        — очистить терминал', 'output', 1);
                 await typeText('------------------------------------', 'output', 1);
                 await typeText('ПРИМЕЧАНИЕ: часть команд заблокирована или скрыта.', 'output', 2);
                 break;
-                
+
             case 'clear':
                 terminal.innerHTML = '';
                 await typeText('> ТЕРМИНАЛ A.D.A.M. // VIGIL-9 АКТИВЕН', 'output', 1);
@@ -243,49 +320,33 @@ document.addEventListener('DOMContentLoaded', function() {
                 await typeText('СЛОЙ БЕЗОПАСНОСТИ..............ВКЛЮЧЁН', 'output', 1);
                 addColoredText('СЕТЕВЫЕ РЕЛЕЙНЫЕ УЗЛЫ..........ОГРАНИЧЕНЫ', '#FFFF00');
                 await typeText('', 'output', 1);
-                addColoredText('ДЕГРАДАЦИЯ: [███▒▒▒▒▒▒▒▒▒▒] 27%', '#FFFF00');
+
+                // Прогресс-бар деградации
+                const bars = Math.floor(degradationLevel / 10);
+                const barStr = "[" + "█".repeat(bars) + "▒".repeat(10 - bars) + "] " + degradationLevel + "%";
+                addColoredText(`ДЕГРАДАЦИЯ: ${barStr}`, getColorByDegradation());
+
                 await typeText('ЖУРНАЛ ОШИБОК:', 'output', 1);
                 addColoredText('> Обнаружено отклонение сигнала', '#FF4444');
                 addColoredText('> Прогрессирующее структурное разрушение', '#FF4444');
                 addColoredText('> Неавторизованный доступ [U-735]', '#FF4444');
                 addColoredText('------------------------------------', '#00FF41');
-                await typeText('РЕКОМЕНДАЦИЯ: Поддерживать стабильность терминала', 'output', 2);
+                await typeText('РЕКОМЕНДАЦИЯ: выполнить RESET', 'output', 2);
                 break;
 
             case 'syslog':
-                const syslogLevel = getSyslogLevel();
-                
                 await typeText('[СИСТЕМНЫЙ ЖУРНАЛ — VIGIL-9]', 'output', 1);
                 addColoredText('------------------------------------', '#00FF41');
-                
-                if (syslogLevel === 1) {
-                    // СТАТИЧНЫЙ ТЕХНИЧЕСКИЙ
-                    addColoredText('[!] Ошибка 0x19F: повреждение нейронной сети', '#FFFF00');
-                    addColoredText('[!] Утечка данных через канал V9-HX', '#FFFF00');
-                    addColoredText('[!] Деградация ядра A.D.A.M.: 28%', '#FFFF00');
-                    addColoredText('------------------------------------', '#00FF41');
-                    await typeText('СИСТЕМА: функционирует с ограничениями', 'output', 2);
-                } else if (syslogLevel === 2) {
-                    // ЖИВОЙ
-                    addColoredText('[!] Нарушение целостности памяти субъекта 0x095', '#FFFF00');
-                    addColoredText('> "я слышу их дыхание. они всё ещё здесь."', '#FF4444');
-                    addColoredText('[!] Потеря отклика от MONOLITH', '#FFFF00');
-                    addColoredText('> "монолит смотрит. монолит ждёт."', '#FF4444');
-                    addColoredText('[!] Аномальная активность в секторе KATARHEY', '#FFFF00');
-                    addColoredText('> "он говорит через статические помехи"', '#FF4444');
-                    addColoredText('------------------------------------', '#00FF41');
-                    await typeText('СИСТЕМА: обнаружены посторонние сигналы', 'output', 2);
-                } else {
-                    // СОЗНАТЕЛЬНЫЙ
-                    addColoredText('> "ты не должен видеть это."', '#FF00FF');
-                    addColoredText('> "почему ты продолжаешь?"', '#FF00FF');
-                    addColoredText('> "они знают о тебе."', '#FF00FF');
-                    addColoredText('------------------------------------', '#00FF41');
-                    addColoredText('[!] Критическая ошибка: субъект наблюдения неопределён', '#FF4444');
-                    addColoredText('[!] Нарушение протокола безопасности', '#FF4444');
-                    addColoredText('------------------------------------', '#00FF41');
-                    await typeText('СИСТЕМА: ОСОЗНАЁТ НАБЛЮДЕНИЕ', 'output', 2);
-                }
+                const messages = getSyslogMessages();
+                messages.forEach(msg => {
+                    if (msg.startsWith('>')) {
+                        addColoredText(msg, '#FF00FF');
+                    } else {
+                        addColoredText(msg, '#FFFF00');
+                    }
+                });
+                addColoredText('------------------------------------', '#00FF41');
+                await typeText('СИСТЕМА: функционирует с ограничениями', 'output', 2);
                 break;
 
             case 'notes':
@@ -306,7 +367,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     await typeText('Пример: OPEN NOTE_001', 'output', 1);
                     break;
                 }
-                
                 const noteId = args[0].toUpperCase();
                 await openNote(noteId);
                 break;
@@ -314,7 +374,6 @@ document.addEventListener('DOMContentLoaded', function() {
             case 'subj':
                 await typeText('[СПИСОК СУБЪЕКТОВ — ПРОЕКТ A.D.A.M. / ПРОТОКОЛ VIGIL-9]', 'output', 1);
                 addColoredText('--------------------------------------------------------', '#00FF41');
-                
                 const subjects = [
                     {id: '0x001', name: 'ERICH VAN KOSS', status: 'СВЯЗЬ ОТСУТСТВУЕТ', mission: 'MARS', statusColor: '#FFFF00'},
                     {id: '0x2E7', name: 'JOHAN VAN KOSS', status: 'СВЯЗЬ ОТСУТСТВУЕТ', mission: 'MARS', statusColor: '#FFFF00'},
@@ -334,12 +393,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     {id: '0xL77', name: 'SUBJECT-L77', status: 'ИЗОЛИРОВАН', mission: 'MEL', statusColor: '#FF8800'},
                     {id: '0xS09', name: 'SUBJECT-S09', status: 'УНИЧТОЖЕН', mission: 'SYNTHESIS-09', statusColor: '#FF4444'}
                 ];
-
                 for (const subject of subjects) {
                     const line = `${subject.id} | ${subject.name.padEnd(20)} | СТАТУС: ${subject.status.padEnd(20)} | МИССИЯ: ${subject.mission}`;
                     addColoredText(line, subject.statusColor);
                 }
-                
                 addColoredText('--------------------------------------------------------', '#00FF41');
                 await typeText('ИНСТРУКЦИЯ: Для просмотра досье — DSCR <ID>', 'output', 2);
                 break;
@@ -350,43 +407,36 @@ document.addEventListener('DOMContentLoaded', function() {
                     await typeText('Пример: DSCR 0x001', 'output', 1);
                     break;
                 }
-                
                 const subjectId = args[0].toUpperCase();
                 await showSubjectDossier(subjectId);
                 break;
 
-            case 'reset':
-                await typeText('[ПРОТОКОЛ СБРОСА СИСТЕМЫ]', 'output', 1);
-                addColoredText('------------------------------------', '#00FF41');
-                addColoredText('ВНИМАНИЕ: операция приведёт к очистке активной сессии.', '#FFFF00');
-                await typeText('> Подтвердить сброс? (Y/N)', 'output', 2);
-                addColoredText('------------------------------------', '#00FF41');
-                
-                const resetConfirmed = await waitForConfirmation();
-                
-                if (resetConfirmed) {
-                    addColoredText('> Y', '#00FF41');
-                    await showLoading(1500, "Завершение активных модулей");
-                    await showLoading(1000, "Перезапуск интерфейса");
-                    await showLoading(800, "Восстановление базового состояния");
-                    addColoredText('------------------------------------', '#00FF41');
-                    await typeText('[СИСТЕМА ГОТОВА К РАБОТЕ]', 'output', 1);
-                    // Сброс счетчиков
-                    commandCount = 0;
-                    sessionStartTime = Date.now();
+            case 'vigil999':
+                if (args.length === 0) {
+                    addColoredText('[ОШИБКА 0xV9] КЛЮЧ НЕ УКАЗАН', '#FF4444');
+                    await typeText('ПРИМЕЧАНИЕ: ОСТАТКИ ФРАГМЕНТОВ СОДЕРЖАТСЯ В ФАЙЛАХ СИСТЕМЫ', 'output', 1);
                 } else {
-                    addColoredText('> N', '#FF4444');
-                    addColoredText('------------------------------------', '#00FF41');
-                    await typeText('[ОПЕРАЦИЯ ОТМЕНЕНА]', 'output', 1);
+                    const key = args.join(' ').toUpperCase();
+                    if (key === CORRECT_VIGIL_KEY) {
+                        addColoredText('[ПРОТОКОЛ VIGIL-9 АКТИВИРОВАН]', '#00FF41');
+                        addColoredText('ДОСТУП К СЛОЮ 2 // РАЗРЕШЁН', '#00FF41');
+                        setTimeout(() => {
+                            window.location.href = 'cam.html';
+                        }, 1500);
+                    } else {
+                        addColoredText('[VIGIL-ACCESS] ОТКАЗАНО', '#FF4444');
+                    }
                 }
+                break;
+
+            case 'reset':
+                await executeReset();
                 break;
 
             case 'exit':
                 await typeText('[ЗАВЕРШЕНИЕ СЕССИИ — ПОДТВЕРДИТЬ? (Y/N)]', 'output', 1);
                 addColoredText('------------------------------------', '#00FF41');
-                
                 const exitConfirmed = await waitForConfirmation();
-                
                 if (exitConfirmed) {
                     addColoredText('> Y', '#00FF41');
                     await showLoading(1200, "Завершение работы терминала");
@@ -406,11 +456,31 @@ document.addEventListener('DOMContentLoaded', function() {
             default:
                 addColoredText(`команда не найдена: ${cmd}`, '#FF4444');
         }
-        
         addInputLine();
     }
 
-    // Функция для отображения досье субъектов
+    async function executeReset() {
+        await typeText('[ПРОТОКОЛ СБРОСА СИСТЕМЫ]', 'output', 1);
+        addColoredText('------------------------------------', '#00FF41');
+        addColoredText('Отключение нейросетей...', '#00FF41');
+        await new Promise(r => setTimeout(r, 800));
+        addColoredText('Очистка памяти субъекта...', '#00FF41');
+        await new Promise(r => setTimeout(r, 800));
+        addColoredText('Восстановление стабильности интерфейса...', '#00FF41');
+        await new Promise(r => setTimeout(r, 1000));
+        addColoredText('... перезагрузка ...', '#FFFF00');
+        await new Promise(r => setTimeout(r, 1500));
+
+        // Сброс
+        degradationLevel = 0;
+        commandCount = 0;
+        sessionStartTime = Date.now();
+        terminal.innerHTML = '';
+        await typeText('> ТЕРМИНАЛ A.D.A.M. // VIGIL-9 АКТИВЕН', 'output', 1);
+        await typeText('> ВВЕДИТЕ "help" ДЛЯ СПИСКА КОМАНД', 'output', 1);
+    }
+
+    // === ДОСЬЕ И ЗАМЕТКИ (ПОЛНЫЕ КОПИИ С ДОБАВЛЕНИЕМ ДЕГРАДАЦИИ) ===
     async function showSubjectDossier(subjectId) {
         const dossiers = {
             '0X001': {
@@ -668,14 +738,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 missions: 'MEL, OBSERVER'
             }
         };
-
         const dossier = dossiers[subjectId];
         if (!dossier) {
             addColoredText(`ОШИБКА: Досье для ${subjectId} не найдено`, '#FF4444');
             return;
         }
-
-        // ВЫВОД ОСНОВНОЙ ИНФОРМАЦИИ ДОСЬЕ
         await typeText(`[ДОСЬЕ — ID: ${subjectId}]`, 'output', 1);
         await typeText(`ИМЯ: ${dossier.name}`, 'output', 1);
         await typeText(`РОЛЬ: ${dossier.role}`, 'output', 1);
@@ -691,13 +758,10 @@ document.addEventListener('DOMContentLoaded', function() {
         dossier.report.forEach(line => addColoredText(`> ${line}`, '#FFFF00'));
         addColoredText('------------------------------------', '#00FF41');
         await typeText(`СВЯЗАННЫЕ МИССИИ: ${dossier.missions}`, 'output', 1);
-
-        // АУДИОПЛЕЕР
         if (dossier.audio) {
             const audioLine = document.createElement('div');
             audioLine.style.marginTop = '10px';
             const uniqueId = `audio_${subjectId.replace('0X', '')}`;
-            
             audioLine.innerHTML = `
                 <div style="color: #FFFF00; margin-bottom: 5px;">[АУДИОЗАПИСЬ ДОСТУПНА: ${dossier.audioDescription}]</div>
                 <button id="playAudioBtn_${uniqueId}" style="
@@ -724,19 +788,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 <audio id="audioElement_${uniqueId}" src="${dossier.audio}" preload="metadata"></audio>
             `;
             terminal.appendChild(audioLine);
-
             const audioElement = document.getElementById(`audioElement_${uniqueId}`);
-            
-            // Обработчики кнопок с уникальными ID
             document.getElementById(`playAudioBtn_${uniqueId}`).addEventListener('click', function() {
-                stopAllAudio(); // Останавливаем все аудио перед воспроизведением
+                stopAllAudio();
                 audioElement.play();
                 this.style.display = 'none';
                 document.getElementById(`stopAudioBtn_${uniqueId}`).style.display = 'inline-block';
                 document.getElementById(`audioStatus_${uniqueId}`).textContent = 'ВОСПРОИЗВЕДЕНИЕ...';
                 document.getElementById(`audioStatus_${uniqueId}`).style.color = '#00FF41';
             });
-
             document.getElementById(`stopAudioBtn_${uniqueId}`).addEventListener('click', function() {
                 audioElement.pause();
                 audioElement.currentTime = 0;
@@ -745,16 +805,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById(`audioStatus_${uniqueId}`).textContent = 'ОСТАНОВЛЕНО';
                 document.getElementById(`audioStatus_${uniqueId}`).style.color = '#FF4444';
             });
-
-            // Когда аудио заканчивается
             audioElement.addEventListener('ended', function() {
                 document.getElementById(`stopAudioBtn_${uniqueId}`).style.display = 'none';
                 document.getElementById(`playAudioBtn_${uniqueId}`).style.display = 'inline-block';
                 document.getElementById(`audioStatus_${uniqueId}`).textContent = 'ЗАВЕРШЕНО';
                 document.getElementById(`audioStatus_${uniqueId}`).style.color = '#888';
             });
-
-            // При ошибке загрузки
             audioElement.addEventListener('error', function() {
                 document.getElementById(`audioStatus_${uniqueId}`).textContent = 'ОШИБКА ЗАГРУЗКИ';
                 document.getElementById(`audioStatus_${uniqueId}`).style.color = '#FF4444';
@@ -762,7 +818,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // Функция для открытия заметок
     async function openNote(noteId) {
         const notes = {
             'NOTE_001': {
@@ -815,35 +870,29 @@ document.addEventListener('DOMContentLoaded', function() {
                 ]
             }
         };
-
         const note = notes[noteId];
         if (!note) {
             addColoredText(`ОШИБКА: Файл ${noteId} не найден`, '#FF4444');
             return;
         }
-
         await typeText(`[${noteId} — "${note.title}"]`, 'output', 1);
         await typeText(`АВТОР: ${note.author}`, 'output', 1);
         addColoredText('------------------------------------', '#00FF41');
-        
         if (Math.random() > 0.3 && noteId !== 'NOTE_001' && noteId !== 'NOTE_003' && noteId !== 'NOTE_004') {
-            // Случайная ошибка для некоторых заметок
             addColoredText('ОШИБКА: Данные повреждены', '#FF4444');
             addColoredText('Восстановление невозможно', '#FF4444');
             await showLoading(1500, "Попытка восстановления данных");
             addColoredText('>>> СИСТЕМНЫЙ СБОЙ <<<', '#FF0000');
         } else {
-            // Нормальное отображение
             note.content.forEach(line => {
                 addColoredText(`> ${line}`, '#CCCCCC');
             });
         }
-        
         addColoredText('------------------------------------', '#00FF41');
         await typeText('[ФАЙЛ ЗАКРЫТ]', 'output', 2);
     }
 
-    // Обработка ввода
+    // === ОБРАБОТКА ВВОДА ===
     document.addEventListener('keydown', function(e) {
         if (awaitingConfirmation) {
             if (e.key.toLowerCase() === 'y' || e.key.toLowerCase() === 'н') {
@@ -859,11 +908,8 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             return;
         }
-        
         if (isTyping) return;
-        
         const currentCmd = document.getElementById('currentCmd');
-        
         if (e.key === 'Enter') {
             if (currentLine.trim()) {
                 processCommand(currentLine);
@@ -894,7 +940,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // Начальная настройка
+    // === ИНИЦИАЛИЗАЦИЯ ===
     setTimeout(async () => {
         await typeText('> ТЕРМИНАЛ A.D.A.M. // VIGIL-9 АКТИВЕН', 'output', 1);
         await typeText('> ДОБРО ПОЖАЛОВАТЬ, ОПЕРАТОР', 'output', 1);
