@@ -1,3 +1,4 @@
+/* Стили для терминала A.D.A.M. - VIGIL-9 PROTOCOL */
 * {
     margin: 0;
     padding: 0;
@@ -5,400 +6,330 @@
 }
 
 body {
-    background-color: #0a0a0a;
+    background: #000;
     color: #00FF41;
     font-family: 'Courier New', monospace;
+    font-size: 16px;
+    line-height: 1.4;
     overflow: hidden;
-    cursor: default;
     position: relative;
+    height: 100vh;
 }
 
-/* ЭПИЧНЫЙ КОСМИЧЕСКИЙ ПОРТАЛ A.D.A.M. */
+/* Эффект сканирующей линии */
+.scanline {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+        to bottom,
+        rgba(0, 255, 65, 0) 0%,
+        rgba(0, 255, 65, 0.03) 50%,
+        rgba(0, 255, 65, 0) 100%
+    );
+    pointer-events: none;
+    z-index: 1000;
+    opacity: 0.3;
+    animation: scan 8s linear infinite;
+}
+
+/* Эффекты для разных уровней деградации */
+.scanline.unstable {
+    animation: scan 4s linear infinite;
+    opacity: 0.5;
+    background: linear-gradient(
+        to bottom,
+        rgba(255, 255, 0, 0) 0%,
+        rgba(255, 255, 0, 0.05) 50%,
+        rgba(255, 255, 0, 0) 100%
+    );
+}
+
+.scanline.critical {
+    animation: scan 2s linear infinite;
+    opacity: 0.7;
+    background: linear-gradient(
+        to bottom,
+        rgba(255, 68, 68, 0) 0%,
+        rgba(255, 68, 68, 0.07) 50%,
+        rgba(255, 68, 68, 0) 100%
+    );
+}
+
+.scanline.terminal {
+    animation: scan 1s linear infinite;
+    opacity: 0.9;
+    background: linear-gradient(
+        to bottom,
+        rgba(255, 0, 255, 0) 0%,
+        rgba(255, 0, 255, 0.1) 50%,
+        rgba(255, 0, 255, 0) 100%
+    );
+}
+
+@keyframes scan {
+    0% { transform: translateY(-100%); }
+    100% { transform: translateY(100%); }
+}
+
+/* Эффект статического шума */
 .noise {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
+    background: 
+        repeating-radial-gradient(#000 0 0.0001%, #00FF41 0 0.0002%) 50% 0/2500px 2500px,
+        repeating-conic-gradient(#000 0 0.0001%, #00FF41 0 0.0002%) 60% 60%/2500px 2500px;
+    background-blend-mode: difference;
+    opacity: 0.02;
     pointer-events: none;
-    z-index: 99;
+    z-index: 999;
 }
 
-/* СЛОЙ 1: БЛИЖНИЕ ЯРКИЕ ЗВЁЗДЫ */
-.noise::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
+/* Контейнер терминала */
+.terminal-container {
+    position: relative;
     width: 100%;
-    height: 100%;
+    height: 100vh;
+    padding: 20px;
+    overflow-y: auto;
     background: 
-        radial-gradient(circle at 20% 50%, rgba(0, 255, 65, 0.3) 2px, transparent 2px),
-        radial-gradient(circle at 80% 20%, rgba(0, 255, 65, 0.25) 1px, transparent 1px),
-        radial-gradient(circle at 40% 80%, rgba(0, 255, 65, 0.35) 3px, transparent 3px),
-        radial-gradient(circle at 60% 10%, rgba(0, 255, 65, 0.22) 1px, transparent 1px),
-        radial-gradient(circle at 10% 90%, rgba(0, 255, 65, 0.28) 2px, transparent 2px);
-    background-size: 200px 200px, 300px 300px, 250px 250px, 350px 350px, 400px 400px;
-    animation: stars-fast-rotate 40s infinite linear;
+        radial-gradient(circle at 20% 50%, rgba(0, 30, 0, 0.3) 0%, transparent 50%),
+        radial-gradient(circle at 80% 20%, rgba(0, 60, 0, 0.2) 0%, transparent 50%),
+        radial-gradient(circle at 40% 80%, rgba(0, 45, 0, 0.25) 0%, transparent 50%);
 }
 
-/* СЛОЙ 2: ДАЛЬНИЕ ТУСКЛЫЕ ЗВЁЗДЫ */
-.noise::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: 
-        radial-gradient(circle at 90% 30%, rgba(0, 255, 65, 0.15) 1px, transparent 1px),
-        radial-gradient(circle at 10% 70%, rgba(0, 255, 65, 0.12) 1px, transparent 1px),
-        radial-gradient(circle at 50% 20%, rgba(0, 255, 65, 0.08) 1px, transparent 1px),
-        radial-gradient(circle at 30% 80%, rgba(0, 255, 65, 0.10) 1px, transparent 1px),
-        radial-gradient(circle at 70% 40%, rgba(0, 255, 65, 0.07) 1px, transparent 1px);
-    background-size: 500px 500px, 600px 600px, 700px 700px, 800px 800px, 900px 900px;
-    animation: stars-slow-rotate 120s infinite linear;
-}
-
-/* АНИМАЦИИ ЗВЁЗД */
-@keyframes stars-fast-rotate {
-    0% { 
-        transform: translate(0, 0) rotate(0deg) scale(1);
-        opacity: 0.9;
-    }
-    25% { 
-        transform: translate(-15px, 8px) rotate(90deg) scale(1.1);
-        opacity: 1;
-    }
-    50% { 
-        transform: translate(10px, -12px) rotate(180deg) scale(1.15);
-        opacity: 0.8;
-    }
-    75% { 
-        transform: translate(12px, 15px) rotate(270deg) scale(1.05);
-        opacity: 1;
-    }
-    100% { 
-        transform: translate(0, 0) rotate(360deg) scale(1);
-        opacity: 0.9;
-    }
-}
-
-@keyframes stars-slow-rotate {
-    0% { 
-        transform: translate(0, 0) rotate(0deg) scale(1);
-        opacity: 0.7;
-    }
-    25% { 
-        transform: translate(20px, -10px) rotate(-45deg) scale(1.02);
-        opacity: 0.8;
-    }
-    50% { 
-        transform: translate(-15px, 18px) rotate(-90deg) scale(1.04);
-        opacity: 0.6;
-    }
-    75% { 
-        transform: translate(-18px, -15px) rotate(-135deg) scale(1.02);
-        opacity: 0.8;
-    }
-    100% { 
-        transform: translate(0, 0) rotate(-180deg) scale(1);
-        opacity: 0.7;
-    }
-}
-
-/* СВЕТЯЩИЕСЯ СЕТИ */
-.neural-network {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: 
-        radial-gradient(circle at 30% 40%, transparent 95%, rgba(0, 255, 65, 0.03) 100%),
-        radial-gradient(circle at 70% 60%, transparent 95%, rgba(0, 255, 65, 0.02) 100%),
-        radial-gradient(circle at 50% 20%, transparent 95%, rgba(0, 255, 65, 0.04) 100%);
-    animation: network-pulse 15s infinite ease-in-out;
-}
-
-@keyframes network-pulse {
-    0%, 100% { opacity: 0.3; }
-    50% { opacity: 0.7; }
-}
-
-/* АНОМАЛИИ - ЯРКИЕ ВСПЫШКИ */
-@keyframes supernova {
-    0%, 95% { 
-        opacity: 0; 
-        transform: scale(0) rotate(0deg);
-        box-shadow: 0 0 0px rgba(0, 255, 65, 0);
-    }
-    96% { 
-        opacity: 0.9; 
-        transform: scale(1.2) rotate(180deg);
-        box-shadow: 0 0 30px rgba(0, 255, 65, 0.8);
-    }
-    97% { 
-        opacity: 0.6; 
-        transform: scale(0.8) rotate(360deg);
-        box-shadow: 0 0 20px rgba(0, 255, 65, 0.6);
-    }
-    98% { 
-        opacity: 1; 
-        transform: scale(1.5) rotate(540deg);
-        box-shadow: 0 0 50px rgba(0, 255, 65, 1);
-    }
-    99% { 
-        opacity: 0.4; 
-        transform: scale(0.7) rotate(720deg);
-        box-shadow: 0 0 15px rgba(0, 255, 65, 0.4);
-    }
-    100% { 
-        opacity: 0; 
-        transform: scale(0) rotate(900deg);
-        box-shadow: 0 0 0px rgba(0, 255, 65, 0);
-    }
-}
-
-.noise .anomaly-1 {
-    position: absolute;
-    top: 25%;
-    left: 15%;
-    width: 8px;
-    height: 8px;
-    background: #00FF41;
-    border-radius: 50%;
-    animation: supernova 35s infinite;
-    animation-delay: 0s;
-}
-
-.noise .anomaly-2 {
-    position: absolute;
-    top: 75%;
-    left: 85%;
-    width: 6px;
-    height: 6px;
-    background: #00FF41;
-    border-radius: 50%;
-    animation: supernova 42s infinite;
-    animation-delay: 12s;
-}
-
-.noise .anomaly-3 {
-    position: absolute;
-    top: 10%;
-    left: 65%;
-    width: 10px;
-    height: 10px;
-    background: #00FF41;
-    border-radius: 50%;
-    animation: supernova 38s infinite;
-    animation-delay: 24s;
-}
-
-.noise .anomaly-4 {
-    position: absolute;
-    top: 90%;
-    left: 35%;
-    width: 7px;
-    height: 7px;
-    background: #00FF41;
-    border-radius: 50%;
-    animation: supernova 45s infinite;
-    animation-delay: 18s;
-}
-
-/* Экран запуска */
-#start-screen {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: black;
-    z-index: 20;
-}
-
-.start-message {
-    text-align: center;
-}
-
-#start-btn {
-    background: black;
-    border: 1px solid #00FF41;
-    color: #00FF41;
-    padding: 15px 30px;
-    margin-top: 30px;
-    cursor: pointer;
-    font-family: 'Courier New', monospace;
-    text-transform: uppercase;
-    font-size: 16px;
-}
-
-#start-btn:hover {
-    background: #00FF41;
-    color: black;
-}
-
-/* Экран загрузки */
-#boot-screen {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: black;
+/* Стили для текста терминала */
+.terminal {
+    max-width: 900px;
+    margin: 0 auto;
+    position: relative;
     z-index: 10;
 }
 
-.boot-message {
-    text-align: left;
-}
-
-.logo pre {
-    font-size: 12px;
-    margin-bottom: 30px;
-    text-align: center;
-}
-
-/* Скрываем текст загрузки изначально и делаем плавное появление */
-#boot-screen .boot-text p {
-    opacity: 0;
-    margin: 10px 0;
-    transition: opacity 0.5s ease-in-out;
-}
-
-/* Экран логина */
-#login-screen {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: black;
-    z-index: 5;
-}
-
-.login-form {
-    text-align: center;
-    border: 1px solid #00FF41;
-    padding: 30px;
-    background: rgba(0, 0, 0, 0.8);
-}
-
-.login-prompt {
-    font-size: 18px;
-    margin-bottom: 20px;
-    text-transform: uppercase;
-}
-
-.input-group {
-    margin: 15px 0;
-    text-align: left;
-}
-
-.input-group label {
-    display: block;
-    margin-bottom: 5px;
-    font-size: 14px;
-}
-
-.input-group input {
-    width: 250px;
-    background: black;
-    border: 1px solid #00FF41;
-    color: #00FF41;
-    padding: 8px;
-    font-family: 'Courier New', monospace;
-    outline: none;
-}
-
-.input-group input:focus {
-    border-color: #00FF41;
-    box-shadow: 0 0 10px #00FF41;
-}
-
-#login-btn {
-    background: black;
-    border: 1px solid #00FF41;
-    color: #00FF41;
-    padding: 10px 20px;
-    margin-top: 15px;
-    cursor: pointer;
-    font-family: 'Courier New', monospace;
-    text-transform: uppercase;
-}
-
-#login-btn:hover {
-    background: #00FF41;
-    color: black;
-}
-
-.error {
-    color: #ff0000;
-    margin-top: 10px;
-    font-size: 14px;
-}
-
-.hidden {
-    display: none !important;
-}
-
-/* Стили терминала */
-#terminal {
-    padding: 20px;
-    height: 100vh;
-    overflow-y: auto;
-    background: #0a0a0a;
-}
-
 .output {
-    margin: 5px 0;
-    white-space: pre-wrap;
-    line-height: 1.4;
+    margin-bottom: 8px;
+    text-shadow: 0 0 5px currentColor;
+    animation: textFlicker 0.01s infinite;
 }
 
 .command {
-    color: #FFFFFF;
-    margin: 5px 0;
-    line-height: 1.4;
-}
-
-.error {
-    color: #FF0000;
-    margin: 5px 0;
-    line-height: 1.4;
+    color: #00FF41;
+    margin-bottom: 8px;
+    font-weight: bold;
 }
 
 .input-line {
     display: flex;
     align-items: center;
-    margin: 10px 0;
+    margin-bottom: 8px;
 }
 
 .prompt {
     color: #00FF41;
+    margin-right: 8px;
+    font-weight: bold;
 }
 
 .cmd {
-    color: #FFFFFF;
+    color: #00FF41;
+    flex: 1;
 }
 
 .cursor {
-    animation: blink 1s step-end infinite;
-    background-color: #00FF41;
+    color: #00FF41;
+    animation: blink 1s infinite;
     margin-left: 2px;
 }
 
+/* Анимации */
 @keyframes blink {
-    50% { opacity: 0; }
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
+}
+
+@keyframes textFlicker {
+    0%, 100% { opacity: 0.99; }
+    50% { opacity: 1; }
+}
+
+/* Эффект глитча для текста */
+.glitch-text {
+    position: relative;
+    display: inline-block;
+}
+
+.glitch-text::before,
+.glitch-text::after {
+    content: attr(data-text);
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.glitch-text::before {
+    left: 2px;
+    text-shadow: -2px 0 #ff00ff;
+    clip: rect(44px, 450px, 56px, 0);
+    animation: glitch-anim 5s infinite linear alternate-reverse;
+}
+
+.glitch-text::after {
+    left: -2px;
+    text-shadow: -2px 0 #00ffff;
+    clip: rect(44px, 450px, 56px, 0);
+    animation: glitch-anim2 5s infinite linear alternate-reverse;
+}
+
+@keyframes glitch-anim {
+    0% { clip: rect(42px, 9999px, 44px, 0); }
+    5% { clip: rect(12px, 9999px, 59px, 0); }
+    10% { clip: rect(48px, 9999px, 29px, 0); }
+    15% { clip: rect(42px, 9999px, 73px, 0); }
+    20% { clip: rect(63px, 9999px, 27px, 0); }
+    25% { clip: rect(34px, 9999px, 55px, 0); }
+    30% { clip: rect(86px, 9999px, 73px, 0); }
+    35% { clip: rect(20px, 9999px, 20px, 0); }
+    40% { clip: rect(26px, 9999px, 60px, 0); }
+    45% { clip: rect(25px, 9999px, 66px, 0); }
+    50% { clip: rect(57px, 9999px, 98px, 0); }
+    55% { clip: rect(5px, 9999px, 46px, 0); }
+    60% { clip: rect(82px, 9999px, 31px, 0); }
+    65% { clip: rect(54px, 9999px, 27px, 0); }
+    70% { clip: rect(28px, 9999px, 99px, 0); }
+    75% { clip: rect(45px, 9999px, 69px, 0); }
+    80% { clip: rect(23px, 9999px, 85px, 0); }
+    85% { clip: rect(54px, 9999px, 84px, 0); }
+    90% { clip: rect(45px, 9999px, 47px, 0); }
+    95% { clip: rect(37px, 9999px, 20px, 0); }
+    100% { clip: rect(4px, 9999px, 91px, 0); }
+}
+
+@keyframes glitch-anim2 {
+    0% { clip: rect(65px, 9999px, 100px, 0); }
+    5% { clip: rect(52px, 9999px, 74px, 0); }
+    10% { clip: rect(79px, 9999px, 85px, 0); }
+    15% { clip: rect(75px, 9999px, 5px, 0); }
+    20% { clip: rect(67px, 9999px, 61px, 0); }
+    25% { clip: rect(14px, 9999px, 79px, 0); }
+    30% { clip: rect(1px, 9999px, 66px, 0); }
+    35% { clip: rect(86px, 9999px, 30px, 0); }
+    40% { clip: rect(23px, 9999px, 98px, 0); }
+    45% { clip: rect(85px, 9999px, 72px, 0); }
+    50% { clip: rect(71px, 9999px, 75px, 0); }
+    55% { clip: rect(2px, 9999px, 48px, 0); }
+    60% { clip: rect(30px, 9999px, 16px, 0); }
+    65% { clip: rect(59px, 9999px, 50px, 0); }
+    70% { clip: rect(41px, 9999px, 62px, 0); }
+    75% { clip: rect(2px, 9999px, 82px, 0); }
+    80% { clip: rect(47px, 9999px, 73px, 0); }
+    85% { clip: rect(3px, 9999px, 27px, 0); }
+    90% { clip: rect(26px, 9999px, 55px, 0); }
+    95% { clip: rect(42px, 9999px, 97px, 0); }
+    100% { clip: rect(38px, 9999px, 49px, 0); }
+}
+
+/* Стили для кнопок аудио */
+button {
+    background: transparent;
+    color: #00FF41;
+    border: 1px solid #00FF41;
+    padding: 5px 10px;
+    margin: 5px;
+    cursor: pointer;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    transition: all 0.3s ease;
+    text-shadow: 0 0 5px #00FF41;
+}
+
+button:hover {
+    background: rgba(0, 255, 65, 0.1);
+    box-shadow: 0 0 10px #00FF41;
+}
+
+button:active {
+    transform: scale(0.95);
+}
+
+/* Полоса прокрутки */
+.terminal-container::-webkit-scrollbar {
+    width: 8px;
+}
+
+.terminal-container::-webkit-scrollbar-track {
+    background: rgba(0, 30, 0, 0.3);
+}
+
+.terminal-container::-webkit-scrollbar-thumb {
+    background: #00FF41;
+    border-radius: 4px;
+}
+
+.terminal-container::-webkit-scrollbar-thumb:hover {
+    background: #00cc33;
+    box-shadow: 0 0 10px #00FF41;
+}
+
+/* Адаптивность */
+@media (max-width: 768px) {
+    body {
+        font-size: 14px;
+    }
+    
+    .terminal-container {
+        padding: 10px;
+    }
+    
+    button {
+        padding: 8px 12px;
+        font-size: 12px;
+    }
+}
+
+/* Эффект VHS искажения */
+.vhs-distortion {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: 
+        linear-gradient(transparent 50%, rgba(0, 255, 65, 0.02) 50%),
+        linear-gradient(90deg, transparent 50%, rgba(0, 255, 65, 0.02) 50%);
+    background-size: 100% 4px, 4px 100%;
+    pointer-events: none;
+    z-index: 998;
+    opacity: 0.1;
+    animation: vhsFlicker 0.1s infinite;
+}
+
+@keyframes vhsFlicker {
+    0%, 100% { opacity: 0.1; }
+    50% { opacity: 0.15; }
+}
+
+/* Эффект свечения для критического состояния */
+.critical-glow {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(circle at center, rgba(255, 0, 0, 0.1) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 997;
+    opacity: 0;
+    animation: criticalPulse 2s infinite;
+}
+
+@keyframes criticalPulse {
+    0%, 100% { opacity: 0; }
+    50% { opacity: 0.3; }
 }
