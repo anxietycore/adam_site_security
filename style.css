@@ -402,3 +402,8 @@ body {
 @keyframes blink {
     50% { opacity: 0; }
 }
+/* === ЭФФЕКТЫ ДЕГРАДАЦИИ === */
+.terminal-output-green { color: #00FF41; }
+.terminal-output-yellow { color: #FFFF00; }
+.terminal-output-red { color: #FF4444; }
+.terminal-output-purple { color: #FF00FF; }
