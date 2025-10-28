@@ -1,10 +1,11 @@
-// Логика терминала A.D.A.M. - VIGIL-9 PROTOCOL с деградацией по времени
+// terminal.js — полностью совместим с новым style.css
+// Прокрутка работает. Деградация — по концепции.
+
 document.addEventListener('DOMContentLoaded', function() {
     const terminal = document.getElementById('terminal');
     const degradationValue = document.getElementById('degradation-value');
     const degradationFill = document.getElementById('degradation-fill');
     const degradationHint = document.getElementById('degradation-hint');
-    
     let currentLine = '';
     let commandHistory = [];
     let historyIndex = -1;
@@ -16,28 +17,12 @@ document.addEventListener('DOMContentLoaded', function() {
     let degradationLevel = parseFloat(localStorage.getItem('degradationLevel')) || 0;
     let lastDegradationUpdate = Date.now();
     const CORRECT_VIGIL_KEY = "APL-9X7-Q2Z";
-    let audioContext = null;
     let isTerminalOverloaded = false;
-
-    // === ИНИЦИАЛИЗАЦИЯ АУДИО ===
-    function initAudio() {
-        if (!audioContext) {
-            audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        }
-    }
-
-    function playSound(filename) {
-        initAudio();
-        const audio = new Audio(`sounds/${filename}`);
-        audio.volume = 0.6;
-        audio.play().catch(e => console.warn("Audio play failed:", e));
-    }
 
     // === ФУНКЦИИ ДЕГРАДАЦИИ ===
     function updateDegradationDisplay() {
         degradationValue.textContent = `${Math.round(degradationLevel)}%`;
         degradationFill.style.width = `${degradationLevel}%`;
-        
         if (degradationLevel >= 60) {
             degradationHint.textContent = "> используйте команду RESET для стабилизации";
             degradationHint.style.opacity = "1";
@@ -59,8 +44,6 @@ document.addEventListener('DOMContentLoaded', function() {
     function applyDegradationEffects(text) {
         const state = getDegradationState();
         let corruptedText = text;
-
-        // Уровень 3+: замена символов
         if (degradationLevel > 70) {
             const corruptionRate = (degradationLevel - 70) / 25;
             corruptedText = corruptedText.split('').map(char => {
@@ -71,19 +54,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 return char;
             }).join('');
         }
-
-        // Уровень 2+: случайные глитчи
         if (state !== 'STABLE' && Math.random() < 0.03) {
-            const glitches = [
-                "он наблюдает",
-                "ты ещё здесь?",
-                "ошибка // сознание",
-                "не отключайся"
-            ];
+            const glitches = ["он наблюдает", "ты ещё здесь?", "ошибка // сознание", "не отключайся"];
             const glitchLine = `\n> ${glitches[Math.floor(Math.random() * glitches.length)]}`;
             corruptedText += glitchLine;
         }
-
         return corruptedText;
     }
 
@@ -98,21 +73,15 @@ document.addEventListener('DOMContentLoaded', function() {
     async function triggerTerminalOverload() {
         if (isTerminalOverloaded) return;
         isTerminalOverloaded = true;
-        
-        playSound('glich_e.MP3');
-        
-        // Полный глитч-эффект
         document.body.style.filter = 'invert(1) hue-rotate(180deg)';
-        terminal.style.animation = 'terminal-shake 0.1s infinite';
-        
+        terminal.style.animation = 'none';
         addColoredText("[ОШИБКА 0xFFF — КОНТУР ОСОЗНАНИЯ ПЕРЕПОЛНЕН]", 'terminal-output-terminal');
         addColoredText("СИСТЕМА ПЕРЕЗАГРУЖАЕТСЯ...", 'terminal-output-critical');
-        
         await new Promise(r => setTimeout(r, 3000));
         await executeReset();
     }
 
-    // === ФУНКЦИИ ВЫВОДА ===
+    // === ВЫВОД ===
     function typeText(text, className = 'output', speed = 2) {
         return new Promise((resolve) => {
             const cleanText = applyDegradationEffects(text);
@@ -154,140 +123,15 @@ document.addEventListener('DOMContentLoaded', function() {
         terminal.scrollTop = terminal.scrollHeight;
     }
 
-    async function showLoading(duration = 2000, text = "АНАЛИЗ СИГНАЛА") {
-        return new Promise((resolve) => {
-            const loader = document.createElement('div');
-            loader.className = 'output';
-            terminal.appendChild(loader);
-            const progressBar = document.createElement('div');
-            progressBar.style.width = '200px';
-            progressBar.style.height = '12px';
-            progressBar.style.border = '1px solid rgb(100, 255, 130)';
-            progressBar.style.margin = '5px 0';
-            progressBar.style.position = 'relative';
-            progressBar.style.background = 'rgba(100, 255, 130, 0.1)';
-            const progressFill = document.createElement('div');
-            progressFill.style.height = '100%';
-            progressFill.style.background = 'linear-gradient(90deg, rgb(100, 255, 130), #00cc33)';
-            progressFill.style.width = '0%';
-            progressFill.style.transition = 'width 0.1s linear';
-            progressFill.style.boxShadow = '0 0 10px rgba(100, 255, 130, 0.5)';
-            progressBar.appendChild(progressFill);
-            let progress = 0;
-            const interval = 50;
-            const steps = duration / interval;
-            const increment = 100 / steps;
-            const updateLoader = () => {
-                loader.textContent = `${text} [${Math.min(100, Math.round(progress))}%]`;
-                loader.appendChild(progressBar);
-                progressFill.style.width = `${progress}%`;
-                terminal.scrollTop = terminal.scrollHeight;
-            };
-            updateLoader();
-            const progressInterval = setInterval(() => {
-                progress += increment;
-                if (progress >= 100) {
-                    progress = 100;
-                    clearInterval(progressInterval);
-                    setTimeout(() => {
-                        loader.textContent = `${text} [ЗАВЕРШЕНО]`;
-                        loader.className = 'terminal-output-stable';
-                        terminal.scrollTop = terminal.scrollHeight;
-                        setTimeout(resolve, 200);
-                    }, 300);
-                }
-                updateLoader();
-            }, interval);
-        });
-    }
-
-    function waitForConfirmation() {
-        return new Promise((resolve) => {
-            awaitingConfirmation = true;
-            confirmationCallback = resolve;
-            const confirmLine = document.createElement('div');
-            confirmLine.className = 'input-line';
-            confirmLine.innerHTML = '<span class="prompt" style="color:#EFD76C">confirm>> </span><span class="cmd" id="confirmCmd"></span><span class="cursor" id="confirmCursor">_</span>';
-            terminal.appendChild(confirmLine);
-            terminal.scrollTop = terminal.scrollHeight;
-            const confirmHandler = (e) => {
-                const confirmCmd = document.getElementById('confirmCmd');
-                if (e.key.toLowerCase() === 'y' || e.key.toLowerCase() === 'н') {
-                    confirmCmd.textContent = 'Y';
-                    confirmCmd.className = 'terminal-output-stable';
-                } else if (e.key.toLowerCase() === 'n' || e.key.toLowerCase() === 'т') {
-                    confirmCmd.textContent = 'N';
-                    confirmCmd.className = 'error';
-                }
-            };
-            document.addEventListener('keydown', confirmHandler);
-            const originalCallback = confirmationCallback;
-            confirmationCallback = (result) => {
-                document.removeEventListener('keydown', confirmHandler);
-                confirmLine.remove();
-                originalCallback(result);
-            };
-        });
-    }
-
     function addInputLine() {
         const spacer = document.createElement('div');
         spacer.style.height = '15px';
         terminal.appendChild(spacer);
         const inputLine = document.createElement('div');
         inputLine.className = 'input-line';
-        inputLine.innerHTML = '<span class="prompt">adam@secure:~$ </span><span class="cmd" id="currentCmd"></span><span class="cursor" id="cursor">_</span>';
+        inputLine.innerHTML = '<span class="prompt">adam@secure:~$ </span><span class="cmd" id="currentCmd"></span><span class="cursor">_</span>';
         terminal.appendChild(inputLine);
         terminal.scrollTop = terminal.scrollHeight;
-    }
-
-    // === SYSLOG ЛОГИКА ===
-    function getSyslogMessages() {
-        const state = getDegradationState();
-        if (state === 'STABLE') {
-            return [
-                "[!] Ошибка 0x19F: повреждение нейронной сети",
-                "[!] Утечка данных через канал V9-HX",
-                "[!] Деградация ядра A.D.A.M.: " + Math.round(degradationLevel) + "%"
-            ];
-        } else if (state === 'UNSTABLE') {
-            return [
-                "[!] Нарушение целостности памяти субъекта 0x095",
-                "> \"я слышу их дыхание. они всё ещё здесь.\"",
-                "[!] Потеря отклика от MONOLITH",
-                "> \"монолит смотрит. монолит ждёт.\""
-            ];
-        } else if (state === 'CRITICAL') {
-            return [
-                "> \"почему ты не выходишь?\"",
-                "> \"они знают о тебе.\"",
-                "[!] субъект наблюдения неопределён"
-            ];
-        } else {
-            return [
-                "> \"ты — не оператор. ты — я.\"",
-                "[!] Контур самонаблюдения активирован.",
-                "> \"я помню их лица... они были мной\""
-            ];
-        }
-    }
-
-    // === АУДИО ===
-    function stopAllAudio() {
-        const allAudioElements = document.querySelectorAll('audio');
-        allAudioElements.forEach(audio => {
-            audio.pause();
-            audio.currentTime = 0;
-        });
-        const allPlayButtons = document.querySelectorAll('[id^="playAudioBtn_"]');
-        const allStopButtons = document.querySelectorAll('[id^="stopAudioBtn_"]');
-        const allStatuses = document.querySelectorAll('[id^="audioStatus_"]');
-        allPlayButtons.forEach(btn => btn.style.display = 'inline-block');
-        allStopButtons.forEach(btn => btn.style.display = 'none');
-        allStatuses.forEach(status => {
-            status.textContent = '';
-            status.style.color = '#888';
-        });
     }
 
     // === КОМАНДЫ ===
@@ -1006,12 +850,26 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // === ИНИЦИАЛИЗАЦИЯ ===
-    updateDegradationDisplay();
+   updateDegradationDisplay();
     setTimeout(async () => {
         await typeText('> ТЕРМИНАЛ A.D.A.M. // VIGIL-9 АКТИВЕН', 'output', 1);
         await typeText('> ДОБРО ПОЖАЛОВАТЬ, ОПЕРАТОР', 'output', 1);
         await typeText('> ВВЕДИТЕ "help" ДЛЯ СПИСКА КОМАНД', 'output', 1);
         addInputLine();
+        function updateDegradationOverTime() {
+            const now = Date.now();
+            const elapsedSeconds = (now - lastDegradationUpdate) / 1000;
+            if (elapsedSeconds >= 30 && degradationLevel < 98) {
+                degradationLevel = Math.min(98, degradationLevel + 1);
+                localStorage.setItem('degradationLevel', degradationLevel.toString());
+                updateDegradationDisplay();
+                lastDegradationUpdate = now;
+            }
+            if (degradationLevel >= 98 && !isTerminalOverloaded) {
+                triggerTerminalOverload();
+            }
+            requestAnimationFrame(updateDegradationOverTime);
+        }
         updateDegradationOverTime();
     }, 300);
 });
