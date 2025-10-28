@@ -54,7 +54,8 @@ body{
 
 /* Глубинный нейрослой — тонкие корни/линии, которые пульсируют */
 .neural-network{
-    position:absolute; inset:0;
+    position:absolute; 
+    inset:0;
     background:
         radial-gradient(ellipse at 20% 35%, rgba(100,255,130,0.02) 0 2%, transparent 5%),
         radial-gradient(ellipse at 80% 65%, rgba(100,255,130,0.01) 0 2%, transparent 6%);
@@ -401,19 +402,32 @@ body{
 
 /* ---------- DEGRADATION LEVEL CLASSES (JS будет ставить body.degrade-XX) ---------- */
 /* 0–30% — stable: почти ничего не происходит (базовые небольшие эффекты) */
-body.degrade-0, body.degrade-10, body.degrade-20, body.degrade-30 {
+body.degrade-0, 
+body.degrade-10, 
+body.degrade-20, 
+body.degrade-30 {
     --grain-opacity: 0.02;
     --vhs-opacity: 0.03;
 }
+
 /* 30–60% — лёгкая нестабильность (дрожание, дыхание усилено) */
-body.degrade-40, body.degrade-50, body.degrade-60 {
+body.degrade-40, 
+body.degrade-50, 
+body.degrade-60 {
     --grain-opacity: 0.035;
     --vhs-opacity: 0.06;
-    /* активируем лёгкое дрожание окна */
-    #terminal, #terminal-container { animation: subtle-shake 6s ease-in-out infinite; }
-    .neural-echo .line { opacity:0; } /* JS покажет вспышки */
-    .cursor{ box-shadow: 0 0 10px rgba(100,255,130,0.2) }
 }
+
+/* Активируем лёгкое дрожание окна для деградации 40-60% */
+body.degrade-40 #terminal,
+body.degrade-40 #terminal-container,
+body.degrade-50 #terminal,
+body.degrade-50 #terminal-container,
+body.degrade-60 #terminal,
+body.degrade-60 #terminal-container {
+    animation: subtle-shake 6s ease-in-out infinite;
+}
+
 @keyframes subtle-shake{
     0%{ transform: translateY(0) }
     40%{ transform: translateY(-0.4px) }
@@ -422,53 +436,119 @@ body.degrade-40, body.degrade-50, body.degrade-60 {
 }
 
 /* 60–80% — CRITICAL (RGB shift, фантомный курсор, вспышки) */
-body.degrade-70, body.degrade-75, body.degrade-80 {
+body.degrade-70, 
+body.degrade-75, 
+body.degrade-80 {
     --grain-opacity: 0.06;
     --vhs-opacity: 0.12;
-    /* включаем усиленные VHS эффекты (JS добавляет класс .vhs также) */
-    .neural-network{ animation-duration: 10s; filter: contrast(1.18) blur(0.4px) }
-    /* курсор пульсирует (дыхание) */
-    .cursor{ animation-duration: 0.6s; box-shadow:0 0 18px rgba(100,255,130,0.28) }
-    /* подсказка RESET появляется (JS покажет) */
-    #degradation-hint{ opacity:1; color: var(--amber); }
-    /* ghost text more visible via class toggles */
-    .neural-echo .line{ opacity:0.08; transform: translateY(-4px); }
+}
+
+/* включаем усиленные VHS эффекты (JS добавляет класс .vhs также) */
+body.degrade-70 .neural-network,
+body.degrade-75 .neural-network,
+body.degrade-80 .neural-network {
+    animation-duration: 10s; 
+    filter: contrast(1.18) blur(0.4px);
+}
+
+/* курсор пульсирует (дыхание) */
+body.degrade-70 .cursor,
+body.degrade-75 .cursor,
+body.degrade-80 .cursor {
+    animation-duration: 0.6s; 
+    box-shadow: 0 0 18px rgba(100,255,130,0.28);
+}
+
+/* подсказка RESET появляется (JS покажет) */
+body.degrade-70 #degradation-hint,
+body.degrade-75 #degradation-hint,
+body.degrade-80 #degradation-hint {
+    opacity:1; 
+    color: var(--amber);
+}
+
+/* ghost text more visible via class toggles */
+body.degrade-70 .neural-echo .line,
+body.degrade-75 .neural-echo .line,
+body.degrade-80 .neural-echo .line {
+    opacity:0.08; 
+    transform: translateY(-4px);
 }
 
 /* 80–95% — STRUCTURE BREAK (инверсия, вибрация контейнера, замена символов) */
-body.degrade-85, body.degrade-90, body.degrade-95 {
+body.degrade-85, 
+body.degrade-90, 
+body.degrade-95 {
     --grain-opacity: 0.12;
     --vhs-opacity: 0.26;
-    /* усиленное дрожание контейнера */
-    #terminal, #terminal-container { animation: container-vibrate 0.9s ease-in-out infinite; }
-    @keyframes container-vibrate{
-        0%{ transform: translate(0,0) rotate(0) }
-        20%{ transform: translate(-1.6px, 0.6px) rotate(-0.2deg) }
-        40%{ transform: translate(1.2px, -0.8px) rotate(0.12deg) }
-        60%{ transform: translate(-0.8px, 0.4px) rotate(-0.08deg) }
-        80%{ transform: translate(0.6px, -0.2px) rotate(0.05deg) }
-        100%{ transform: translate(0,0) rotate(0) }
-    }
-    /* сильный RGB shift via class toggles */
-    .rgb-shift .output::before{ transform: translate(-2px, 0); opacity:0.95; }
-    .rgb-shift .output::after{ transform: translate(2px, 0); opacity:0.95; }
-    /* подсказки видимее */
-    #degradation-hint{ opacity:1; color: var(--blood); font-weight:700; }
+}
+
+/* усиленное дрожание контейнера */
+body.degrade-85 #terminal,
+body.degrade-85 #terminal-container,
+body.degrade-90 #terminal,
+body.degrade-90 #terminal-container,
+body.degrade-95 #terminal,
+body.degrade-95 #terminal-container {
+    animation: container-vibrate 0.9s ease-in-out infinite;
+}
+
+@keyframes container-vibrate{
+    0%{ transform: translate(0,0) rotate(0) }
+    20%{ transform: translate(-1.6px, 0.6px) rotate(-0.2deg) }
+    40%{ transform: translate(1.2px, -0.8px) rotate(0.12deg) }
+    60%{ transform: translate(-0.8px, 0.4px) rotate(-0.08deg) }
+    80%{ transform: translate(0.6px, -0.2px) rotate(0.05deg) }
+    100%{ transform: translate(0,0) rotate(0) }
+}
+
+/* сильный RGB shift via class toggles */
+body.degrade-85 .rgb-shift .output::before,
+body.degrade-90 .rgb-shift .output::before,
+body.degrade-95 .rgb-shift .output::before {
+    transform: translate(-2px, 0); 
+    opacity:0.95;
+}
+
+body.degrade-85 .rgb-shift .output::after,
+body.degrade-90 .rgb-shift .output::after,
+body.degrade-95 .rgb-shift .output::after {
+    transform: translate(2px, 0); 
+    opacity:0.95;
+}
+
+/* подсказки видимее */
+body.degrade-85 #degradation-hint,
+body.degrade-90 #degradation-hint,
+body.degrade-95 #degradation-hint {
+    opacity:1; 
+    color: var(--blood); 
+    font-weight:700;
 }
 
 /* 95–100% — TERMINAL COLLAPSE (всё ломается — JS включает .glitch-heavy .vhs .chars-degrade) */
-body.degrade-98, body.degrade-99, body.degrade-100 {
+body.degrade-98, 
+body.degrade-99, 
+body.degrade-100 {
     --grain-opacity: 0.28;
     --vhs-opacity: 0.5;
-    /* экран иногда инвертируется (JS будет применять .invert-flash на body на короткие кадры) */
-    filter: none;
-    #terminal, #terminal-container { animation: catastrophic 0.5s linear infinite; }
-    @keyframes catastrophic{
-        0%{ transform: translate(0,0) scale(1) }
-        30%{ transform: translate(-4px, 2px) scale(0.998) skewX(-0.2deg) }
-        60%{ transform: translate(3px,-3px) scale(1.002) skewX(0.5deg) }
-        100%{ transform: translate(0,0) scale(1) skewX(0) }
-    }
+}
+
+/* экран иногда инвертируется (JS будет применять .invert-flash на body на короткие кадры) */
+body.degrade-98 #terminal,
+body.degrade-98 #terminal-container,
+body.degrade-99 #terminal,
+body.degrade-99 #terminal-container,
+body.degrade-100 #terminal,
+body.degrade-100 #terminal-container {
+    animation: catastrophic 0.5s linear infinite;
+}
+
+@keyframes catastrophic{
+    0%{ transform: translate(0,0) scale(1) }
+    30%{ transform: translate(-4px, 2px) scale(0.998) skewX(-0.2deg) }
+    60%{ transform: translate(3px,-3px) scale(1.002) skewX(0.5deg) }
+    100%{ transform: translate(0,0) scale(1) skewX(0) }
 }
 
 /* ---------- UTILITIES (visible helper classes) ---------- */
@@ -490,7 +570,15 @@ body.degrade-98, body.degrade-99, body.degrade-100 {
 
 /* ---------- OPTIONAL SELECTORS (совместимость с существующим проектом) ---------- */
 /* если в проекте ты используешь #terminal-container внутри body, эти правила работают */
-#terminal-container #terminal { background: transparent; padding: 0; }
+#terminal-container #terminal { 
+    background: transparent; 
+    padding: 0; 
+}
+
+/* Добавляем класс hidden для скрытия элементов */
+.hidden {
+    display: none !important;
+}
 
 /* ---------- COMMENTS / INTEGRATION NOTES ----------
 JS должен:
