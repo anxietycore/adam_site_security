@@ -23,31 +23,28 @@ const RESET_HOLD_MS = 3500; // visual reset length
 document.addEventListener('DOMContentLoaded', initTerminal);
 
 function initTerminal(){
-    // canvas neural draw
-    initNeuralCanvas();
-
-    // terminal elements
+    // 1. Получи элементы DOM
     window.terminal = document.getElementById('terminal');
     window.degIndicator = document.getElementById('degradation-indicator');
     window.degPercent = document.getElementById('deg-percent');
     window.degFill = document.getElementById('deg-fill');
     window.degTip = document.getElementById('deg-tip');
 
-    // audio
+    // 2. Получи аудио-элементы
     window.audioAmbient = document.getElementById('audio-ambient');
     window.audioResetCom = document.getElementById('audio-reset-com');
     window.audioResetComRev = document.getElementById('audio-reset-com-rev');
     window.audioGlitchE = document.getElementById('audio-glitch-e');
     window.audioClick = document.getElementById('audio-click');
 
-    // start ambient quietly
-    try { audioAmbient.volume = 0.06; audioAmbient.play().catch(()=>{}); } catch(e){/*ignore*/}
-
-    // internal state
+    // 3. Инициализируй состояние — ВКЛЮЧАЯ currentDegradation
     window.currentDegradation = parseInt(localStorage.getItem(DEG_KEY)) || 0;
     window.commandCount = 0;
     window.sessionStart = Date.now();
     localStorage.setItem(SESSION_START_KEY, window.sessionStart);
+
+    // 4. ТОЛЬКО ТЕПЕРЬ можно рисовать canvas — потому что currentDegradation уже существует
+    initNeuralCanvas();
 
     // restore visits and show boot-ish lines
     const visits = parseInt(localStorage.getItem(VISITS_KEY)) || 0;
