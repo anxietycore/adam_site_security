@@ -11,23 +11,16 @@
 <head>
     <meta charset="UTF-8">
     <title>A.D.A.M. // ТЕРМИНАЛ</title>
+    <link rel="preconnect" href=" https://fonts.googleapis.com ">
+    <link rel="preconnect" href="https://fonts.gstatic.com " crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="scanline"></div>
-    <!-- ЭПИЧНЫЙ КОСМИЧЕСКИЙ ПОРТАЛ -->
-<div class="noise">
-    <div class="nebula nebula-1"></div>
-    <div class="nebula nebula-2"></div>
-    <div class="nebula nebula-3"></div>
-    <div class="gravity-lens gravity-lens-1"></div>
-    <div class="gravity-lens gravity-lens-2"></div>
-    <div class="neural-network"></div>
-    <div class="anomaly-1"></div>
-    <div class="anomaly-2"></div>
-    <div class="anomaly-3"></div>
-    <div class="anomaly-4"></div>
-</div>
+    <div class="noise">
+        <div class="neural-network"></div>
+    </div>
     
     <!-- Экран запуска -->
     <div id="start-screen">
@@ -55,16 +48,11 @@
                 </pre>
             </div>
             <div class="boot-text">
-                <p>> ИНИЦИАЛИЗАЦИЯ ПРОТОКОЛА БЕЗОПАСНОСТИ A.D.A.M...</p>
-                <p>> ЗАГРУЗКА ПОДСИСТЕМЫ VIGIL-9...</p>
-                <p>> ТЕСТ ПАМЯТИ: УСПЕШНО</p>
-                <p>> КРИПТОМОДУЛЬ: АКТИВИРОВАН</p>
-                <p>> ПРЕДУПРЕЖДЕНИЕ: НЕСАНКЦИОНИРОВАННЫЙ ДОСТУП ЗАПРЕЩЁН</p>
-                <p>> СИСТЕМА ГОТОВА</p>
+                <!-- Заполняется динамически -->
             </div>
         </div>
     </div>
-
+    
     <!-- Экран логина -->
     <div id="login-screen" class="hidden">
         <div class="login-form">
@@ -78,10 +66,10 @@
                 <input type="password" id="password" autocomplete="off">
             </div>
             <button id="login-btn">АУТЕНТИФИКАЦИЯ</button>
-            <p id="login-error" class="error hidden">ДОСТУП ЗАПРЕЩЁН</p>
+            <p id="login-error" class="error hidden"></p>
         </div>
     </div>
-
-    <script src="script.js?v=3"></script>
+    
+    <script src="script.js?v=4"></script>
 </body>
-</html>
+</html> 
