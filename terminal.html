@@ -3,26 +3,39 @@
 <head>
     <meta charset="UTF-8">
     <title>A.D.A.M. TERMINAL // VIGIL-9</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com ">
+    <link rel="preconnect" href="https://fonts.gstatic.com " crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <!-- SVG для искривления -->
+    <svg class="distortion-filter">
+        <defs>
+            <filter id="distortion" x="-10%" y="-10%" width="120%" height="120%">
+                <feTurbulence type="turbulence" baseFrequency="0.0001" numOctaves="2" result="turbulence"/>
+                <feDisplacementMap in2="turbulence" in="SourceGraphic" scale="2" xChannelSelector="R" yChannelSelector="G"/>
+            </filter>
+        </defs>
+    </svg>
+
     <div class="scanline"></div>
-<!-- ЭПИЧНЫЙ КОСМИЧЕСКИЙ ПОРТАЛ -->
-<div class="noise">
-    <div class="nebula nebula-1"></div>
-    <div class="nebula nebula-2"></div>
-    <div class="nebula nebula-3"></div>
-    <div class="gravity-lens gravity-lens-1"></div>
-    <div class="gravity-lens gravity-lens-2"></div>
-    <div class="neural-network"></div>
-    <div class="anomaly-1"></div>
-    <div class="anomaly-2"></div>
-    <div class="anomaly-3"></div>
-    <div class="anomaly-4"></div>
-</div>
-    
-    <div id="terminal">
-        <!-- Терминал будет заполняться через JavaScript -->
+    <div class="noise">
+        <div class="neural-network"></div>
+    </div>
+
+    <div id="degradation-panel">
+        <div>ДЕГРАДАЦИЯ: <span id="degradation-value">0%</span></div>
+        <div id="degradation-bar">
+            <div id="degradation-fill"></div>
+        </div>
+        <div id="degradation-hint"></div>
+    </div>
+
+    <div id="terminal-container">
+        <div id="terminal">
+            <!-- Терминал будет заполняться через JavaScript -->
+        </div>
     </div>
 
     <script>
@@ -34,4 +47,4 @@
     </script>
     <script src="terminal.js"></script>
 </body>
-</html>
+</html> 
