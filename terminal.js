@@ -649,7 +649,3 @@ function randChoice(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
         }
     }, 500);
 })();
-
-/* ================ finalize: initial input line ================ */
-addInputLine();
-updateDegradationUI();
