@@ -1,87 +1,82 @@
 <!DOCTYPE html>
 <html lang="ru">
-<!-- Google Analytics -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-M30NK9KWVH"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-  gtag('config', 'G-M30NK9KWVH');
-</script>
 <head>
-    <meta charset="UTF-8">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>A.D.A.M. // ТЕРМИНАЛ</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+    <!--
+        A.D.A.M. Terminal Start Screen
+        Все визуальные слои и элементы управляются стилями и скриптами.
+        Звуковые файлы expected: reset_com.mp3, reset_com_reverse.mp3, glich_e.mp3, ambient_hum.mp3, glitch_click.mp3
+        (поместите их в ту же папку, что и страницы)
+    -->
+
     <div class="scanline"></div>
-    <!-- ЭПИЧНЫЙ КОСМИЧЕСКИЙ ПОРТАЛ -->
-<div class="noise">
-    <div class="nebula nebula-1"></div>
-    <div class="nebula nebula-2"></div>
-    <div class="nebula nebula-3"></div>
-    <div class="gravity-lens gravity-lens-1"></div>
-    <div class="gravity-lens gravity-lens-2"></div>
-    <div class="neural-network"></div>
-    <div class="anomaly-1"></div>
-    <div class="anomaly-2"></div>
-    <div class="anomaly-3"></div>
-    <div class="anomaly-4"></div>
-</div>
-    
-    <!-- Экран запуска -->
-    <div id="start-screen">
+
+    <!-- НИЖНИЙ СЛОЙ: ГЛУБИННЫЙ НЕЙРОСЛОЙ -->
+    <div id="bg-root" aria-hidden="true">
+        <canvas id="neural-canvas"></canvas>
+        <div class="vein-layer"></div>
+        <div class="memory-ghosts" id="memory-ghosts" aria-hidden="true"></div>
+        <div class="screen-scratches"></div>
+        <div class="vhs-grain"></div>
+    </div>
+
+    <!-- Start Screen -->
+    <div id="start-screen" class="ui-layer">
         <div class="start-message">
             <div class="logo">
-                <pre>
-    \    _ \    \     \  | 
-   _ \   |  |  _ \   |\/ | 
- _/  _\ ___/ _/  _\ _|  _| 
-                </pre>
+<pre>
+\    _ \    \     \  | 
+ _ \   |  |  _ \   |\/ | 
+_/  _\ ___/ _/  _\ _|  _| 
+</pre>
             </div>
-            <p>> СИСТЕМА A.D.A.M. ГОТОВА К ЗАПУСКУ</p>
-            <button id="start-btn">ЗАПУСТИТЬ СИСТЕМУ</button>
+
+            <p class="lead">&gt; СИСТЕМА A.D.A.M. ГОТОВА К ЗАПУСКУ</p>
+            <button id="start-btn" class="btn">ЗАПУСТИТЬ СИСТЕМУ</button>
+            <p class="hint small">Версия VIGIL-9 • experimental</p>
         </div>
     </div>
-    
-    <!-- Экран загрузки -->
-    <div id="boot-screen" class="hidden">
+
+    <!-- Boot Screen -->
+    <div id="boot-screen" class="ui-layer hidden">
         <div class="boot-message">
             <div class="logo">
-                <pre>
-    \    _ \    \     \  | 
-   _ \   |  |  _ \   |\/ | 
- _/  _\ ___/ _/  _\ _|  _| 
-                </pre>
+<pre>
+\    _ \    \     \  | 
+ _ \   |  |  _ \   |\/ | 
+_/  _\ ___/ _/  _\ _|  _| 
+</pre>
             </div>
-            <div class="boot-text">
-                <p>> ИНИЦИАЛИЗАЦИЯ ПРОТОКОЛА БЕЗОПАСНОСТИ A.D.A.M...</p>
-                <p>> ЗАГРУЗКА ПОДСИСТЕМЫ VIGIL-9...</p>
-                <p>> ТЕСТ ПАМЯТИ: УСПЕШНО</p>
-                <p>> КРИПТОМОДУЛЬ: АКТИВИРОВАН</p>
-                <p>> ПРЕДУПРЕЖДЕНИЕ: НЕСАНКЦИОНИРОВАННЫЙ ДОСТУП ЗАПРЕЩЁН</p>
-                <p>> СИСТЕМА ГОТОВА</p>
+            <div class="boot-text" id="boot-text">
+                <!-- lines filled from script.js -->
             </div>
         </div>
     </div>
 
-    <!-- Экран логина -->
-    <div id="login-screen" class="hidden">
+    <!-- Login Screen -->
+    <div id="login-screen" class="ui-layer hidden">
         <div class="login-form">
             <p class="login-prompt">ДОСТУП К ТЕРМИНАЛУ</p>
             <div class="input-group">
                 <label for="username">ИМЯ ПОЛЬЗОВАТЕЛЯ:</label>
-                <input type="text" id="username" autocomplete="off">
+                <input type="text" id="username" autocomplete="off" />
             </div>
             <div class="input-group">
                 <label for="password">ПАРОЛЬ:</label>
-                <input type="password" id="password" autocomplete="off">
+                <input type="password" id="password" autocomplete="off" />
             </div>
-            <button id="login-btn">АУТЕНТИФИКАЦИЯ</button>
+            <button id="login-btn" class="btn">АУТЕНТИФИКАЦИЯ</button>
             <p id="login-error" class="error hidden">ДОСТУП ЗАПРЕЩЁН</p>
         </div>
     </div>
 
-    <script src="script.js?v=3"></script>
+    <!-- Terminal page is separate (terminal.html). After login, we redirect there. -->
+
+    <script src="script.js?v=7"></script>
 </body>
 </html>
