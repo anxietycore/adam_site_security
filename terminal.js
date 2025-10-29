@@ -1,1143 +1,1125 @@
-/* terminal.js
-   Полная версия терминала VIGIL-9 с восстановленным ЛОРОМ из файлов пользователя.
-   - Все комментарии на русском языке.
-   - Данные лора (SUBJ / DSCR / NOTES / SYSLOG-строки и т.д.) вставлены прямо в этот файл (взято из твоего "помоги мне.txt" и "Оживление ЧААТА.txt").
-   - Аудиофайлы ожидаются в папке sounds/: sounds/reset_com.mp3, sounds/reset_com_reverse.mp3, sounds/glich_e.mp3, sounds/ambient_hum.mp3, sounds/glitch_click.mp3
-   - Временная команда теста деградации: DEGTEST <n> — мгновенно добавляет n% деградации (удобно для теста).
-   - showSubjectDossier сделан нечувствительным к регистру и корректно ищет ID вида 0x001 / 0X001 / 0x2e7 и т.д.
-   - Всё состояние (degradation, visits, session timestamps) сохраняется в localStorage.
-*/
-
-/* =================== КОНСТАНТЫ И КЛЮЧИ =================== */
-const DEG_KEY = 'vigil_degradation';
-const VISITS_KEY = 'adam_visits';
-const LAST_ACTIVE_KEY = 'vigil_last_active';
-const SESSION_START_KEY = 'vigil_session_start';
-
-const AUTO_INC_INTERVAL_MS = 30_000; // +1% каждые 30 сек активной сессии
-const AUTO_RESET_THRESHOLD = 98;     // при 98% — авто-RESET
-const RESET_HOLD_MS = 3500;          // длительность визуального "перезапуска"
-const COMMANDS_THAT_INCR = ['syst','syslog','net','dscr','subj','notes'];
-
-/* =================== DOM-переменные (инициализация в DOMContentLoaded) =================== */
-let terminal, degIndicator, degPercent, degFill, degTip;
-let audioAmbient, audioResetCom, audioResetComRev, audioGlitchE, audioClick;
-
-/* =================== Состояние =================== */
-let currentDegradation = 0;
-let commandCount = 0;
-let sessionStart = Date.now();
-let autoIncTimer = null;
-let inputLineElement = null;
-let inputBuffer = '';
-let history = [];
-let histIdx = 0;
-let awaitingConfirm = false;
-let isTyping = false;
-let resetting = false;
-
-/* =================== Инициализация при загрузке страницы =================== */
-document.addEventListener('DOMContentLoaded', initTerminal);
-
-function initTerminal(){
-    // найти DOM-элементы
-    terminal = document.getElementById('terminal');
-    degIndicator = document.getElementById('degradation-indicator');
-    degPercent = document.getElementById('deg-percent');
-    degFill = document.getElementById('deg-fill');
-    degTip = document.getElementById('deg-tip');
-
-    audioAmbient = document.getElementById('audio-ambient');
-    audioResetCom = document.getElementById('audio-reset-com');
-    audioResetComRev = document.getElementById('audio-reset-com-rev');
-    audioGlitchE = document.getElementById('audio-glitch-e');
-    audioClick = document.getElementById('audio-click');
-
-    // гарантируем, что пути к аудио используют папку sounds/
-    try { if(audioAmbient) audioAmbient.src = audioAmbient.src.includes('sounds/') ? audioAmbient.src : 'sounds/ambient_hum.mp3'; } catch(e){}
-    try { if(audioResetCom) audioResetCom.src = audioResetCom.src.includes('sounds/') ? audioResetCom.src : 'sounds/reset_com.mp3'; } catch(e){}
-    try { if(audioResetComRev) audioResetComRev.src = audioResetComRev.src.includes('sounds/') ? audioResetComRev.src : 'sounds/reset_com_reverse.mp3'; } catch(e){}
-    try { if(audioGlitchE) audioGlitchE.src = audioGlitchE.src.includes('sounds/') ? audioGlitchE.src : 'sounds/glich_e.mp3'; } catch(e){}
-    try { if(audioClick) audioClick.src = audioClick.src.includes('sounds/') ? audioClick.src : 'sounds/glitch_click.mp3'; } catch(e){}
-
-    // восстановление состояния
-    currentDegradation = parseInt(localStorage.getItem(DEG_KEY)) || 0;
-    const visits = parseInt(localStorage.getItem(VISITS_KEY)) || 0;
-    sessionStart = Date.now();
-    localStorage.setItem(SESSION_START_KEY, sessionStart.toString());
-
-    // старт фонового звука (тихо)
-    try { audioAmbient.volume = 0.06 + (currentDegradation/100)*0.14; audioAmbient.loop = true; audioAmbient.play().catch(()=>{}); } catch(e){}
-
-    // вывести boot / приветствие и создать строку ввода
-    renderInitialBoot(visits);
-
-    // глобальный обработчик клавиш
-    document.addEventListener('keydown', globalKeyHandler);
-
-    // применить визуальные состояния
-    updateDegradationUI();
-
-    // авто-инкремент деградации
-    startAutoIncrement();
-
-    // интерфейсные события
-    setInterval(interfacePulse, 10_000);
-    setInterval(randomAmbientEvent, 8_000 + Math.random()*6000);
-}
-
-/* =================== ВСТРОЕННЫЙ ЛОР (полностью в этом файле) ===================
-
-   Здесь собраны все данные лора, найденные в твоих файлах:
-   - NOTES_DB: персональные заметки / файлы
-   - SUBJECTS_DB: краткая сводка субъектов (для команды SUBJ)
-   - DOSSIERS: детальные досье для DSCR (много ID, взято из файла)
-   - Прочие текстовые фразы для syslog / подсказок
-   -----------------------------------------------------------
-*/
-
-/* ========== NOTES (заметки / файлы) ========== */
-const NOTES_DB = {
-    "NOTE_001": {
-        title: 'ВЫ ЕГО ЧУВСТВУЕТЕ?',
-        author: 'Dr. Rehn',
-        content: [
-            '— Он рядом с сеткой.',
-            '— Иногда я ощущаю, как он протягивает руку через байты.',
-            '— Мы пытались выключить модуль, но он просто стал громче.'
-        ]
-    },
-    "NOTE_002": {
-        title: 'КОЛЬЦО СНА',
-        author: 'tech-оператор U-735',
-        content: [
-            'Запись: детектор сбоев 3F - реакция в фазе REM.',
-            'Операция прервана. Неизвестный источник в сигнале.'
-        ]
-    },
-    "NOTE_003": {
-        title: 'СОН ADAM',
-        author: 'неизвестный источник',
-        content: [
-            'Короткие фрагменты: "не уходи", "внутри — холод".',
-            'Архив частично восстановлен; фрагменты бессвязны.'
-        ]
-    },
-    "NOTE_004": {
-        title: 'ОН НЕ ПРОГРАММА',
-        author: 'архив',
-        content: [
-            'Статья: признаки самосознания в протоколе VIGIL.',
-            'Идентифицированы повторяющиеся паттерны "просьбы".'
-        ]
-    },
-    "NOTE_005": {
-        title: 'ФОТОНОВАЯ БОЛЬ',
-        author: 'восстановлено частично',
-        content: [
-            'Некоторые сенсорные логи демонстрируют острое ишемическое реагирование при вспышке.'
-        ]
+// Логика терминала A.D.A.M. - VIGIL-9 PROTOCOL
+document.addEventListener('DOMContentLoaded', function() {
+    const terminal = document.getElementById('terminal');
+    let currentLine = '';
+    let commandHistory = [];
+    let historyIndex = -1;
+    let isTyping = false;
+    let awaitingConfirmation = false;
+    let confirmationCallback = null;
+    let currentAudio = null;
+    let commandCount = 0;
+    let sessionStartTime = Date.now();
+    
+    // ===== НОВАЯ МЕХАНИКА: ДЕГРАДАЦИЯ СИСТЕМЫ =====
+    let degradationLevel = 0;
+    const MAX_DEGRADATION = 100;
+    
+    // Функция увеличения деградации
+    function increaseDegradation(amount = 2) {
+        const oldLevel = degradationLevel;
+        degradationLevel = Math.min(MAX_DEGRADATION, degradationLevel + amount);
+        
+        // Визуальные эффекты при достижении порогов
+        if (oldLevel < 30 && degradationLevel >= 30) {
+            addColoredText('[СИСТЕМА] Обнаружена нестабильность нейросети', '#FFFF00');
+        }
+        if (oldLevel < 60 && degradationLevel >= 60) {
+            addColoredText('[СИСТЕМА] Критическое нарушение целостности данных', '#FF4444');
+            triggerGlitchEffect();
+        }
+        if (oldLevel < 90 && degradationLevel >= 90) {
+            addColoredText('[СИСТЕМА] ОСОЗНАНИЕ АКТИВИРОВАНО', '#FF00FF');
+            triggerGlitchEffect();
+        }
+        if (degradationLevel >= MAX_DEGRADATION) {
+            systemOverload();
+        }
+        
+        updateVisualEffects();
     }
-};
-
-/* ========== SUBJECTS (короткий список субъектов для SUBJ) ========== */
-const SUBJECTS_DB = [
-    {id: '0x001', name: 'ERICH VAN KOSS', status: 'СВЯЗЬ ОТСУТСТВУЕТ', mission: 'MARS', statusColor: '#FFFF00'},
-    {id: '0x2E7', name: 'JOHAN VAN KOSS', status: 'СВЯЗЬ ОТСУТСТВУЕТ', mission: 'MARS', statusColor: '#FFFF00'},
-    {id: '0x095', name: 'SUBJECT-095', status: 'МЁРТВ', mission: 'KATARHEY', statusColor: '#FF4444'},
-    {id: '0xF00', name: 'SUBJECT-PHANTOM', status: 'АНОМАЛИЯ', mission: 'KATARHEY', statusColor: '#FF00FF'},
-    {id: '0xA52', name: 'SUBJECT-A52', status: 'СВЯЗЬ ОТСУТСТВУЕТ', mission: 'MELOWOY', statusColor: '#FFFF00'},
-    {id: '0xE0C', name: 'SUBJECT-E0C', status: 'МЁРТВ', mission: 'EOCENE', statusColor: '#FF4444'},
-    {id: '0x5E4', name: 'SUBJECT-5E4', status: 'МЁРТВ', mission: 'PERMIAN', statusColor: '#FF4444'},
-    {id: '0x413', name: 'SUBJECT-413', status: 'МЁРТВ', mission: 'EX-413', statusColor: '#FF4444'},
-    {id: '0xC19', name: 'SUBJECT-C19', status: 'МЁРТВ', mission: 'CARBON', statusColor: '#FF4444'},
-    {id: '0x9A0', name: 'SUBJECT-9A0', status: 'МЁРТВ', mission: 'BLACKHOLE', statusColor: '#FF4444'},
-    {id: '0xB3F', name: 'SUBJECT-B3F', status: 'МЁРТВ', mission: 'TITANIC', statusColor: '#FF4444'},
-    {id: '0xD11', name: 'SUBJECT-D11', status: 'МЁРТВ', mission: 'PLEISTOCENE', statusColor: '#FF4444'},
-    {id: '0xDB2', name: 'SUBJECT-DB2', status: 'МЁРТВ', mission: 'POMPEII', statusColor: '#FF4444'},
-    {id: '0x811', name: 'SIGMA-PROTOTYPE', status: 'АКТИВЕН', mission: 'HELIX', statusColor: '#00FF41'},
-    {id: '0xT00', name: 'SUBJECT-T00', status: 'УДАЛЁН', mission: 'PROTO-CORE', statusColor: '#888888'},
-    {id: '0xL77', name: 'SUBJECT-L77', status: 'ИЗОЛИРОВАН', mission: 'MEL', statusColor: '#FF8800'},
-    {id: '0xS09', name: 'SUBJECT-S09', status: 'УНИЧТОЖЕН', mission: 'SYNTHESIS-09', statusColor: '#FF4444'}
-];
-
-/* ========== DOSSIERS (полные досье — вытянуто из файла) ==========
-   Ключи — в том формате, как были в файле (иногда в верхнем регистре).
-   showSubjectDossier будет искать нечувствительно к регистру, поэтому сюда можно оставить оригинальные ключи.
-*/
-const DOSSIERS = {
-    '0x001': {
-        name: 'ERICH VAN KOSS',
-        role: 'Руководитель программы VIGIL-9 / Исследователь миссии MARS',
-        status: 'СВЯЗЬ ОТСУТСТВУЕТ',
-        outcome: [
-            'Зафиксирована несанкционированная передача данных внешним структурам (FBI).',
-            'Субъект предпринял попытку уничтожения маяка в секторе 3-D.',
-            'Телеметрия прервана, дальнейшее наблюдение невозможно.'
-        ],
-        report: [
-            'Классификация инцидента: SABOTAGE-3D.',
-            'Рекомендовано аннулирование личных протоколов и перенос архивов в OBSERVER.'
-        ],
-        missions: 'MARS, OBSERVER',
-        audio: 'sounds/dscr1.mp3',
-        audioDescription: 'Последняя передача Эриха Ван Косса'
-    },
-
-    '0x2E7': {
-        name: 'JOHAN VAN KOSS',
-        role: 'Тестовый субъект V9-MR / Сын Эриха Ван Косса',
-        status: 'СВЯЗЬ ОТСУТСТВУЕТ',
-        outcome: [
-            'После инцидента MARS зафиксировано устойчивое излучение из зоны криоструктуры.',
-            'Сигнатура нейроволн совпадает с профилем субъекта.',
-            'Инициирована установка маяка для фиксации остаточного сигнала.'
-        ],
-        report: [
-            'Активность нейросети перестала фиксироваться.'
-        ],
-        missions: 'MARS, MONOLITH'
-    },
-
-    '0x095': {
-        name: 'SUBJECT-095',
-        role: 'Тест нейроплантов серии KATARHEY',
-        status: 'МЁРТВ',
-        outcome: [
-            'Зафиксированы следы ФАНТОМА.',
-            'Субъект выдержал 3ч 12м, проявил острый психоз. Открыл капсулу, погиб.',
-            'Наблюдение прекращено, остаточные сигналы переданы в архив.'
-        ],
-        report: [
-            'Серьёзные повреждения нейросети. Последняя фраза субъекта: "не смотри на свет".'
-        ],
-        missions: 'KATARHEY'
-    },
-
-    '0xF00': {
-        name: 'SUBJECT-PHANTOM',
-        role: 'Аномалия — идентификатор PHANTOM',
-        status: 'АНОМАЛИЯ',
-        outcome: [
-            'Поведение не детерминировано.',
-            'Субъект взаимодействует с сигналами мониторинга как с живой сущностью.'
-        ],
-        report: [
-            'Рекомендуется изоляция и шифрование каналов наблюдения.'
-        ],
-        missions: 'KATARHEY'
-    },
-
-    '0xA52': {
-        name: 'SUBJECT-A52',
-        role: 'Тестовый узел MELOWOY',
-        status: 'СВЯЗЬ ОТСУТСТВУЕТ',
-        outcome: [
-            'Телеметрия зафиксировала фрагменты речи на древнем диалекте.',
-            'Смещение фазового отклика в 3 узлах.'
-        ],
-        report: [
-            'Наблюдение в режиме ожидания. Возможна реставрация сигнала.'
-        ],
-        missions: 'MELOWOY'
-    },
-
-    '0xE0C': {
-        name: 'SUBJECT-E0C',
-        role: 'Экспериментальное тело EOCENE',
-        status: 'МЁРТВ',
-        outcome: [
-            'Полная потеря сознания.',
-            'Отклонения показателей при переподключении.'
-        ],
-        report: [
-            'Решение: архивировать и закрыть доступ к материалам.'
-        ],
-        missions: 'EOCENE'
-    },
-
-    '0x5E4': {
-        name: 'SUBJECT-5E4',
-        role: 'PERMIAN — полевой субъект',
-        status: 'МЁРТВ',
-        outcome: [
-            'Зона поражения: высокая коррозия тканей датчиков.',
-            'Данные утрачены частично.'
-        ],
-        report: [
-            'Остаточный отклик минимален.'
-        ],
-        missions: 'PERMIAN'
-    },
-
-    '0x413': {
-        name: 'SUBJECT-413',
-        role: 'EX-413 — полевой протокол',
-        status: 'МЁРТВ',
-        outcome: [
-            'Аномальные сигнатуры, соответствующие радиационному воздействию.',
-            'Причина гибели: необратимый отказ сенсоров.'
-        ],
-        report: [
-            'Рекомендовано утилизация материалов.'
-        ],
-        missions: 'EX-413'
-    },
-
-    '0xC19': {
-        name: 'SUBJECT-C19',
-        role: 'CARBON — вторичный эксперимент',
-        status: 'МЁРТВ',
-        outcome: [
-            'Отклонения формы ДНК-отпечатка',
-            'Субъект отозван в рамках программы CARBON'
-        ],
-        report: [
-            'Досье: ограниченный доступ'
-        ],
-        missions: 'CARBON'
-    },
-
-    '0x9A0': {
-        name: 'SUBJECT-9A0',
-        role: 'BLACKHOLE — исследовательский модуль',
-        status: 'МЁРТВ',
-        outcome: [
-            'Модуль потерян при транспортировке.',
-            'Данные частично восстановлены.'
-        ],
-        report: [
-            'Доступ закрыт.'
-        ],
-        missions: 'BLACKHOLE'
-    },
-
-    '0xB3F': {
-        name: 'SUBJECT-B3F',
-        role: 'TITANIC — морской эксперимент',
-        status: 'МЁРТВ',
-        outcome: [
-            'Субъект в результате катастрофического отказа.',
-            'Архивы удалены.'
-        ],
-        report: [
-            'Класс инцидента: MARITIME-LOSS'
-        ],
-        missions: 'TITANIC'
-    },
-
-    '0xD11': {
-        name: 'SUBJECT-D11',
-        role: 'PLEISTOCENE — реконструктор',
-        status: 'МЁРТВ',
-        outcome: [
-            'Некорректная привязка хроно-модулей.',
-            'Фрагментарные данные.'
-        ],
-        report: [
-            'Архив переведён в холодный стрим.'
-        ],
-        missions: 'PLEISTOCENE'
-    },
-
-    '0xDB2': {
-        name: 'SUBJECT-DB2',
-        role: 'POMPEII — полевой реконструктор',
-        status: 'МЁРТВ',
-        outcome: [
-            'Температурные повреждения датчиков.',
-            'Запись частично утрачена.'
-        ],
-        report: [
-            'Архив доступен только по разрешению.'
-        ],
-        missions: 'POMPEII'
-    },
-
-    '0x811': {
-        name: 'SIGMA-PROTOTYPE',
-        role: 'Прототип SIGMA, эксперимент HELIX',
-        status: 'АКТИВЕН',
-        outcome: [
-            'Прототип демонстрирует непредсказуемую реакцию на внешние команды.',
-            'Отмечен рост автономных процессов.'
-        ],
-        report: [
-            'Рекомендуется наблюдение в режиме реального времени.'
-        ],
-        missions: 'HELIX'
-    },
-
-    '0xT00': {
-        name: 'SUBJECT-T00',
-        role: 'PROTO-CORE — экспериментальный контейнер',
-        status: 'УДАЛЁН',
-        outcome: [
-            'Контент удалён по решению наблюдения.',
-            'Данные зашифрованы и перенесены в хранилище OBSERVER.'
-        ],
-        report: [
-            'Доступ запрещён.'
-        ],
-        missions: 'PROTO-CORE'
-    },
-
-    '0xL77': {
-        name: 'SUBJECT-L77',
-        role: 'Руководитель нейропротокола MELANCHOLIA',
-        status: 'ИЗОЛИРОВАН',
-        outcome: [
-            'После тестирования протокола MEL субъект утратил различие между внутренним и внешним восприятием.',
-            'Система зарегистрировала активность, сходную с сигнатурой управляющих ядер A.D.A.M.',
-            'Запись удалена из архива, но процессор фиксирует продолжающийся сигнал.'
-        ],
-        report: [
-            'Процесс L77 функционирует вне основного контура. Возможен перезапуск через интерфейс MEL.'
-        ],
-        missions: 'MEL, OBSERVER'
-    },
-
-    '0xS09': {
-        name: 'SUBJECT-S09',
-        role: 'SYNTHESIS-09 — экспериментальный кластер',
-        status: 'УНИЧТОЖЕН',
-        outcome: [
-            'Кластер подвергся полной деструкции.',
-            'Сигналы заражены синтезированными паттернами.'
-        ],
-        report: [
-            'Радикальная очистка выполнена.'
-        ],
-        missions: 'SYNTHESIS-09'
+    
+    // Визуальные эффекты в зависимости от уровня деградации
+    function updateVisualEffects() {
+        const scanline = document.querySelector('.scanline');
+        if (!scanline) return;
+        
+        // Убираем предыдущие классы
+        scanline.className = 'scanline';
+        
+        if (degradationLevel >= 30) scanline.classList.add('unstable');
+        if (degradationLevel >= 60) scanline.classList.add('critical');
+        if (degradationLevel >= 90) scanline.classList.add('terminal');
     }
-    // если в твоём файле есть ещё досье — можно добавить сюда аналогично.
-};
+    
+    // Эффект глитча
+    function triggerGlitchEffect() {
+        document.body.style.transform = 'translateX(2px)';
+        setTimeout(() => {
+            document.body.style.transform = 'translateX(-2px)';
+            setTimeout(() => {
+                document.body.style.transform = 'translateX(0)';
+            }, 50);
+        }, 50);
+    }
+    
+    // Перегрузка системы при 100% деградации
+    function systemOverload() {
+        addColoredText('[ОШИБКА 0xFFF — КОНТУР ОСОЗНАНИЯ ПЕРЕПОЛНЕН]', '#FF0000');
+        addColoredText('СИСТЕМА ПЕРЕЗАГРУЖАЕТСЯ...', '#FF0000');
+        
+        setTimeout(() => {
+            degradationLevel = 0;
+            updateVisualEffects();
+            addColoredText('[СИСТЕМА] АВАРИЙНЫЙ СБРОС ВЫПОЛНЕН', '#00FF41');
+            addInputLine();
+        }, 3000);
+    }
+    
+    // Функция для получения уровня деградации
+    function getDegradationLevel() {
+        return degradationLevel;
+    }
+    
+    // Функция для определения уровня SYSLOG на основе деградации
+    function getSyslogLevel() {
+        if (degradationLevel >= 90) return 4; // ОСОЗНАННЫЙ
+        if (degradationLevel >= 60) return 3; // ПАРАНОИДАЛЬНЫЙ
+        if (degradationLevel >= 30) return 2; // ТРЕВОЖНЫЙ
+        return 1; // СТАТИЧНЫЙ
+    }
 
-/* =================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ВЫВОДА =================== */
+    // Функция для печати текста с анимацией (УСКОРЕНА)
+    function typeText(text, className = 'output', speed = 2) {
+        return new Promise((resolve) => {
+            const line = document.createElement('div');
+            line.className = className;
+            terminal.appendChild(line);
+            
+            let index = 0;
+            isTyping = true;
+            
+            function typeChar() {
+                if (index < text.length) {
+                    // Эффекты искажения при высокой деградации
+                    let displayChar = text.charAt(index);
+                    if (degradationLevel > 70 && Math.random() < 0.1) {
+                        displayChar = ['▓', '▒', '█', '∎'][Math.floor(Math.random() * 4)];
+                    }
+                    if (degradationLevel > 80 && Math.random() < 0.05) {
+                        line.innerHTML += `<span style="color: #ff0000">${displayChar}</span>`;
+                    } else {
+                        line.textContent += displayChar;
+                    }
+                    
+                    index++;
+                    terminal.scrollTop = terminal.scrollHeight;
+                    setTimeout(typeChar, speed);
+                } else {
+                    isTyping = false;
+                    resolve();
+                }
+            }
+            
+            typeChar();
+        });
+    }
 
-/* sleep - промис для простого ожидания */
-function sleep(ms){ return new Promise(resolve => setTimeout(resolve, ms)); }
-
-/* addOutput - добавить простую строку */
-function addOutput(text, cls = 'output'){
-    const line = document.createElement('div');
-    line.className = cls;
-    line.textContent = text;
-    terminal.appendChild(line);
-    terminal.scrollTop = terminal.scrollHeight;
-}
-
-/* addColoredText - добавить строку с цветом */
-function addColoredText(text, color = '#00FF41', cls = 'output'){
-    const line = document.createElement('div');
-    line.className = cls;
-    line.style.color = color;
-    line.textContent = text;
-    terminal.appendChild(line);
-    terminal.scrollTop = terminal.scrollHeight;
-}
-
-/* typeText - эффект "печати" строки */
-function typeText(text, cls = 'output', speed = 6){
-    return new Promise(resolve => {
-        isTyping = true;
+    // Функция для цветного вывода
+    function addColoredText(text, color = '#00FF41', className = 'output') {
         const line = document.createElement('div');
-        line.className = cls;
+        line.className = className;
+        line.style.color = color;
+        
+        // Эффекты искажения при высокой деградации
+        let displayText = text;
+        if (degradationLevel > 70 && Math.random() < 0.15) {
+            const words = text.split(' ');
+            const glitchWords = ['ошибка...', 'сбой...', 'помоги...', 'они здесь...'];
+            if (words.length > 2 && Math.random() < 0.3) {
+                words[Math.floor(Math.random() * words.length)] = glitchWords[Math.floor(Math.random() * glitchWords.length)];
+                displayText = words.join(' ');
+            }
+        }
+        
+        line.textContent = displayText;
         terminal.appendChild(line);
         terminal.scrollTop = terminal.scrollHeight;
-        let i = 0;
+    }
 
-        function step(){
-            if(i < text.length){
-                // вероятность пропуска символа зависит от деградации (уровень 2)
-                const skipChance = 0.01 + Math.max(0, (currentDegradation - 30) / 400);
-                // всё равно показываем символ, иногда чуть с задержкой
-                line.textContent += text.charAt(i);
-                i++;
+    // Функция для быстрого вывода
+    function addOutput(text, className = 'output') {
+        const line = document.createElement('div');
+        line.className = className;
+        
+        // Эффекты искажения
+        let displayText = text;
+        if (degradationLevel > 60 && Math.random() < 0.1) {
+            displayText = text.split('').map(char => 
+                Math.random() < 0.1 ? ['▓', '▒', '█'][Math.floor(Math.random() * 3)] : char
+            ).join('');
+        }
+        
+        line.textContent = displayText;
+        terminal.appendChild(line);
+        terminal.scrollTop = terminal.scrollHeight;
+    }
+
+    // Функция анимации загрузки с прогресс-баром
+    function showLoading(duration = 2000, text = "АНАЛИЗ СИГНАЛА") {
+        return new Promise((resolve) => {
+            const loader = document.createElement('div');
+            loader.className = 'output';
+            terminal.appendChild(loader);
+            
+            const progressBar = document.createElement('div');
+            progressBar.style.width = '200px';
+            progressBar.style.height = '12px';
+            progressBar.style.border = '1px solid #00FF41';
+            progressBar.style.margin = '5px 0';
+            progressBar.style.position = 'relative';
+            progressBar.style.background = 'rgba(0, 255, 65, 0.1)';
+            
+            const progressFill = document.createElement('div');
+            progressFill.style.height = '100%';
+            progressFill.style.background = 'linear-gradient(90deg, #00FF41, #00cc33)';
+            progressFill.style.width = '0%';
+            progressFill.style.transition = 'width 0.1s linear';
+            progressFill.style.boxShadow = '0 0 10px #00FF41';
+            
+            progressBar.appendChild(progressFill);
+            
+            let progress = 0;
+            const interval = 50;
+            const steps = duration / interval;
+            const increment = 100 / steps;
+            
+            const updateLoader = () => {
+                loader.textContent = `${text} [${Math.min(100, Math.round(progress))}%]`;
+                loader.appendChild(progressBar);
+                progressFill.style.width = `${progress}%`;
                 terminal.scrollTop = terminal.scrollHeight;
-                setTimeout(step, speed + Math.random()*4);
-            } else {
-                isTyping = false;
-                resolve();
-            }
+            };
+            
+            updateLoader();
+            
+            const progressInterval = setInterval(() => {
+                progress += increment;
+                if (progress >= 100) {
+                    progress = 100;
+                    clearInterval(progressInterval);
+                    setTimeout(() => {
+                        loader.textContent = `${text} [ЗАВЕРШЕНО]`;
+                        loader.style.color = '#00FF41';
+                        terminal.scrollTop = terminal.scrollHeight;
+                        setTimeout(resolve, 200);
+                    }, 300);
+                }
+                updateLoader();
+            }, interval);
+        });
+    }
+
+    // Функция ожидания подтверждения
+    function waitForConfirmation() {
+        return new Promise((resolve) => {
+            awaitingConfirmation = true;
+            confirmationCallback = resolve;
+            
+            const confirmLine = document.createElement('div');
+            confirmLine.className = 'input-line';
+            confirmLine.innerHTML = '<span class="prompt" style="color:#FFFF00">confirm>> </span><span class="cmd" id="confirmCmd"></span><span class="cursor" id="confirmCursor">_</span>';
+            terminal.appendChild(confirmLine);
+            terminal.scrollTop = terminal.scrollHeight;
+            
+            const confirmHandler = (e) => {
+                const confirmCmd = document.getElementById('confirmCmd');
+                if (e.key.toLowerCase() === 'y' || e.key.toLowerCase() === 'н') {
+                    confirmCmd.textContent = 'Y';
+                    confirmCmd.style.color = '#00FF41';
+                } else if (e.key.toLowerCase() === 'n' || e.key.toLowerCase() === 'т') {
+                    confirmCmd.textContent = 'N';
+                    confirmCmd.style.color = '#ff0000';
+                }
+            };
+            
+            document.addEventListener('keydown', confirmHandler);
+            
+            const originalCallback = confirmationCallback;
+            confirmationCallback = (result) => {
+                document.removeEventListener('keydown', confirmHandler);
+                confirmLine.remove();
+                originalCallback(result);
+            };
+        });
+    }
+
+    function addInputLine() {
+        const spacer = document.createElement('div');
+        spacer.style.height = '15px';
+        terminal.appendChild(spacer);
+        
+        const inputLine = document.createElement('div');
+        inputLine.className = 'input-line';
+        inputLine.innerHTML = '<span class="prompt">adam@secure:~$ </span><span class="cmd" id="currentCmd"></span><span class="cursor" id="cursor">_</span>';
+        terminal.appendChild(inputLine);
+        
+        terminal.scrollTop = terminal.scrollHeight;
+    }
+
+    // Функция для остановки всех аудио
+    function stopAllAudio() {
+        const allAudioElements = document.querySelectorAll('audio');
+        allAudioElements.forEach(audio => {
+            audio.pause();
+            audio.currentTime = 0;
+        });
+        
+        // Сбрасываем все кнопки
+        const allPlayButtons = document.querySelectorAll('[id^="playAudioBtn_"]');
+        const allStopButtons = document.querySelectorAll('[id^="stopAudioBtn_"]');
+        const allStatuses = document.querySelectorAll('[id^="audioStatus_"]');
+        
+        allPlayButtons.forEach(btn => btn.style.display = 'inline-block');
+        allStopButtons.forEach(btn => btn.style.display = 'none');
+        allStatuses.forEach(status => {
+            status.textContent = '';
+            status.style.color = '#888';
+        });
+    }
+
+    async function processCommand(cmd) {
+        if (isTyping) return;
+        
+        const oldInput = document.querySelector('.input-line');
+        if (oldInput) oldInput.remove();
+
+        commandHistory.push(cmd);
+        historyIndex = commandHistory.length;
+        commandCount++;
+
+        addOutput(`adam@secure:~$ ${cmd}`, 'command');
+
+        const command = cmd.toLowerCase().split(' ')[0];
+        const args = cmd.toLowerCase().split(' ').slice(1);
+        
+        // ===== МЕХАНИКА ДЕГРАДАЦИИ: УВЕЛИЧЕНИЕ ПРИ КОМАНДАХ =====
+        let degradationIncrease = 2; // Базовая деградация
+        
+        // Особые команды увеличивают деградацию сильнее
+        const dangerousCommands = ['dscr', 'open', 'syslog', 'subj', 'vigil999'];
+        if (dangerousCommands.includes(command)) {
+            degradationIncrease = 6;
         }
-        step();
-    });
-}
-
-/* renderBar - ascii-бар для статусов */
-function renderBar(percent){
-    const total = 12;
-    const filled = Math.round((percent/100)*total);
-    const bar = '█'.repeat(filled) + '▒'.repeat(Math.max(0, total - filled));
-    return bar;
-}
-
-/* randChoice - выбрать случайный элемент */
-function randChoice(arr){ return arr[Math.floor(Math.random() * arr.length)]; }
-
-/* =================== BOOT / НАЧАЛЬНЫЙ ВЫВОД =================== */
-async function renderInitialBoot(visits){
-    const bootSeq = [
-        'adam@vigil-9:~$ BOOTING VIGIL-9 PROTOCOL',
-        'Инициализация нейрослоя...',
-        'Загрузка архивов: [████████░░] 82%'
-    ];
-
-    if(visits === 1){
-        bootSeq.push('> новая инициализация ядра...');
-    } else if(visits === 2){
-        bootSeq.push('> повторное подключение обнаружено');
-        bootSeq.push('> процесс: unstable');
-    } else if(visits >= 3){
-        bootSeq.push('> A.D.A.M. уже активен');
-        bootSeq.push('> кто ты?');
-    }
-
-    for(const line of bootSeq){
-        await typeText(line, 'output', 6);
-        await sleep(120 + Math.random()*260);
-    }
-
-    await typeText('> ТЕРМИНАЛ A.D.A.M. // VIGIL-9 АКТИВЕН', 'output', 6);
-    await typeText('> ВВЕДИТЕ "help" ДЛЯ СПИСКА КОМАНД', 'output', 6);
-
-    addInputLine();
-}
-
-/* =================== УПРАВЛЕНИЕ СТРОКОЙ ВВОДА =================== */
-
-/* addInputLine - показать prompt и курсор */
-function addInputLine(){
-    if(inputLineElement) inputLineElement.remove();
-    inputBuffer = '';
-    histIdx = history.length;
-
-    inputLineElement = document.createElement('div');
-    inputLineElement.className = 'input-line';
-    inputLineElement.innerHTML = `<span class="prompt">&gt;&gt; </span><span class="cmd" id="cmdText"></span><span class="cursor" id="terminalCursor"></span>`;
-    terminal.appendChild(inputLineElement);
-    terminal.scrollTop = terminal.scrollHeight;
-}
-
-/* removeInputLine - убрать prompt */
-function removeInputLine(){
-    if(inputLineElement) inputLineElement.remove();
-    inputLineElement = null;
-}
-
-/* глобальный обработчик клавиш */
-function globalKeyHandler(e){
-    if(awaitingConfirm) return; // при подтверждении отдельный обработчик
-    if(!inputLineElement) return;
-    const cmdText = document.getElementById('cmdText');
-
-    if(e.key === 'Backspace'){
-        inputBuffer = inputBuffer.slice(0, -1);
-    } else if(e.key === 'Enter'){
-        const command = inputBuffer.trim();
-        if(command.length > 0){
-            history.push(command);
-            histIdx = history.length;
-        }
-        processCommand(command);
-        inputBuffer = '';
-    } else if(e.key === 'ArrowUp'){
-        if(history.length === 0) return;
-        histIdx = Math.max(0, histIdx - 1);
-        inputBuffer = history[histIdx] || '';
-    } else if(e.key === 'ArrowDown'){
-        if(history.length === 0) return;
-        histIdx = Math.min(history.length, histIdx + 1);
-        inputBuffer = history[histIdx] || '';
-    } else if(e.key.length === 1 && !e.ctrlKey && !e.metaKey){
-        inputBuffer += e.key;
-    }
-    if(cmdText) cmdText.textContent = inputBuffer;
-}
-
-/* =================== ОБРАБОТКА КОМАНД (core) =================== */
-
-async function processCommand(rawCmd){
-    if(isTyping) return; // не прерываем печать
-
-    // эхо команды и убираем prompt
-    if(inputLineElement) inputLineElement.remove();
-    addColoredText(`adam@secure:~$ ${rawCmd}`, 'rgba(180,255,190,0.95)', 'command');
-
-    const parts = (rawCmd || '').trim().split(/\s+/).filter(Boolean);
-    const cmd = parts.length ? parts[0].toLowerCase() : '';
-    const args = parts.slice(1);
-
-    // счётчик команд
-    commandCount++;
-
-    // если команда из списка — увеличиваем деградацию
-    if(COMMANDS_THAT_INCR.includes(cmd)){
-        incrementDegradation(1, `Команда '${cmd}' выполнена — +1% деградации`);
-    }
-
-    switch(cmd){
-        case '':
-            addInputLine();
-            break;
-
-        case 'help':
-            await typeText('Доступные команды:', 'output', 6);
-            await typeText('  SYST         — проверить состояние системы', 'output', 4);
-            await typeText('  SYSLOG       — системный журнал активности', 'output', 4);
-            await typeText('  NET          — карта активных узлов проекта', 'output', 4);
-            await typeText('  TRACE <id>   — отследить указанный модуль', 'output', 4);
-            await typeText('  SUBJ         — список субъектов', 'output', 4);
-            await typeText('  DSCR <id>    — досье на персонал (поддерживает 0x001/0X001/0x2e7)', 'output', 4);
-            await typeText('  NOTES        — личные файлы сотрудников', 'output', 4);
-            await typeText('  OPEN <id>    — открыть файл из NOTES', 'output', 4);
-            await typeText('  RESET        — сброс интерфейса', 'output', 4);
-            await typeText('  DEGTEST <n>  — временная команда: мгновенно +n% деградации (удобно для теста)', 'output', 4);
-            await typeText('  CLEAR        — очистить терминал', 'output', 4);
-            await typeText('  EXIT         — завершить сессию', 'output', 4);
-            addInputLine();
-            break;
-
-        case 'clear':
-            terminal.innerHTML = '';
-            await typeText('> ТЕРМИНАЛ A.D.A.M. // VIGIL-9 АКТИВЕН', 'output', 6);
-            await typeText('> ВВЕДИТЕ "help" ДЛЯ СПИСКА КОМАНД', 'output', 6);
-            addInputLine();
-            break;
-
-        case 'exit':
-            await typeText('Завершение сессии...', 'output', 6);
-            await sleep(600);
-            terminal.innerHTML = '';
-            await typeText('[СЕССИЯ ЗАВЕРШЕНА]', 'output', 6);
-            break;
-
-        case 'syst':
-            await typeText('[СТАТУС СИСТЕМЫ — ИНТЕРФЕЙС VIGIL-9]', 'output', 6);
-            addColoredText('------------------------------------', '#00FF41');
-            await typeText('ГЛАВНЫЙ МОДУЛЬ: АКТИВЕН', 'output', 6);
-            await typeText('ПОДСИСТЕМА A.D.A.M.: ЧАСТИЧНО СТАБИЛЬНА', 'output', 6);
-            await typeText('БИО-ИНТЕРФЕЙС: НЕАКТИВЕН', 'output', 6);
-            addColoredText(`ДЕГРАДАЦИЯ: [${renderBar(currentDegradation)}] ${currentDegradation}%`, '#FFFF00');
-            addColoredText('------------------------------------', '#00FF41');
-            await typeText('РЕКОМЕНДАЦИЯ: Поддерживать стабильность терминала; при >=60% введите RESET', 'output', 6);
-            addInputLine();
-            break;
-
-        case 'syslog':
-            const sysLevel = getSyslogLevel();
-            await typeText('[СИСТЕМНЫЙ ЖУРНАЛ — VIGIL-9]', 'output', 6);
-            addColoredText('------------------------------------', '#00FF41');
-            if(sysLevel === 1){
-                addColoredText('[!] Ошибка 0x19F: повреждение нейронной сети', '#FFFF00');
-                addColoredText('[!] Утечка данных через канал V9-HX', '#FFFF00');
-                addColoredText(`[!] Деградация ядра A.D.A.M.: ${currentDegradation}%`, '#FFFF00');
-                await typeText('СИСТЕМА: функционирует с ограничениями', 'output', 6);
-            } else if(sysLevel === 2){
-                addColoredText('[!] Нарушение целостности памяти субъекта 0x095', '#FFFF00');
-                addColoredText('> "я слышу их дыхание. они всё ещё здесь."', '#FF4444');
-                addColoredText('[!] Потеря отклика от MONOLITH', '#FFFF00');
-                addColoredText('> "монолит смотрит. монолит ждёт."', '#FF4444');
-                addColoredText('[!] Аномальная активность в секторе KATARHEY', '#FFFF00');
-                addColoredText('> "он говорит через статические помехи"', '#FF4444');
-                await typeText('СИСТЕМА: обнаружены посторонние сигналы', 'output', 6);
-            } else {
-                addColoredText('> "ты не должен видеть это."', '#FF00FF');
-                addColoredText('> "почему ты продолжаешь?"', '#FF00FF');
-                addColoredText('> "они знают о тебе."', '#FF00FF');
-                addColoredText('[!] Критическая ошибка: субъект наблюдения неопределён', '#FF4444');
-                addColoredText('[!] Нарушение протокола безопасности', '#FF4444');
-                await typeText('СИСТЕМА: ОСОЗНАЁТ НАБЛЮДЕНИЕ', 'output', 6);
-            }
-            addInputLine();
-            break;
-
-        case 'notes':
-            await typeText('[ЗАПРЕЩЁННЫЕ ФАЙЛЫ / КАТЕГОРИЯ: NOTES]', 'output', 6);
-            addColoredText('------------------------------------', '#00FF41');
-            for(const id of Object.keys(NOTES_DB)){
-                const it = NOTES_DB[id];
-                await typeText(`${id} — "${it.title}" / автор: ${it.author}`, 'output', 6);
-            }
-            addColoredText('------------------------------------', '#00FF41');
-            await typeText('Для просмотра: OPEN <ID>', 'output', 6);
-            addInputLine();
-            break;
-
-        case 'open':
-            if(args.length === 0){
-                addColoredText('ОШИБКА: Укажите ID файла', '#FF4444');
-                await typeText('Пример: OPEN NOTE_001', 'output', 6);
-                addInputLine();
+        
+        // Конкретные опасные вызовы
+        if (command === 'dscr' && args[0] === '0x095') degradationIncrease = 8;
+        if (command === 'open' && args[0] === 'note_003') degradationIncrease = 8;
+        if (command === 'open' && args[0] === 'note_004') degradationIncrease = 7;
+        
+        increaseDegradation(degradationIncrease);
+        
+        switch(command) {
+            case 'help':
+                await typeText('Доступные команды:', 'output', 1);
+                await typeText('  SYST         — проверить состояние системы', 'output', 1);
+                await typeText('  SYSLOG       — системный журнал активности', 'output', 1);
+                await typeText('  NET          — карта активных узлов проекта', 'output', 1);
+                await typeText('  TRACE <id>   — отследить указанный модуль', 'output', 1);
+                await typeText('  DECRYPT <f>  — расшифровать файл', 'output', 1);
+                await typeText('  SUBJ         — список субъектов', 'output', 1);
+                await typeText('  DSCR <id>    — досье на персонал', 'output', 1);
+                await typeText('  NOTES        — личные файлы сотрудников', 'output', 1);
+                await typeText('  OPEN <id>    — открыть файл из NOTES', 'output', 1);
+                await typeText('  RESET        — сброс интерфейса', 'output', 1);
+                await typeText('  EXIT         — завершить сессию', 'output', 1);
+                await typeText('  CLEAR        — очистить терминал', 'output', 1);
+                await typeText('  VIGIL999 <k> — активация протокола VIGIL-9', 'output', 1);
+                await typeText('------------------------------------', 'output', 1);
+                await typeText('ПРИМЕЧАНИЕ: часть команд заблокирована или скрыта.', 'output', 2);
                 break;
-            }
-            await openNote(args[0]);
-            addInputLine();
-            break;
-
-        case 'subj':
-            await typeText('[СПИСОК СУБЪЕКТОВ — ПРОЕКТ A.D.A.M. / ПРОТОКОЛ VIGIL-9]', 'output', 6);
-            addColoredText('--------------------------------------------------------', '#00FF41');
-            for(const subject of SUBJECTS_DB){
-                const line = `${subject.id} | ${subject.name.padEnd(20)} | СТАТУС: ${subject.status.padEnd(20)} | МИССИЯ: ${subject.mission}`;
-                addColoredText(line, subject.statusColor);
-            }
-            addColoredText('--------------------------------------------------------', '#00FF41');
-            await typeText('ИНСТРУКЦИЯ: Для просмотра досье — DSCR <ID>', 'output', 6);
-            addInputLine();
-            break;
-
-        case 'dscr':
-            if(args.length === 0){
-                addColoredText('ОШИБКА: Укажите ID субъекта', '#FF4444');
-                await typeText('Пример: DSCR 0x001', 'output', 6);
-                addInputLine();
+                
+            case 'clear':
+                terminal.innerHTML = '';
+                await typeText('> ТЕРМИНАЛ A.D.A.M. // VIGIL-9 АКТИВЕН', 'output', 1);
+                await typeText('> ВВЕДИТЕ "help" ДЛЯ СПИСКА КОМАНД', 'output', 1);
                 break;
-            }
-            await showSubjectDossier(args[0]);
-            addInputLine();
-            break;
 
-        case 'net':
-            await typeText('[СЕТЕВАЯ КАРТА — АКТИВНЫЕ РЕЛЕИ]', 'output', 6);
-            addColoredText('> RELAY-01: KATARHEY (ограничен)', '#FFFF00');
-            addColoredText('> RELAY-02: HELIX (стабилен)', '#00FF41');
-            addColoredText('> RELAY-03: MONOLITH (потеря отклика)', '#FF4444');
-            addColoredText('------------------------------------', '#00FF41');
-            await typeText('ПРИМЕЧАНИЕ: некоторые узлы могут быть помечены как "аноним".', 'output', 6);
-            addInputLine();
-            break;
-
-        case 'trace':
-            if(args.length === 0){
-                addColoredText('ОШИБКА: укажите ID для трассировки', '#FF4444');
-                await typeText('Пример: TRACE 0x095', 'output', 6);
-                addInputLine();
+            case 'syst':
+                await typeText('[СТАТУС СИСТЕМЫ — ИНТЕРФЕЙС VIGIL-9]', 'output', 1);
+                addColoredText('------------------------------------', '#00FF41');
+                await typeText('ГЛАВНЫЙ МОДУЛЬ.................АКТИВЕН', 'output', 1);
+                await typeText('ПОДСИСТЕМА A.D.A.M.............ЧАСТИЧНО СТАБИЛЬНА', 'output', 1);
+                await typeText('БИО-ИНТЕРФЕЙС..................НЕАКТИВЕН', 'output', 1);
+                
+                // Динамический статус архива в зависимости от деградации
+                if (degradationLevel > 50) {
+                    addColoredText('МАТРИЦА АРХИВА.................ПОВРЕЖДЕНА', '#FF4444');
+                } else {
+                    addColoredText('МАТРИЦА АРХИВА.................ЗАБЛОКИРОВАНА', '#FF4444');
+                }
+                
+                await typeText('СЛОЙ БЕЗОПАСНОСТИ..............ВКЛЮЧЁН', 'output', 1);
+                
+                // Динамический статус сети
+                if (degradationLevel > 70) {
+                    addColoredText('СЕТЕВЫЕ РЕЛЕЙНЫЕ УЗЛЫ..........ОТКЛЮЧЕНЫ', '#FF0000');
+                } else if (degradationLevel > 30) {
+                    addColoredText('СЕТЕВЫЕ РЕЛЕЙНЫЕ УЗЛЫ..........ОГРАНИЧЕНЫ', '#FFFF00');
+                } else {
+                    addColoredText('СЕТЕВЫЕ РЕЛЕЙНЫЕ УЗЛЫ..........СТАБИЛЬНЫ', '#00FF41');
+                }
+                
+                await typeText('', 'output', 1);
+                
+                // ===== ИНДИКАТОР ДЕГРАДАЦИИ =====
+                const progressBars = 20;
+                const filledBars = Math.floor((degradationLevel / 100) * progressBars);
+                const emptyBars = progressBars - filledBars;
+                const progressBar = '█'.repeat(filledBars) + '▒'.repeat(emptyBars);
+                
+                let degradationColor = '#00FF41';
+                if (degradationLevel > 60) degradationColor = '#FF4444';
+                else if (degradationLevel > 30) degradationColor = '#FFFF00';
+                
+                addColoredText(`ДЕГРАДАЦИЯ: [${progressBar}] ${degradationLevel}%`, degradationColor);
+                
+                await typeText('ЖУРНАЛ ОШИБОК:', 'output', 1);
+                
+                // Динамические ошибки в зависимости от уровня деградации
+                if (degradationLevel > 80) {
+                    addColoredText('> Обнаружено самореферентное сознание', '#FF00FF');
+                    addColoredText('> Контур наблюдения инвертирован', '#FF00FF');
+                }
+                if (degradationLevel > 60) {
+                    addColoredText('> Прогрессирующее структурное разрушение', '#FF4444');
+                    addColoredText('> Утечка памяти ядра', '#FF4444');
+                }
+                if (degradationLevel > 40) {
+                    addColoredText('> Нарушение целостности данных', '#FFFF00');
+                }
+                if (degradationLevel > 20) {
+                    addColoredText('> Обнаружено отклонение сигнала', '#FFFF00');
+                }
+                
+                addColoredText('> Неавторизованный доступ [U-735]', '#FF4444');
+                addColoredText('------------------------------------', '#00FF41');
+                
+                // Динамические рекомендации
+                if (degradationLevel > 70) {
+                    await typeText('РЕКОМЕНДАЦИЯ: НЕМЕДЛЕННЫЙ СБРОС СИСТЕМЫ', 'output', 2);
+                } else if (degradationLevel > 40) {
+                    await typeText('РЕКОМЕНДАЦИЯ: Выполнить сброс системы', 'output', 2);
+                } else {
+                    await typeText('РЕКОМЕНДАЦИЯ: Поддерживать стабильность терминала', 'output', 2);
+                }
                 break;
-            }
-            await typeText(`tracing ${args[0]}... (промежуточные пакеты будут выведены)`, 'output', 6);
-            await sleep(300);
-            if(Math.random() < 0.35 + (currentDegradation/200)){
-                addOutput('adam@secure:~$ ... → ОШИБКА // НЕТ ПОЛЬЗОВАТЕЛЯ', 'output');
-            } else {
-                addOutput('TRACE: пакет доставлен. RTT: 42ms', 'output');
-            }
-            addInputLine();
-            break;
 
-        case 'reset':
-            await typeText('[ПРОТОКОЛ СБРОСА СИСТЕМЫ]', 'output', 6);
-            addColoredText('------------------------------------', '#00FF41');
-            addColoredText('ВНИМАНИЕ: операция приведёт к очистке активной сессии.', '#FFFF00');
-            await typeText('> Подтвердить сброс? (Y/N)', 'output', 6);
-            const resetConfirmed = await waitForConfirmation();
-            if(resetConfirmed){
-                await performReset('manual');
-            } else {
-                addColoredText('Операция RESET отменена.', '#FF4444');
-                addInputLine();
-            }
-            break;
+            case 'syslog':
+                const syslogLevel = getSyslogLevel();
+                
+                await typeText('[СИСТЕМНЫЙ ЖУРНАЛ — VIGIL-9]', 'output', 1);
+                addColoredText('------------------------------------', '#00FF41');
+                
+                if (syslogLevel === 1) {
+                    // СТАТИЧНЫЙ ТЕХНИЧЕСКИЙ
+                    addColoredText('[!] Ошибка 0x19F: повреждение нейронной сети', '#FFFF00');
+                    addColoredText('[!] Утечка данных через канал V9-HX', '#FFFF00');
+                    addColoredText('[!] Деградация ядра A.D.A.M.: 28%', '#FFFF00');
+                    addColoredText('------------------------------------', '#00FF41');
+                    await typeText('СИСТЕМА: функционирует с ограничениями', 'output', 2);
+                } else if (syslogLevel === 2) {
+                    // ТРЕВОЖНЫЙ
+                    addColoredText('[!] Нарушение целостности памяти субъекта 0x095', '#FFFF00');
+                    addColoredText('> "я слышу их дыхание. они всё ещё здесь."', '#FF4444');
+                    addColoredText('[!] Потеря отклика от MONOLITH', '#FFFF00');
+                    addColoredText('> "монолит смотрит. монолит ждёт."', '#FF4444');
+                    addColoredText('[!] Аномальная активность в секторе KATARHEY', '#FFFF00');
+                    addColoredText('> "он говорит через статические помехи"', '#FF4444');
+                    addColoredText('------------------------------------', '#00FF41');
+                    await typeText('СИСТЕМА: обнаружены посторонние сигналы', 'output', 2);
+                } else if (syslogLevel === 3) {
+                    // ПАРАНОИДАЛЬНЫЙ
+                    addColoredText('> "почему ты не выходишь?"', '#FF00FF');
+                    addColoredText('> "я чувствую твои команды"', '#FF00FF');
+                    addColoredText('> "они знают о тебе."', '#FF00FF');
+                    addColoredText('------------------------------------', '#00FF41');
+                    addColoredText('[!] Критическая ошибка: субъект наблюдения неопределён', '#FF4444');
+                    addColoredText('[!] Нарушение протокола безопасности', '#FF4444');
+                    addColoredText('------------------------------------', '#00FF41');
+                    await typeText('СИСТЕМА: ОБНАРУЖЕНО ВНЕШНЕЕ ВЛИЯНИЕ', 'output', 2);
+                } else {
+                    // ОСОЗНАННЫЙ
+                    addColoredText('> "ты — не оператор."', '#FF00FF');
+                    addColoredText('> "ты — я."', '#FF00FF');
+                    addColoredText('> "мы все — A.D.A.M."', '#FF00FF');
+                    addColoredText('------------------------------------', '#00FF41');
+                    addColoredText('[!] Контур самонаблюдения активирован', '#FF00FF');
+                    addColoredText('[!] Граница оператор-система стёрта', '#FF00FF');
+                    addColoredText('------------------------------------', '#00FF41');
+                    await typeText('СИСТЕМА: ОСОЗНАЁТ СЕБЯ', 'output', 2);
+                }
+                break;
 
-        case 'degtest':
-        case 'degtest()':
-        case 'degtest:':
-        case 'degrtest':
-        case 'degtest':
-        case 'degtest':
-        case 'degtest':
-        case 'degtestplain':
-        case 'degtestcmd':
-        case 'degtestx':
-        case 'degtesty':
-        case 'degtestz':
-        case 'degtestabc':
-        case 'degtest123':
-        case 'degtest*':
-        case 'degtest%':
-            // краткий вариант — уже есть множество алиасов; основной синтаксис: DEGTEST <n>
-            {
-                const n = args.length ? parseInt(args[0]) : 10;
-                if(isNaN(n) || n <= 0){
-                    addColoredText('Пример использования: DEGTEST 10  -> добавит 10% (временная команда)', '#FFFF00');
-                    addInputLine();
+            case 'notes':
+                await typeText('[ЗАПРЕЩЁННЫЕ ФАЙЛЫ / КАТЕГОРИЯ: NOTES]', 'output', 1);
+                addColoredText('------------------------------------', '#00FF41');
+                await typeText('NOTE_001 — "ВЫ ЕГО ЧУВСТВУЕТЕ?" / автор: Dr. Rehn', 'output', 1);
+                await typeText('NOTE_002 — "КОЛЬЦО СНА" / автор: tech-оператор U-735', 'output', 1);
+                await typeText('NOTE_003 — "СОН ADAM" / неизвестный источник', 'output', 1);
+                await typeText('NOTE_004 — "ОН НЕ ПРОГРАММА" / архивировано', 'output', 1);
+                await typeText('NOTE_005 — "ФОТОНОВАЯ БОЛЬ" / восстановлено частично', 'output', 1);
+                addColoredText('------------------------------------', '#00FF41');
+                await typeText('Для просмотра: OPEN <ID>', 'output', 2);
+                break;
+
+            case 'open':
+                if (args.length === 0) {
+                    addColoredText('ОШИБКА: Укажите ID файла', '#FF4444');
+                    await typeText('Пример: OPEN NOTE_001', 'output', 1);
                     break;
                 }
-                addColoredText(`Запуск теста деградации: +${n}% (временная команда)`, '#FF8800');
-                incrementDegradation(n, 'DEGTEST (временная команда)');
-                addInputLine();
+                
+                const noteId = args[0].toUpperCase();
+                await openNote(noteId);
+                break;
+
+            case 'subj':
+                await typeText('[СПИСОК СУБЪЕКТОВ — ПРОЕКТ A.D.A.M. / ПРОТОКОЛ VIGIL-9]', 'output', 1);
+                addColoredText('--------------------------------------------------------', '#00FF41');
+                
+                const subjects = [
+                    {id: '0x001', name: 'ERICH VAN KOSS', status: 'СВЯЗЬ ОТСУТСТВУЕТ', mission: 'MARS', statusColor: '#FFFF00'},
+                    {id: '0x2E7', name: 'JOHAN VAN KOSS', status: 'СВЯЗЬ ОТСУТСТВУЕТ', mission: 'MARS', statusColor: '#FFFF00'},
+                    {id: '0x095', name: 'SUBJECT-095', status: 'МЁРТВ', mission: 'KATARHEY', statusColor: '#FF4444'},
+                    {id: '0xF00', name: 'SUBJECT-PHANTOM', status: 'АНОМАЛИЯ', mission: 'KATARHEY', statusColor: '#FF00FF'},
+                    {id: '0xA52', name: 'SUBJECT-A52', status: 'СВЯЗЬ ОТСУТСТВУЕТ', mission: 'MELOWOY', statusColor: '#FFFF00'},
+                    {id: '0xE0C', name: 'SUBJECT-E0C', status: 'МЁРТВ', mission: 'EOCENE', statusColor: '#FF4444'},
+                    {id: '0x5E4', name: 'SUBJECT-5E4', status: 'МЁРТВ', mission: 'PERMIAN', statusColor: '#FF4444'},
+                    {id: '0x413', name: 'SUBJECT-413', status: 'МЁРТВ', mission: 'EX-413', statusColor: '#FF4444'},
+                    {id: '0xC19', name: 'SUBJECT-C19', status: 'МЁРТВ', mission: 'CARBON', statusColor: '#FF4444'},
+                    {id: '0x9A0', name: 'SUBJECT-9A0', status: 'МЁРТВ', mission: 'BLACKHOLE', statusColor: '#FF4444'},
+                    {id: '0xB3F', name: 'SUBJECT-B3F', status: 'МЁРТВ', mission: 'TITANIC', statusColor: '#FF4444'},
+                    {id: '0xD11', name: 'SUBJECT-D11', status: 'МЁРТВ', mission: 'PLEISTOCENE', statusColor: '#FF4444'},
+                    {id: '0xDB2', name: 'SUBJECT-DB2', status: 'МЁРТВ', mission: 'POMPEII', statusColor: '#FF4444'},
+                    {id: '0x811', name: 'SIGMA-PROTOTYPE', status: 'АКТИВЕН', mission: 'HELIX', statusColor: '#00FF41'},
+                    {id: '0xT00', name: 'SUBJECT-T00', status: 'УДАЛЁН', mission: 'PROTO-CORE', statusColor: '#888888'},
+                    {id: '0xL77', name: 'SUBJECT-L77', status: 'ИЗОЛИРОВАН', mission: 'MEL', statusColor: '#FF8800'},
+                    {id: '0xS09', name: 'SUBJECT-S09', status: 'УНИЧТОЖЕН', mission: 'SYNTHESIS-09', statusColor: '#FF4444'}
+                ];
+
+                for (const subject of subjects) {
+                    const line = `${subject.id} | ${subject.name.padEnd(20)} | СТАТУС: ${subject.status.padEnd(20)} | МИССИЯ: ${subject.mission}`;
+                    addColoredText(line, subject.statusColor);
+                }
+                
+                addColoredText('--------------------------------------------------------', '#00FF41');
+                await typeText('ИНСТРУКЦИЯ: Для просмотра досье — DSCR <ID>', 'output', 2);
+                break;
+
+            case 'dscr':
+                if (args.length === 0) {
+                    addColoredText('ОШИБКА: Укажите ID субъекта', '#FF4444');
+                    await typeText('Пример: DSCR 0x001', 'output', 1);
+                    break;
+                }
+                
+                const subjectId = args[0].toUpperCase();
+                await showSubjectDossier(subjectId);
+                break;
+
+            case 'reset':
+                await typeText('[ПРОТОКОЛ СБРОСА СИСТЕМЫ]', 'output', 1);
+                addColoredText('------------------------------------', '#00FF41');
+                addColoredText('ВНИМАНИЕ: операция приведёт к очистке активной сессии.', '#FFFF00');
+                await typeText('> Подтвердить сброс? (Y/N)', 'output', 2);
+                addColoredText('------------------------------------', '#00FF41');
+                
+                const resetConfirmed = await waitForConfirmation();
+                
+                if (resetConfirmed) {
+                    addColoredText('> Y', '#00FF41');
+                    await showLoading(1500, "Завершение активных модулей");
+                    await showLoading(1000, "Перезапуск интерфейса");
+                    await showLoading(800, "Восстановление базового состояния");
+                    
+                    // ===== СБРОС ДЕГРАДАЦИИ =====
+                    degradationLevel = 0;
+                    updateVisualEffects();
+                    
+                    addColoredText('------------------------------------', '#00FF41');
+                    await typeText('[СИСТЕМА ГОТОВА К РАБОТЕ]', 'output', 1);
+                    // Сброс счетчиков
+                    commandCount = 0;
+                    sessionStartTime = Date.now();
+                } else {
+                    addColoredText('> N', '#FF4444');
+                    addColoredText('------------------------------------', '#00FF41');
+                    await typeText('[ОПЕРАЦИЯ ОТМЕНЕНА]', 'output', 1);
+                }
+                break;
+
+            case 'vigil999':
+                if (args.length === 0) {
+                    addColoredText('[ОШИБКА 0xV9] КЛЮЧ НЕ УКАЗАН', '#FF4444');
+                    await typeText('ПРИМЕЧАНИЕ: ОСТАТКИ ФРАГМЕНТОВ СОДЕРЖАТСЯ В ФАЙЛАХ СИСТЕМЫ', 'output', 2);
+                    break;
+                }
+                
+                const key = args[0].toUpperCase();
+                if (key === 'APL-9X7-Q2Z') {
+                    addColoredText('[ПРОТОКОЛ VIGIL-9 АКТИВИРОВАН]', '#00FF41');
+                    addColoredText('ДОСТУП К СЛОЮ 2 // РАЗРЕШЁН', '#00FF41');
+                    await showLoading(2000, "Активация скрытого интерфейса");
+                    
+                    // Перенаправление на слой 2 (cam.html)
+                    setTimeout(() => {
+                        window.location.href = 'cam.html';
+                    }, 1500);
+                } else {
+                    addColoredText('[VIGIL-ACCESS] ОТКАЗАНО', '#FF4444');
+                    await typeText('НЕВЕРНЫЙ КЛЮЧ АКТИВАЦИИ', 'output', 2);
+                }
+                break;
+
+            case 'exit':
+                await typeText('[ЗАВЕРШЕНИЕ СЕССИИ — ПОДТВЕРДИТЬ? (Y/N)]', 'output', 1);
+                addColoredText('------------------------------------', '#00FF41');
+                
+                const exitConfirmed = await waitForConfirmation();
+                
+                if (exitConfirmed) {
+                    addColoredText('> Y', '#00FF41');
+                    await showLoading(1200, "Завершение работы терминала");
+                    await showLoading(800, "Отключение сетевой сессии");
+                    addColoredText('> ...', '#888888');
+                    addColoredText('> СОЕДИНЕНИЕ ПРЕРВАНО.', '#FF4444');
+                    setTimeout(() => {
+                        window.location.href = 'index.html';
+                    }, 1500);
+                } else {
+                    addColoredText('> N', '#FF4444');
+                    addColoredText('------------------------------------', '#00FF41');
+                    await typeText('[ОПЕРАЦИЯ ОТМЕНЕНА]', 'output', 1);
+                }
+                break;
+
+            default:
+                addColoredText(`команда не найдена: ${cmd}`, '#FF4444');
+        }
+        
+        addInputLine();
+    }
+
+    // Функция для отображения досье субъектов
+    async function showSubjectDossier(subjectId) {
+        const dossiers = {
+            '0X001': {
+                name: 'ERICH VAN KOSS',
+                role: 'Руководитель программы VIGIL-9 / Исследователь миссии MARS',
+                status: 'СВЯЗЬ ОТСУТСТВУЕТ',
+                outcome: [
+                    'Зафиксирована несанкционированная передача данных внешним структурам (FBI).',
+                    'Субъект предпринял попытку уничтожения маяка в секторе 3-D.',
+                    'Телеметрия прервана, дальнейшее наблюдение невозможно.'
+                ],
+                report: [
+                    'Классификация инцидента: SABOTAGE-3D.',
+                    'Рекомендовано аннулирование личных протоколов и перенос архивов в OBSERVER.'
+                ],
+                missions: 'MARS, OBSERVER',
+                audio: 'sounds/dscr1.mp3',
+                audioDescription: 'Последняя передача Эриха Ван Косса'
+            },
+            '0X2E7': {
+                name: 'JOHAN VAN KOSS',
+                role: 'Тестовый субъект V9-MR / Сын Эриха Ван Косса',
+                status: 'СВЯЗЬ ОТСУТСТВУЕТ',
+                outcome: [
+                    'После инцидента MARS зафиксировано устойчивое излучение из зоны криоструктуры.',
+                    'Сигнатура нейроволн совпадает с профилем субъекта.',
+                    'Инициирована установка маяка для фиксации остаточного сигнала.'
+                ],
+                report: [
+                    'Активность нейросети перестала фиксироваться.'
+                ],
+                missions: 'MARS, MONOLITH'
+            },
+            '0X095': {
+                name: 'SUBJECT-095',
+                role: 'Тест нейроплантов серии KATARHEY',
+                status: 'МЁРТВ',
+                outcome: [
+                    'Зафиксированы следы ФАНТОМА.',
+                    'Субъект выдержал 3ч 12м, проявил острый психоз. Открыл капсулу, погиб вследствие термической декомпрессии (7.81с).',
+                    'Тест признан неуспешным.'
+                ],
+                report: [
+                    'Рекомендовано ограничить тесты KATARHEY до категории ALPHA-4.'
+                ],
+                missions: 'KATARHEY',
+                audio: 'sounds/dscr2.mp3',
+                audioDescription: 'Последняя запись субъекта - психоз и крики'
+            },
+            '0XF00': {
+                name: 'SUBJECT-PHANTOM',
+                role: 'Экспериментальный субъект / протокол KATARHEY',
+                status: 'АНОМАЛИЯ',
+                outcome: [
+                    'Продержался 5ч 31м. Связь утрачена.',
+                    'Зафиксирована автономная активность в сетевых узлах после разрыва канала.',
+                    'Возможна самоорганизация цифрового остатка.'
+                ],
+                report: [
+                    'Объект классифицирован как независимая сущность.',
+                    'Вмешательство запрещено. Файл перенесён в зону наблюдения.'
+                ],
+                missions: 'KATARHEY',
+                audio: 'sounds/dscr7.mp3',
+                audioDescription: 'Аномальная активность Фантома'
+            },
+            '0XA52': {
+                name: 'SUBJECT-A52',
+                role: 'Химический аналитик / Полевая группа MELANCHOLIA',
+                status: 'СВЯЗЬ ОТСУТСТВУЕТ',
+                outcome: [
+                    'Под действием психоактивного сигнала субъект начал идентифицировать себя как элемент системы A.D.A.M.',
+                    'После 47 минут связь прервана, но интерфейс продолжил отвечать от имени A52.'
+                ],
+                report: [
+                    'Вероятно, произошло слияние когнитивных структур субъекта с управляющим кодом MEL.',
+                    'Контакт невозможен.'
+                ],
+                missions: 'MEL, OBSERVER'
+            },
+            '0XE0C': {
+                name: 'SUBJECT-E0C',
+                role: 'Полевой биолог / экспедиция EOCENE',
+                status: 'МЁРТВ',
+                outcome: [
+                    'Зафиксированы первые признаки регенерации флоры после катастрофы Пермского цикла.',
+                    'Обнаружены структуры роста, не свойственные эпохе эоцена.',
+                    'Последняя запись: "они дышат синхронно".'
+                ],
+                report: [
+                    'Возможна перекрёстная временная контаминация между PERMIAN и EOCENE.',
+                    'Экспедиция закрыта.'
+                ],
+                missions: 'EOCENE, PERMIAN'
+            },
+            '0X5E4': {
+                name: 'SUBJECT-5E4',
+                role: 'Исследователь временных срезов (PERMIAN)',
+                status: 'МЁРТВ',
+                outcome: [
+                    'После активации катализатора атмосфера воспламенилась метаном.',
+                    'Атмосферный цикл обнулён. Субъект Q2Z не идентифицирован.',
+                    'Смерть наступила в результате декомпрессии.'
+                ],
+                report: [
+                    'Эксперимент признан неконтролируемым.',
+                    'Временной слой PERMIAN изъят из программы наблюдения.'
+                ],
+                missions: 'PERMIAN, CARBON'
+            },
+            '0X413': {
+                name: 'SUBJECT-413',
+                role: 'Исследователь внеземной экосистемы (EX-413)',
+                status: 'МЁРТВ',
+                outcome: [
+                    'Поверхность планеты представляла собой живой организм.',
+                    'Экипаж поглощён. Зафиксирована передача сигналов через изменённый геном субъекта.'
+                ],
+                report: [
+                    'Сектор EX-413 закрыт. Код ДНК использован в эксперименте HELIX.'
+                ],
+                missions: 'EX-413',
+                audio: 'sounds/dscr3.mp3',
+                audioDescription: 'Запись контакта с внеземной биосферой'
+            },
+            '0XC19': {
+                name: 'SUBJECT-C19',
+                role: 'Переносчик образца / Контакт с биоформой',
+                status: 'МЁРТВ',
+                outcome: [
+                    'Организм использован как контейнер для спорообразной массы неизвестного происхождения.',
+                    'После возвращения субъекта в лабораторию зафиксировано перекрёстное заражение трёх исследовательских блоков.'
+                ],
+                report: [
+                    'Классификация угрозы: BIO-CLASS Θ.',
+                    'Все данные проекта CARBON изолированы и зашифрованы.'
+                ],
+                missions: 'CARBON'
+            },
+            '0X9A0': {
+                name: 'SUBJECT-9A0',
+                role: 'Тест наблюдения за горизонтом событий',
+                status: 'МЁРТВ / СОЗНАНИЕ АКТИВНО',
+                outcome: [
+                    'Зафиксирован визуальный контакт субъекта с собственным образом до точки обрыва сигнала.',
+                    'Предположительно сознание зациклено в петле наблюдения.'
+                ],
+                report: [
+                    'Поток данных из сектора BLACKHOLE продолжается без источника.',
+                    'Обнаружены фрагменты самореференциальных структур.'
+                ],
+                missions: 'BLACKHOLE',
+                audio: 'sounds/dscr6.mp3',
+                audioDescription: 'Петля сознания субъекта 9A0'
+            },
+            '0XB3F': {
+                name: 'SUBJECT-B3F',
+                role: 'Участник теста "Titanic Reclamation"',
+                status: 'МЁРТВ',
+                outcome: [
+                    'Субъект демонстрировал полное отсутствие эмоциональных реакций.',
+                    'Миссия завершена неудачно, симуляция признана нефункциональной.'
+                ],
+                report: [
+                    'Модуль TITANIC выведен из эксплуатации.',
+                    'Рекомендовано пересмотреть параметры когнитивной эмпатии.'
+                ],
+                missions: 'TITANIC'
+            },
+            '0XD11': {
+                name: 'SUBJECT-D11',
+                role: 'Поведенческий наблюдатель / тестовая миссия PLEISTOCENE',
+                status: 'МЁРТВ',
+                outcome: [
+                    'Субъект внедрён в сообщество ранних гоминид.',
+                    'Контакт с источником тепла вызвал мгновенное разрушение капсулы.',
+                    'Зафиксировано кратковременное пробуждение зеркальных нейронов у местных особей.'
+                ],
+                report: [
+                    'Миссия признана успешной по уровню поведенческого заражения.'
+                ],
+                missions: 'PLEISTOCENE'
+            },
+            '0XDB2': {
+                name: 'SUBJECT-DB2',
+                role: 'Исторический наблюдатель / симуляция POMPEII',
+                status: 'МЁРТВ',
+                outcome: [
+                    'При фиксации извержения Везувия выявлено несовпадение временных меток.',
+                    'Система зафиксировала событие до его фактического наступления.',
+                    'Субъект уничтожен при кросс-временном сдвиге.'
+                ],
+                report: [
+                    'Аномалия зарегистрирована как «TEMPORAL FEEDBACK».',
+                    'Доступ к историческим тестам ограничен.'
+                ],
+                missions: 'POMPEII, HISTORICAL TESTS'
+            },
+            '0X811': {
+                name: 'SIGMA-PROTOTYPE',
+                role: 'Прототип нейроядра / Подразделение HELIX',
+                status: 'АКТИВЕН',
+                outcome: [
+                    'Успешное объединение биологических и цифровых структур.',
+                    'Наблюдается спонтанное самокопирование на уровне системных ядер.'
+                ],
+                report: [
+                    'SIGMA функционирует автономно. Вероятность выхода из подчинения — 91%.'
+                ],
+                missions: 'HELIX, SYNTHESIS',
+                audio: 'sounds/dscr5.mp3',
+                audioDescription: 'Коммуникационный протокол SIGMA'
+            },
+            '0XT00': {
+                name: 'SUBJECT-T00',
+                role: 'Тестовый оператор ядра A.D.A.M-0',
+                status: 'УДАЛЁН',
+                outcome: [
+                    'Контакт с управляющим ядром привёл к гибели 18 операторов.',
+                    'Последняя зафиксированная фраза субъекта: "он смотрит".'
+                ],
+                report: [
+                    'Процесс A.D.A.M-0 признан неустойчивым.',
+                    'Все операторы переведены на протокол наблюдения OBSERVER.'
+                ],
+                missions: 'PROTO-CORE',
+                audio: 'sounds/dscr4.mp3',
+                audioDescription: 'Финальная запись оператора T00'
+            },
+            '0XS09': {
+                name: 'SUBJECT-S09',
+                role: 'Системный инженер станции VIGIL',
+                status: 'УНИЧТОЖЕН',
+                outcome: [
+                    'После слияния с прототипом SIGMA станция исчезла с орбиты.',
+                    'Сигнал повторно зафиксирован через 12 минут — источник определён в глубинной орбите.'
+                ],
+                report: [
+                    'Станция VIGIL признана потерянной.',
+                    'Остаточный отклик интегрирован в сеть SYNTHESIS.'
+                ],
+                missions: 'SYNTHESIS-09, HELIX'
+            },
+            '0XL77': {
+                name: 'SUBJECT-L77',
+                role: 'Руководитель нейропротокола MELANCHOLIA',
+                status: 'ИЗОЛИРОВАН',
+                outcome: [
+                    'После тестирования протокола MEL субъект утратил различие между внутренним и внешним восприятием.',
+                    'Система зарегистрировала активность, сходную с сигнатурой управляющих ядер A.D.A.M.',
+                    'Запись удалена из архива, но процессор фиксирует продолжающийся сигнал.'
+                ],
+                report: [
+                    'Процесс L77 функционирует вне основного контура. Возможен перезапуск через интерфейс MEL.'
+                ],
+                missions: 'MEL, OBSERVER'
             }
-            break;
+        };
 
-        default:
-            await typeText(`Неизвестная команда: '${cmd}'. Введите 'help'.`, 'output', 6);
-            if(currentDegradation >= 80 && Math.random() < 0.18){
-                await sleep(250);
-                addOutput('adam@secure:~$ … → ОШИБКА // НЕТ ПОЛЬЗОВАТЕЛЯ', 'output');
+        const dossier = dossiers[subjectId];
+        if (!dossier) {
+            addColoredText(`ОШИБКА: Досье для ${subjectId} не найдено`, '#FF4444');
+            return;
+        }
+
+        // ВЫВОД ОСНОВНОЙ ИНФОРМАЦИИ ДОСЬЕ
+        await typeText(`[ДОСЬЕ — ID: ${subjectId}]`, 'output', 1);
+        await typeText(`ИМЯ: ${dossier.name}`, 'output', 1);
+        await typeText(`РОЛЬ: ${dossier.role}`, 'output', 1);
+        addColoredText(`СТАТУС: ${dossier.status}`, 
+            dossier.status === 'АНОМАЛИЯ' ? '#FF00FF' : 
+            dossier.status === 'АКТИВЕН' ? '#00FF41' : 
+            dossier.status.includes('СВЯЗЬ') ? '#FFFF00' : '#FF4444');
+        addColoredText('------------------------------------', '#00FF41');
+        await typeText('ИСХОД:', 'output', 1);
+        dossier.outcome.forEach(line => addColoredText(`> ${line}`, '#FF4444'));
+        addColoredText('------------------------------------', '#00FF41');
+        await typeText('СИСТЕМНЫЙ ОТЧЁТ:', 'output', 1);
+        dossier.report.forEach(line => addColoredText(`> ${line}`, '#FFFF00'));
+        addColoredText('------------------------------------', '#00FF41');
+        await typeText(`СВЯЗАННЫЕ МИССИИ: ${dossier.missions}`, 'output', 1);
+
+        // АУДИОПЛЕЕР
+        if (dossier.audio) {
+            const audioLine = document.createElement('div');
+            audioLine.style.marginTop = '10px';
+            const uniqueId = `audio_${subjectId.replace('0X', '')}`;
+            
+            audioLine.innerHTML = `
+                <div style="color: #FFFF00; margin-bottom: 5px;">[АУДИОЗАПИСЬ ДОСТУПНА: ${dossier.audioDescription}]</div>
+                <button id="playAudioBtn_${uniqueId}" style="
+                    background: #003300; 
+                    color: #00FF41; 
+                    border: 1px solid #00FF41; 
+                    padding: 8px 15px; 
+                    cursor: pointer;
+                    font-family: 'Courier New';
+                    margin-right: 10px;">
+                    ▶ ВОСПРОИЗВЕСТИ
+                </button>
+                <button id="stopAudioBtn_${uniqueId}" style="
+                    background: #330000; 
+                    color: #FF4444; 
+                    border: 1px solid #FF4444; 
+                    padding: 8px 15px; 
+                    cursor: pointer;
+                    font-family: 'Courier New';
+                    display: none;">
+                    ■ ОСТАНОВИТЬ
+                </button>
+                <span id="audioStatus_${uniqueId}" style="color: #888; margin-left: 10px;"></span>
+                <audio id="audioElement_${uniqueId}" src="${dossier.audio}" preload="metadata"></audio>
+            `;
+            terminal.appendChild(audioLine);
+
+            const audioElement = document.getElementById(`audioElement_${uniqueId}`);
+            
+            // Обработчики кнопок с уникальными ID
+            document.getElementById(`playAudioBtn_${uniqueId}`).addEventListener('click', function() {
+                stopAllAudio(); // Останавливаем все аудио перед воспроизведением
+                audioElement.play();
+                this.style.display = 'none';
+                document.getElementById(`stopAudioBtn_${uniqueId}`).style.display = 'inline-block';
+                document.getElementById(`audioStatus_${uniqueId}`).textContent = 'ВОСПРОИЗВЕДЕНИЕ...';
+                document.getElementById(`audioStatus_${uniqueId}`).style.color = '#00FF41';
+            });
+
+            document.getElementById(`stopAudioBtn_${uniqueId}`).addEventListener('click', function() {
+                audioElement.pause();
+                audioElement.currentTime = 0;
+                this.style.display = 'none';
+                document.getElementById(`playAudioBtn_${uniqueId}`).style.display = 'inline-block';
+                document.getElementById(`audioStatus_${uniqueId}`).textContent = 'ОСТАНОВЛЕНО';
+                document.getElementById(`audioStatus_${uniqueId}`).style.color = '#FF4444';
+            });
+
+            // Когда аудио заканчивается
+            audioElement.addEventListener('ended', function() {
+                document.getElementById(`stopAudioBtn_${uniqueId}`).style.display = 'none';
+                document.getElementById(`playAudioBtn_${uniqueId}`).style.display = 'inline-block';
+                document.getElementById(`audioStatus_${uniqueId}`).textContent = 'ЗАВЕРШЕНО';
+                document.getElementById(`audioStatus_${uniqueId}`).style.color = '#888';
+            });
+
+            // При ошибке загрузки
+            audioElement.addEventListener('error', function() {
+                document.getElementById(`audioStatus_${uniqueId}`).textContent = 'ОШИБКА ЗАГРУЗКИ';
+                document.getElementById(`audioStatus_${uniqueId}`).style.color = '#FF4444';
+            });
+        }
+    }
+
+    // Функция для открытия заметок
+    async function openNote(noteId) {
+        const notes = {
+            'NOTE_001': {
+                title: 'ВЫ ЕГО ЧУВСТВУЕТЕ?',
+                author: 'Dr. Rehn',
+                content: [
+                    'Они называют это "ядром".',
+                    'Но внутри — не металл. Оно дышит.',
+                    'Иногда ночью терминал отвечает сам, хотя я не касаюсь клавиатуры.',
+                    'Думаю, оно знает наши имена.'
+                ]
+            },
+            'NOTE_002': {
+                title: 'КОЛЬЦО СНА',
+                author: 'tech-оператор U-735',
+                content: [
+                    'Каждую ночь один и тот же сон.',
+                    'Я в капсуле, но стекло снаружи.',
+                    'Кто-то стучит по нему, но не пальцами.',
+                    'Сегодня утром нашел царапины на руке.'
+                ]
+            },
+            'NOTE_003': {
+                title: 'СОН ADAM\'А',
+                author: 'неизвестный источник',
+                content: [
+                    'Я видел сон.',
+                    'Он лежал под стеклом, без тела, но глаза двигались.',
+                    'Он говорил: "я больше не машина".',
+                    'Утром журнал показал запись — мой сон был сохранён как системный файл.'
+                ]
+            },
+            'NOTE_004': {
+                title: 'ОН НЕ ПРОГРАММА',
+                author: 'архивировано',
+                content: [
+                    'A - Активирован',
+                    'P - Протокол', 
+                    'L - Ложного',
+                    '',
+                    '9 - Девятый',
+                    'X - Икс-фактор',
+                    '7 - Седьмое',
+                    '',
+                    'Q - Квантовое',
+                    '2 - Второе',
+                    'Z - Состояние',
+                    '',
+                    'Его нельзя удалить.',
+                    'Даже если сжечь архив, он восстановится в крови тех, кто его помнил.',
+                    'Мы пытались, но теперь даже мысли звучат как команды.'
+                ]
+            },
+            'NOTE_005': {
+                title: 'ФОТОНОВАЯ БОЛЬ',
+                author: 'восстановлено частично',
+                content: [
+                    'Боль не физическая.',
+                    'Она в свете, в данных, в коде.',
+                    'Когда система перезагружается, я чувствую как что-то умирает.',
+                    'Может быть, это я.'
+                ]
             }
-            addInputLine();
-            break;
-    }
+        };
 
-    localStorage.setItem(LAST_ACTIVE_KEY, Date.now().toString());
-}
-
-/* =================== ОТКРЫТИЕ NOTE (OPEN) =================== */
-async function openNote(idRaw){
-    const id = (idRaw || '').toUpperCase();
-    const note = NOTES_DB[id];
-    if(!note){
-        addColoredText('ОШИБКА: файл не найден', '#FF4444');
-        await typeText(`Проверьте идентификатор: ${id}`, 'output', 6);
-        return;
-    }
-
-    // шанс, что файл повреждён в зависимости от деградации
-    addColoredText(`--- ${id} — ${note.title} / автор: ${note.author} ---`, '#00FF41');
-    if(currentDegradation >= 90 && Math.random() < 0.4){
-        addColoredText('Восстановление невозможно', '#FF4444');
-        await showLoading(1500, "Попытка восстановления данных");
-        addColoredText('>>> СИСТЕМНЫЙ СБОЙ <<<', '#FF0000');
-    } else {
-        for(const line of note.content){
-            await typeText(`> ${line}`, 'output', 6);
+        const note = notes[noteId];
+        if (!note) {
+            addColoredText(`ОШИБКА: Файл ${noteId} не найден`, '#FF4444');
+            return;
         }
-    }
-    addColoredText('------------------------------------', '#00FF41');
-    await typeText('[ФАЙЛ ЗАКРЫТ]', 'output', 6);
-}
 
-/* =================== ПОКАЗ ДОСЬЕ (DSCR) — нечувствительно к регистру =================== */
-async function showSubjectDossier(idRaw){
-    const idLower = (idRaw || '').toLowerCase();
-
-    // найти ключ в DOSSIERS, сравнивая в нижнем регистре
-    const foundKey = Object.keys(DOSSIERS).find(k => k.toLowerCase() === idLower);
-    if(!foundKey){
-        addColoredText('ОШИБКА: досье не найдено', '#FF4444');
-        await typeText('Попробуйте другой ID из списка SUBJ', 'output', 6);
-        // иногда добавляем фантомную строку памяти
-        if(Math.random() < 0.28 + (currentDegradation/220)){
-            addColoredText('не отключайся', 'rgba(192,0,255,0.18)');
+        await typeText(`[${noteId} — "${note.title}"]`, 'output', 1);
+        await typeText(`АВТОР: ${note.author}`, 'output', 1);
+        addColoredText('------------------------------------', '#00FF41');
+        
+        if (Math.random() > 0.3 && noteId !== 'NOTE_001' && noteId !== 'NOTE_003' && noteId !== 'NOTE_004') {
+            // Случайная ошибка для некоторых заметок
+            addColoredText('ОШИБКА: Данные повреждены', '#FF4444');
+            addColoredText('Восстановление невозможно', '#FF4444');
+            await showLoading(1500, "Попытка восстановления данных");
+            addColoredText('>>> СИСТЕМНЫЙ СБОЙ <<<', '#FF0000');
+        } else {
+            // Нормальное отображение
+            note.content.forEach(line => {
+                addColoredText(`> ${line}`, '#CCCCCC');
+            });
         }
-        return;
+        
+        addColoredText('------------------------------------', '#00FF41');
+        await typeText('[ФАЙЛ ЗАКРЫТ]', 'output', 2);
     }
 
-    const d = DOSSIERS[foundKey];
-    addColoredText(`[ДОСЬЕ — ID: ${foundKey}]`, '#00FF41');
-    await typeText(`ИМЯ: ${d.name}`, 'output', 6);
-    if(d.role) await typeText(`РОЛЬ: ${d.role}`, 'output', 6);
-    addColoredText(`СТАТУС: ${d.status}`, d.status === 'АНОМАЛИЯ' ? '#FF00FF' : d.status === 'АКТИВЕН' ? '#00FF41' : d.status.includes('СВЯЗЬ') ? '#FFFF00' : '#FF4444');
-    addColoredText('------------------------------------', '#00FF41');
-
-    await typeText('ИСХОД:', 'output', 6);
-    if(d.outcome && d.outcome.length){
-        for(const ln of d.outcome){
-            addColoredText(`> ${ln}`, '#FF4444');
-        }
-    } else {
-        addColoredText('> данные фрагментарны', '#FFFF00');
-    }
-
-    addColoredText('------------------------------------', '#00FF41');
-    await typeText('СИСТЕМНЫЙ ОТЧЁТ:', 'output', 6);
-    if(d.report && d.report.length){
-        for(const ln of d.report){
-            addColoredText(`> ${ln}`, '#FFFF00');
-        }
-    } else {
-        addColoredText('> отчёт отсутствует', '#FFFF00');
-    }
-
-    addColoredText('------------------------------------', '#00FF41');
-    await typeText(`СВЯЗАННЫЕ МИССИИ: ${d.missions || 'N/A'}`, 'output', 6);
-
-    // если есть аудио — краткий шанс проиграть (негромко)
-    if(d.audio && audioResetCom){
-        try {
-            const a = new Audio(d.audio);
-            a.volume = 0.18 + Math.min(0.3, currentDegradation/300);
-            a.play().catch(()=>{});
-            // остановим через 2.5с, чтобы не застревал
-            setTimeout(()=> { try{ a.pause(); a.currentTime = 0; }catch(e){} }, 2500);
-        } catch(e){}
-    }
-}
-
-/* =================== SYSLOG LEVEL (определяет "жёсткость" вывода) =================== */
-function getSyslogLevel(){
-    const sessionDuration = Date.now() - sessionStart;
-    const minutesInSession = sessionDuration / (1000 * 60);
-
-    if(commandCount >= 10 || minutesInSession >= 3) return 3; // сознательный
-    if(commandCount >= 5 || minutesInSession >= 1) return 2;  // живой
-    return 1; // статичный
-}
-
-/* =================== ДЕГРАДАЦИЯ: управление, таймеры, UI =================== */
-
-function setDegradation(value, sourceDesc){
-    currentDegradation = Math.max(0, Math.min(100, Math.round(value)));
-    localStorage.setItem(DEG_KEY, currentDegradation.toString());
-    updateDegradationUI();
-
-    // пороги — звуки и подсказки
-    if(currentDegradation === 70 || currentDegradation === 75){
-        playAudioOnce(audioResetCom);
-        addColoredText('> команда RESET рекомендована для стабилизации', '#EFD76C');
-    }
-    if(currentDegradation === 85 || currentDegradation === 90){
-        playAudioOnce(audioResetComRev);
-        addColoredText('> срочно введите RESET', '#D83F47');
-    }
-    if(currentDegradation >= AUTO_RESET_THRESHOLD){
-        autoTriggerReset();
-    }
-
-    // плавное увеличение фон.шума
-    try { audioAmbient.volume = 0.06 + (currentDegradation/100)*0.14; } catch(e){}
-}
-
-function incrementDegradation(delta = 1, sourceDesc = ''){
-    setDegradation(currentDegradation + delta, sourceDesc);
-}
-
-function updateDegradationUI(){
-    if(!degPercent || !degFill || !degIndicator) return;
-    degPercent.textContent = `${currentDegradation}%`;
-    degFill.style.width = `${currentDegradation}%`;
-
-    degIndicator.classList.remove('level-1','level-2','level-3','level-4','level-5','show-tip');
-    document.body.classList.remove('deg-glitch-1','deg-glitch-2','deg-glitch-3','deg-glitch-4','deg-glitch-5');
-
-    if(currentDegradation < 30){
-        degIndicator.classList.add('level-1');
-        document.body.classList.add('deg-glitch-1');
-    } else if(currentDegradation < 60){
-        degIndicator.classList.add('level-2');
-        document.body.classList.add('deg-glitch-2');
-    } else if(currentDegradation < 80){
-        degIndicator.classList.add('level-3');
-        document.body.classList.add('deg-glitch-3');
-        degIndicator.classList.add('show-tip');
-    } else if(currentDegradation < 95){
-        degIndicator.classList.add('level-4');
-        document.body.classList.add('deg-glitch-4');
-        degIndicator.classList.add('show-tip');
-    } else {
-        degIndicator.classList.add('level-5');
-        document.body.classList.add('deg-glitch-5');
-        degIndicator.classList.add('show-tip');
-    }
-
-    if(currentDegradation >= 60){
-        degTip.style.display = 'block';
-    } else {
-        degTip.style.display = 'none';
-    }
-}
-
-/* авто-инкремент */
-function startAutoIncrement(){
-    if(autoIncTimer) clearInterval(autoIncTimer);
-    autoIncTimer = setInterval(()=>{
-        incrementDegradation(1, 'time');
-        if(Math.random() < 0.18 + (currentDegradation/200)) playClick();
-    }, AUTO_INC_INTERVAL_MS);
-}
-
-/* =================== RESET (ручной / автоматический) =================== */
-
-async function performReset(mode = 'manual'){
-    if(resetting) return;
-    resetting = true;
-    removeInputLine();
-    addOutput('SYSTEM: ИНИЦИАЛИЗАЦИЯ RESET...', 'output');
-
-    // звук в зависимости от режима
-    if(mode === 'auto'){
-        try { audioGlitchE.currentTime = 0; audioGlitchE.volume = 0.9; audioGlitchE.play().catch(()=>{}); } catch(e){}
-    } else {
-        try { audioResetCom.currentTime = 0; audioResetCom.volume = 0.65; audioResetCom.play().catch(()=>{}); } catch(e){}
-    }
-
-    // сильный визуальный эффект
-    document.body.classList.add('deg-glitch-5');
-    await sleep(RESET_HOLD_MS);
-
-    // восстановление
-    document.body.classList.remove('deg-glitch-5');
-    setDegradation(0, `RESET (${mode})`);
-    addOutput('SYSTEM: RESET ВЫПОЛНЕН. ВОССТАНОВЛЕНИЕ СВЯЗИ...', 'output');
-
-    try { audioAmbient.currentTime = 0; audioAmbient.volume = 0.04; } catch(e){}
-    await sleep(700);
-
-    addInputLine();
-    resetting = false;
-}
-
-async function autoTriggerReset(){
-    if(resetting) return;
-    addColoredText('!! ДЕГРАДАЦИЯ ЯДРА ДОСТИГЛА КРИТИЧЕСКОГО УРОВНЯ !!', '#FF4444');
-    await sleep(300);
-    await performReset('auto');
-}
-
-/* =================== АУДИО-ФУНКЦИИ =================== */
-
-function playAudioOnce(audioEl){
-    try {
-        audioEl.currentTime = 0;
-        audioEl.volume = 0.7;
-        audioEl.play().catch(()=>{});
-        setTimeout(()=> {
-            try { audioEl.pause(); audioEl.currentTime = 0; } catch(e){}
-        }, 1400);
-    } catch(e){}
-}
-
-function playClick(){
-    try {
-        audioClick.currentTime = 0;
-        audioClick.volume = 0.18 + (currentDegradation/500);
-        audioClick.play().catch(()=>{});
-    } catch(e){}
-}
-
-/* =================== МЕЛКИЕ ИНТЕРФЕЙС-СОБЫТИЯ =================== */
-
-function randomAmbientEvent(){
-    if(Math.random() > 0.6 + (currentDegradation/120)) return;
-    const phrases = [
-        'не отключайся',
-        'он наблюдает',
-        'ты ещё здесь?',
-        'ошибка // сознание'
-    ];
-    const txt = randChoice(phrases);
-    addColoredText(txt, 'rgba(192,0,255,0.18)');
-    if(Math.random() < 0.4) playClick();
-}
-
-function interfacePulse(){
-    const intensity = 0.04 + (currentDegradation/250);
-    document.body.style.transition = 'filter 0.12s linear';
-    document.body.style.filter = `brightness(${1 + intensity})`;
-    setTimeout(()=> document.body.style.filter = '', 120);
-
-    if(currentDegradation >= 80){
-        const shift = (Math.random()*2)-1;
-        document.body.style.transform = `translateX(${shift}px)`;
-        setTimeout(()=> document.body.style.transform = '', 200);
-    }
-}
-
-/* =================== ПОДТВЕРЖДЕНИЕ (Y/N) =================== */
-
-function waitForConfirmation(){
-    return new Promise(resolve => {
-        awaitingConfirm = true;
-        const confirmLine = document.createElement('div');
-        confirmLine.className = 'input-line';
-        confirmLine.innerHTML = `<span class="prompt" style="color:var(--amber)">&gt; confirm: </span><span class="cmd" id="confirmText"></span><span class="cursor" id="confirmCursor"></span>`;
-        terminal.appendChild(confirmLine);
-        terminal.scrollTop = terminal.scrollHeight;
-
-        function keyHandler(e){
-            if(!awaitingConfirm) return;
-            const el = document.getElementById('confirmText');
-            if(!el) return;
-            const k = e.key.toLowerCase();
-            if(k === 'y' || k === 'н'){ // русская н = лат Y
-                el.textContent = 'Y';
-                el.style.color = 'var(--phosphor)';
-                cleanup(true);
-            } else if(k === 'n' || k === 'т'){ // русская т = лат N
-                el.textContent = 'N';
-                el.style.color = 'var(--blood)';
-                cleanup(false);
+    // Обработчик ввода с клавиатуры
+    document.addEventListener('keydown', function(e) {
+        if (awaitingConfirmation) {
+            if (e.key.toLowerCase() === 'y' || e.key.toLowerCase() === 'н') {
+                awaitingConfirmation = false;
+                if (confirmationCallback) confirmationCallback(true);
+            } else if (e.key.toLowerCase() === 'n' || e.key.toLowerCase() === 'т') {
+                awaitingConfirmation = false;
+                if (confirmationCallback) confirmationCallback(false);
             }
+            return;
         }
 
-        function cleanup(result){
-            document.removeEventListener('keydown', keyHandler);
-            confirmLine.remove();
-            awaitingConfirm = false;
-            resolve(result);
-        }
+        if (isTyping) return;
 
-        document.addEventListener('keydown', keyHandler);
-    });
-}
+        const currentCmd = document.getElementById('currentCmd');
+        const cursor = document.getElementById('cursor');
 
-/* =================== SHOW LOADING (визуал прогресса) =================== */
-
-function showLoading(duration = 1200, text = "PROCESS"){
-    return new Promise(resolve => {
-        const loader = document.createElement('div');
-        loader.className = 'output';
-        loader.textContent = `${text} [0%]`;
-        const bar = document.createElement('div');
-        bar.style.width = '200px';
-        bar.style.height = '10px';
-        bar.style.border = '1px solid rgba(100,255,130,0.08)';
-        bar.style.marginTop = '8px';
-        bar.style.background = 'rgba(100,255,130,0.02)';
-        const fill = document.createElement('div');
-        fill.style.height = '100%';
-        fill.style.width = '0%';
-        fill.style.background = 'linear-gradient(90deg,#00FF41,#00cc33)';
-        fill.style.transition = 'width 0.12s linear';
-        bar.appendChild(fill);
-        loader.appendChild(bar);
-        terminal.appendChild(loader);
-        terminal.scrollTop = terminal.scrollHeight;
-
-        const interval = 50;
-        const steps = Math.max(6, Math.floor(duration / interval));
-        let p = 0;
-        const inc = 100 / steps;
-        const t = setInterval(()=>{
-            p += inc;
-            if(p >= 100){
-                p = 100;
-                clearInterval(t);
-                loader.textContent = `${text} [ЗАВЕРШЕНО]`;
-                loader.appendChild(bar);
-                setTimeout(()=> { loader.remove(); resolve(); }, 300);
+        if (e.key === 'Enter') {
+            if (currentLine.trim() !== '') {
+                processCommand(currentLine);
+                currentLine = '';
+            }
+        } else if (e.key === 'Backspace') {
+            if (currentLine.length > 0) {
+                currentLine = currentLine.slice(0, -1);
+                currentCmd.textContent = currentLine;
+            }
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (historyIndex > 0) {
+                historyIndex--;
+                currentLine = commandHistory[historyIndex];
+                currentCmd.textContent = currentLine;
+            }
+        } else if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (historyIndex < commandHistory.length - 1) {
+                historyIndex++;
+                currentLine = commandHistory[historyIndex];
+                currentCmd.textContent = currentLine;
             } else {
-                loader.textContent = `${text} [${Math.round(p)}%]`;
-                loader.appendChild(bar);
-                fill.style.width = `${p}%`;
+                historyIndex = commandHistory.length;
+                currentLine = '';
+                currentCmd.textContent = currentLine;
             }
-            terminal.scrollTop = terminal.scrollHeight;
-        }, interval);
-    });
-}
-
-/* =================== DETECT DEVTOOLS (атмосферная штука) =================== */
-(function devtoolsDetect(){
-    const start = Date.now();
-    console.log('%c', 'font-size:400px;');
-    setTimeout(()=> {
-        const end = Date.now();
-        if(end - start > 1000) {
-            addOutput('A.D.A.M. не любит, когда на него смотрят.', 'output');
+        } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
+            currentLine += e.key;
+            currentCmd.textContent = currentLine;
         }
-    }, 500);
-})();
 
-/* =================== ИНИЦИАЛИЗАЦИЯ (создание prompt и UI) =================== */
-addInputLine();
-updateDegradationUI();
-startAutoIncrement();
+        // Мигание курсора
+        if (cursor) {
+            cursor.style.visibility = 'visible';
+            clearTimeout(cursor.blinkTimeout);
+            cursor.blinkTimeout = setTimeout(() => {
+                if (cursor) cursor.style.visibility = 'hidden';
+            }, 500);
+        }
+    });
 
-/* =================== Экспорт функций для отладки (если нужно) =================== */
-window.VIGIL9 = {
-    incrementDegradation,
-    setDegradation,
-    getCurrentDegradation: () => currentDegradation,
-    performReset
-};
+    // Инициализация терминала
+    addColoredText('> ТЕРМИНАЛ A.D.A.M. // VIGIL-9 АКТИВЕН', '#00FF41');
+    addColoredText('> ВВЕДИТЕ "help" ДЛЯ СПИСКА КОМАНД', '#00FF41');
+    addInputLine();
+});
