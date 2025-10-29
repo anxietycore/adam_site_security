@@ -1,46 +1,37 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>A.D.A.M. TERMINAL1 // VIGIL-9</title>
-    <link rel="stylesheet" href="style.css" />
+    <meta charset="UTF-8">
+    <title>A.D.A.M. TERMINAL // VIGIL-9</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="scanline"></div>
-
-    <!-- BG layers reused from index (canvas drawn by terminal.js if necessary) -->
-    <div id="bg-root" aria-hidden="true">
-        <canvas id="neural-canvas"></canvas>
-        <div class="vein-layer"></div>
-        <div class="memory-ghosts" id="memory-ghosts" aria-hidden="true"></div>
-        <div class="screen-scratches"></div>
-        <div class="vhs-grain"></div>
+<!-- ЭПИЧНЫЙ КОСМИЧЕСКИЙ ПОРТАЛ -->
+<div class="noise">
+    <div class="nebula nebula-1"></div>
+    <div class="nebula nebula-2"></div>
+    <div class="nebula nebula-3"></div>
+    <div class="gravity-lens gravity-lens-1"></div>
+    <div class="gravity-lens gravity-lens-2"></div>
+    <div class="neural-network"></div>
+    <div class="anomaly-1"></div>
+    <div class="anomaly-2"></div>
+    <div class="anomaly-3"></div>
+    <div class="anomaly-4"></div>
+</div>
+    
+    <div id="terminal">
+        <!-- Терминал будет заполняться через JavaScript -->
     </div>
-
-    <!-- Degradation indicator top-right -->
-    <div id="degradation-indicator" class="level-1">
-        <div><strong>VIGIL-9 • DEGR:</strong> <span id="deg-percent">0%</span></div>
-        <div class="bar"><div class="fill" id="deg-fill"></div></div>
-        <div class="tip" id="deg-tip">&gt; используйте команду RESET для стабилизации</div>
-    </div>
-
-    <!-- Terminal container -->
-    <div id="terminal" role="main" aria-live="polite"></div>
-
-    <!-- Audio elements (preloaded, controlled by terminal.js) -->
-    <audio id="audio-ambient" loop preload="auto" src="ambient_hum.mp3"></audio>
-    <audio id="audio-reset-com" preload="auto" src="reset_com.mp3"></audio>
-    <audio id="audio-reset-com-rev" preload="auto" src="reset_com_reverse.mp3"></audio>
-    <audio id="audio-glitch-e" preload="auto" src="glich_e.mp3"></audio>
-    <audio id="audio-click" preload="auto" src="glitch_click.mp3"></audio>
 
     <script>
-        // prevent back button leaving
+        // Защита от кнопки "Назад"
         history.pushState(null, null, location.href);
-        window.onpopstate = function(){ history.go(1); };
+        window.onpopstate = function() {
+            history.go(1);
+        };
     </script>
-
-    <script src="terminal.js?v=13"></script>
+    <script src="terminal.js"></script>
 </body>
 </html>
