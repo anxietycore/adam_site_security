@@ -4,67 +4,16 @@
     box-sizing: border-box;
 }
 
-/* === ОСНОВНОЙ СТИЛЬ С ПОДДЕРЖКОЙ КИРИЛЛИЦЫ И VHS-ЭФФЕКТАМИ === */
 body {
     background-color: #0a0a0a;
     color: #00FF41;
-    /* Используем шрифт, который поддерживает кириллицу И выглядит как терминал */
     font-family: 'Courier New', monospace;
     overflow: hidden;
     cursor: default;
     position: relative;
-
-    /* VHS-эффекты */
-    text-shadow:
-        -1px 0 0 rgba(255, 0, 0, 0.3),   /* красный слева */
-        1px 0 0 rgba(0, 255, 0, 0.3);    /* зелёный справа */
-    filter: contrast(1.1) brightness(1.02);
-    -webkit-font-smoothing: none;
-    -moz-osx-font-smoothing: grayscale;
-    image-rendering: pixelated;
-    letter-spacing: -0.5px;
 }
 
-/* === ДРОЖАНИЕ ТЕКСТА (VHS) === */
-@keyframes vhs-jitter {
-    0%, 100% { transform: translate(0, 0); }
-    12% { transform: translate(-0.8px, 0.4px); }
-    24% { transform: translate(0.6px, -0.3px); }
-    36% { transform: translate(-0.4px, 0.2px); }
-    48% { transform: translate(0.3px, -0.1px); }
-    60% { transform: translate(-0.2px, 0.1px); }
-    72% { transform: translate(0.2px, -0.2px); }
-    84% { transform: translate(-0.3px, 0.3px); }
-    96% { transform: translate(0.4px, -0.4px); }
-}
-
-/* Применяем дрожание к тексту терминала и форм */
-.output, .command, .error, .prompt, .cmd,
-.login-form *, .start-message *, .boot-text *,
-#start-btn, #login-btn {
-    animation: vhs-jitter 12s infinite;
-    animation-timing-function: steps(1);
-}
-
-/* === СКАНЛАЙНЫ CRT === */
-.scanline {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: repeating-linear-gradient(
-        to bottom,
-        transparent 0%,
-        rgba(0, 255, 65, 0.03) 1px,
-        transparent 2px
-    );
-    pointer-events: none;
-    z-index: 9999;
-    opacity: 0.6;
-}
-
-/* === ОСТАЛЬНОЙ КОСМОС (БЕЗ ИЗМЕНЕНИЙ) === */
+/* ЭПИЧНЫЙ КОСМИЧЕСКИЙ ПОРТАЛ A.D.A.M. */
 .noise {
     position: fixed;
     top: 0;
@@ -75,6 +24,7 @@ body {
     z-index: 99;
 }
 
+/* СЛОЙ 1: БЛИЖНИЕ ЯРКИЕ ЗВЁЗДЫ */
 .noise::before {
     content: "";
     position: absolute;
@@ -92,6 +42,7 @@ body {
     animation: stars-fast-rotate 40s infinite linear;
 }
 
+/* СЛОЙ 2: ДАЛЬНИЕ ТУСКЛЫЕ ЗВЁЗДЫ */
 .noise::after {
     content: "";
     position: absolute;
@@ -109,22 +60,54 @@ body {
     animation: stars-slow-rotate 120s infinite linear;
 }
 
+/* АНИМАЦИИ ЗВЁЗД */
 @keyframes stars-fast-rotate {
-    0% { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 0.9; }
-    25% { transform: translate(-15px, 8px) rotate(90deg) scale(1.1); opacity: 1; }
-    50% { transform: translate(10px, -12px) rotate(180deg) scale(1.15); opacity: 0.8; }
-    75% { transform: translate(12px, 15px) rotate(270deg) scale(1.05); opacity: 1; }
-    100% { transform: translate(0, 0) rotate(360deg) scale(1); opacity: 0.9; }
+    0% { 
+        transform: translate(0, 0) rotate(0deg) scale(1);
+        opacity: 0.9;
+    }
+    25% { 
+        transform: translate(-15px, 8px) rotate(90deg) scale(1.1);
+        opacity: 1;
+    }
+    50% { 
+        transform: translate(10px, -12px) rotate(180deg) scale(1.15);
+        opacity: 0.8;
+    }
+    75% { 
+        transform: translate(12px, 15px) rotate(270deg) scale(1.05);
+        opacity: 1;
+    }
+    100% { 
+        transform: translate(0, 0) rotate(360deg) scale(1);
+        opacity: 0.9;
+    }
 }
 
 @keyframes stars-slow-rotate {
-    0% { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 0.7; }
-    25% { transform: translate(20px, -10px) rotate(-45deg) scale(1.02); opacity: 0.8; }
-    50% { transform: translate(-15px, 18px) rotate(-90deg) scale(1.04); opacity: 0.6; }
-    75% { transform: translate(-18px, -15px) rotate(-135deg) scale(1.02); opacity: 0.8; }
-    100% { transform: translate(0, 0) rotate(-180deg) scale(1); opacity: 0.7; }
+    0% { 
+        transform: translate(0, 0) rotate(0deg) scale(1);
+        opacity: 0.7;
+    }
+    25% { 
+        transform: translate(20px, -10px) rotate(-45deg) scale(1.02);
+        opacity: 0.8;
+    }
+    50% { 
+        transform: translate(-15px, 18px) rotate(-90deg) scale(1.04);
+        opacity: 0.6;
+    }
+    75% { 
+        transform: translate(-18px, -15px) rotate(-135deg) scale(1.02);
+        opacity: 0.8;
+    }
+    100% { 
+        transform: translate(0, 0) rotate(-180deg) scale(1);
+        opacity: 0.7;
+    }
 }
 
+/* СВЕТЯЩИЕСЯ СЕТИ */
 .neural-network {
     position: absolute;
     top: 0;
@@ -143,13 +126,38 @@ body {
     50% { opacity: 0.7; }
 }
 
+/* АНОМАЛИИ - ЯРКИЕ ВСПЫШКИ */
 @keyframes supernova {
-    0%, 95% { opacity: 0; transform: scale(0) rotate(0deg); box-shadow: 0 0 0px rgba(0, 255, 65, 0); }
-    96% { opacity: 0.9; transform: scale(1.2) rotate(180deg); box-shadow: 0 0 30px rgba(0, 255, 65, 0.8); }
-    97% { opacity: 0.6; transform: scale(0.8) rotate(360deg); box-shadow: 0 0 20px rgba(0, 255, 65, 0.6); }
-    98% { opacity: 1; transform: scale(1.5) rotate(540deg); box-shadow: 0 0 50px rgba(0, 255, 65, 1); }
-    99% { opacity: 0.4; transform: scale(0.7) rotate(720deg); box-shadow: 0 0 15px rgba(0, 255, 65, 0.4); }
-    100% { opacity: 0; transform: scale(0) rotate(900deg); box-shadow: 0 0 0px rgba(0, 255, 65, 0); }
+    0%, 95% { 
+        opacity: 0; 
+        transform: scale(0) rotate(0deg);
+        box-shadow: 0 0 0px rgba(0, 255, 65, 0);
+    }
+    96% { 
+        opacity: 0.9; 
+        transform: scale(1.2) rotate(180deg);
+        box-shadow: 0 0 30px rgba(0, 255, 65, 0.8);
+    }
+    97% { 
+        opacity: 0.6; 
+        transform: scale(0.8) rotate(360deg);
+        box-shadow: 0 0 20px rgba(0, 255, 65, 0.6);
+    }
+    98% { 
+        opacity: 1; 
+        transform: scale(1.5) rotate(540deg);
+        box-shadow: 0 0 50px rgba(0, 255, 65, 1);
+    }
+    99% { 
+        opacity: 0.4; 
+        transform: scale(0.7) rotate(720deg);
+        box-shadow: 0 0 15px rgba(0, 255, 65, 0.4);
+    }
+    100% { 
+        opacity: 0; 
+        transform: scale(0) rotate(900deg);
+        box-shadow: 0 0 0px rgba(0, 255, 65, 0);
+    }
 }
 
 .noise .anomaly-1 {
@@ -200,7 +208,7 @@ body {
     animation-delay: 18s;
 }
 
-/* === ЭКРАНЫ (БЕЗ ИЗМЕНЕНИЙ) === */
+/* Экран запуска */
 #start-screen {
     position: fixed;
     top: 0;
@@ -214,7 +222,9 @@ body {
     z-index: 20;
 }
 
-.start-message { text-align: center; }
+.start-message {
+    text-align: center;
+}
 
 #start-btn {
     background: black;
@@ -233,6 +243,7 @@ body {
     color: black;
 }
 
+/* Экран загрузки */
 #boot-screen {
     position: fixed;
     top: 0;
@@ -246,7 +257,9 @@ body {
     z-index: 10;
 }
 
-.boot-message { text-align: left; }
+.boot-message {
+    text-align: left;
+}
 
 .logo pre {
     font-size: 12px;
@@ -254,12 +267,14 @@ body {
     text-align: center;
 }
 
+/* Скрываем текст загрузки изначально и делаем плавное появление */
 #boot-screen .boot-text p {
     opacity: 0;
     margin: 10px 0;
     transition: opacity 0.5s ease-in-out;
 }
 
+/* Экран логина */
 #login-screen {
     position: fixed;
     top: 0;
@@ -334,9 +349,11 @@ body {
     font-size: 14px;
 }
 
-.hidden { display: none !important; }
+.hidden {
+    display: none !important;
+}
 
-/* === ТЕРМИНАЛ === */
+/* Стили терминала */
 #terminal {
     padding: 20px;
     height: 100vh;
@@ -356,14 +373,25 @@ body {
     line-height: 1.4;
 }
 
+.error {
+    color: #FF0000;
+    margin: 5px 0;
+    line-height: 1.4;
+}
+
 .input-line {
     display: flex;
     align-items: center;
     margin: 10px 0;
 }
 
-.prompt { color: #00FF41; }
-.cmd { color: #FFFFFF; }
+.prompt {
+    color: #00FF41;
+}
+
+.cmd {
+    color: #FFFFFF;
+}
 
 .cursor {
     animation: blink 1s step-end infinite;
