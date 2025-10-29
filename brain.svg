@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <radialGradient id="coreGlow" cx="50%" cy="50%" r="30%">
+      <stop offset="0%" stop-color="#ff6b8a" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#ff6b8a" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Связи (линии) -->
+  <g class="edges">
+    <!-- Примеры линий: от центра к узлам -->
+    <line class="edge" x1="500" y1="500" x2="300" y2="200" stroke="rgba(138,255,153,0.3)" stroke-width="1"/>
+    <line class="edge" x1="500" y1="500" x2="700" y2="250" stroke="rgba(239,215,108,0.25)" stroke-width="1"/>
+    <line class="edge" x1="500" y1="500" x2="200" y2="600" stroke="rgba(100,255,130,0.2)" stroke-width="1"/>
+    <line class="edge" x1="500" y1="500" x2="800" y2="700" stroke="rgba(200,100,255,0.2)" stroke-width="1"/>
+    <line class="edge" x1="500" y1="500" x2="400" y2="800" stroke="rgba(138,255,153,0.25)" stroke-width="1"/>
+    <line class="edge" x1="500" y1="500" x2="600" y2="150" stroke="rgba(255,107,138,0.2)" stroke-width="1"/>
+    <line class="edge" x1="500" y1="500" x2="150" y2="400" stroke="rgba(239,215,108,0.2)" stroke-width="1"/>
+    <line class="edge" x1="500" y1="500" x2="900" y2="500" stroke="rgba(100,255,130,0.18)" stroke-width="1"/>
+    <line class="edge" x1="500" y1="500" x2="500" y2="900" stroke="rgba(200,100,255,0.18)" stroke-width="1"/>
+    <line class="edge" x1="500" y1="500" x2="250" y2="250" stroke="rgba(255,107,138,0.15)" stroke-width="1"/>
+    <!-- Добавь ещё, если хочешь — но 10–15 достаточно -->
+  </g>
+
+  <!-- Узлы (нейроны) -->
+  <g class="nodes">
+    <!-- Центр — A.D.A.M. -->
+    <circle class="node core" cx="500" cy="500" r="12" fill="url(#coreGlow)" opacity="1"/>
+    
+    <!-- Остальные узлы -->
+    <circle class="node" cx="300" cy="200" r="6" fill="#8aff99" opacity="1"/>
+    <circle class="node" cx="700" cy="250" r="5" fill="#EFD76C" opacity="1"/>
+    <circle class="node" cx="200" cy="600" r="7" fill="#8aff99" opacity="1"/>
+    <circle class="node" cx="800" cy="700" r="5" fill="#C000FF" opacity="1"/>
+    <circle class="node" cx="400" cy="800" r="6" fill="#8aff99" opacity="1"/>
+    <circle class="node" cx="600" cy="150" r="4" fill="#EFD76C" opacity="1"/>
+    <circle class="node" cx="150" cy="400" r="5" fill="#8aff99" opacity="1"/>
+    <circle class="node" cx="900" cy="500" r="6" fill="#C000FF" opacity="1"/>
+    <circle class="node" cx="500" cy="900" r="5" fill="#8aff99" opacity="1"/>
+    <circle class="node" cx="250" cy="250" r="4" fill="#EFD76C" opacity="1"/>
+  </g>
+</svg>
