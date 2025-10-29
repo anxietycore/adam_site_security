@@ -1,404 +1,515 @@
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
+/* ========== style.css — A.D.A.M. TERMINAL (FULL) ========== */
+/* Analog horror / sci-psych horror terminal visuals
+   - Живой нейрослой, дыхание интерфейса, импульсы, VHS/CRT шум
+   - Управление деградацией через классы: body.degrade-30, body.degrade-60, body.degrade-80, body.degrade-95, body.degrade-100
+   - Доп. классы: .glitch, .glitch-heavy, .rgb-shift, .vhs, .breath-strong
+*/
+
+/* ---------- ПЕРВИЧНЫЕ ПЕРЕМЕННЫЕ --------- */
+:root{
+    --bg: #000; /* основной фон */
+    --phosphor: rgb(100,255,130); /* грязный фосфорный зелёный */
+    --phosphor-dim: rgba(100,255,130,0.55);
+    --amber: #EFD76C; /* пыльный янтарь */
+    --blood: #D83F47; /* кроваво-малиновый */
+    --anomaly: #C000FF; /* пурпурный */
+    --glass: rgba(255,255,255,0.03);
+
+    --terminal-width: 1000px;
+    --terminal-padding: 22px;
+
+    --grain-opacity: 0.03;
+    --vhs-opacity: 0.08;
+
+    --breath-duration: 14s;
 }
 
-body {
-    background-color: #0a0a0a;
-    color: #00FF41;
-    font-family: 'Courier New', monospace;
-    overflow: hidden;
+/* ---------- RESET BASE ---------- */
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+    background: var(--bg);
+    color: var(--phosphor);
+    font-family: "VT323", "Courier New", monospace;
+    letter-spacing: -0.3px;
+    overflow:hidden;
     cursor: default;
-    position: relative;
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+    /* base subtle glow (low) */
+    text-rendering: optimizeLegibility;
 }
 
-/* ЭПИЧНЫЙ КОСМИЧЕСКИЙ ПОРТАЛ A.D.A.M. */
-.noise {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    z-index: 99;
+/* ---------- GLOBAL LAYERS (noise, neural etc.) ---------- */
+/* .noise — контейнер для фоновых слоев. держит нейрослой, grain, импульсы */
+.noise{
+    position:fixed;
+    inset:0;
+    pointer-events:none;
+    z-index:0;
+    overflow:hidden;
+    isolation:isolate;
+    background: linear-gradient(180deg, rgba(0,0,0,0.95) 0%, rgba(6,6,6,0.98) 100%);
 }
 
-/* СЛОЙ 1: БЛИЖНИЕ ЯРКИЕ ЗВЁЗДЫ */
-.noise::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: 
-        radial-gradient(circle at 20% 50%, rgba(0, 255, 65, 0.3) 2px, transparent 2px),
-        radial-gradient(circle at 80% 20%, rgba(0, 255, 65, 0.25) 1px, transparent 1px),
-        radial-gradient(circle at 40% 80%, rgba(0, 255, 65, 0.35) 3px, transparent 3px),
-        radial-gradient(circle at 60% 10%, rgba(0, 255, 65, 0.22) 1px, transparent 1px),
-        radial-gradient(circle at 10% 90%, rgba(0, 255, 65, 0.28) 2px, transparent 2px);
-    background-size: 200px 200px, 300px 300px, 250px 250px, 350px 350px, 400px 400px;
-    animation: stars-fast-rotate 40s infinite linear;
+/* Глубинный нейрослой — тонкие корни/линии, которые пульсируют */
+.neural-network{
+    position:absolute; inset:0;
+    background:
+        radial-gradient(ellipse at 20% 35%, rgba(100,255,130,0.02) 0 2%, transparent 5%),
+        radial-gradient(ellipse at 80% 65%, rgba(100,255,130,0.01) 0 2%, transparent 6%);
+    mix-blend-mode: screen;
+    opacity: 0.55;
+    transform-origin:center;
+    animation: neural-breath var(--breath-duration) ease-in-out infinite;
+    filter: blur(0.6px) contrast(1.05);
 }
 
-/* СЛОЙ 2: ДАЛЬНИЕ ТУСКЛЫЕ ЗВЁЗДЫ */
-.noise::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: 
-        radial-gradient(circle at 90% 30%, rgba(0, 255, 65, 0.15) 1px, transparent 1px),
-        radial-gradient(circle at 10% 70%, rgba(0, 255, 65, 0.12) 1px, transparent 1px),
-        radial-gradient(circle at 50% 20%, rgba(0, 255, 65, 0.08) 1px, transparent 1px),
-        radial-gradient(circle at 30% 80%, rgba(0, 255, 65, 0.10) 1px, transparent 1px),
-        radial-gradient(circle at 70% 40%, rgba(0, 255, 65, 0.07) 1px, transparent 1px);
-    background-size: 500px 500px, 600px 600px, 700px 700px, 800px 800px, 900px 900px;
-    animation: stars-slow-rotate 120s infinite linear;
+/* keyframes для "дыхания" нейрослоя */
+@keyframes neural-breath{
+    0%{ transform: scale(0.995); opacity:0.35}
+    40%{ transform: scale(1.01); opacity:0.7}
+    100%{ transform: scale(0.995); opacity:0.35}
 }
 
-/* АНИМАЦИИ ЗВЁЗД */
-@keyframes stars-fast-rotate {
-    0% { 
-        transform: translate(0, 0) rotate(0deg) scale(1);
-        opacity: 0.9;
-    }
-    25% { 
-        transform: translate(-15px, 8px) rotate(90deg) scale(1.1);
-        opacity: 1;
-    }
-    50% { 
-        transform: translate(10px, -12px) rotate(180deg) scale(1.15);
-        opacity: 0.8;
-    }
-    75% { 
-        transform: translate(12px, 15px) rotate(270deg) scale(1.05);
-        opacity: 1;
-    }
-    100% { 
-        transform: translate(0, 0) rotate(360deg) scale(1);
-        opacity: 0.9;
-    }
+/* Echo memory — краткие вспышки старых команд (появляются через JS, внутренний контент) */
+.neural-echo{
+    position:absolute;
+    top:0; left:0; right:0; bottom:0;
+    pointer-events:none;
+    mix-blend-mode: screen;
 }
-
-@keyframes stars-slow-rotate {
-    0% { 
-        transform: translate(0, 0) rotate(0deg) scale(1);
-        opacity: 0.7;
-    }
-    25% { 
-        transform: translate(20px, -10px) rotate(-45deg) scale(1.02);
-        opacity: 0.8;
-    }
-    50% { 
-        transform: translate(-15px, 18px) rotate(-90deg) scale(1.04);
-        opacity: 0.6;
-    }
-    75% { 
-        transform: translate(-18px, -15px) rotate(-135deg) scale(1.02);
-        opacity: 0.8;
-    }
-    100% { 
-        transform: translate(0, 0) rotate(-180deg) scale(1);
-        opacity: 0.7;
-    }
-}
-
-/* СВЕТЯЩИЕСЯ СЕТИ */
-.neural-network {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: 
-        radial-gradient(circle at 30% 40%, transparent 95%, rgba(0, 255, 65, 0.03) 100%),
-        radial-gradient(circle at 70% 60%, transparent 95%, rgba(0, 255, 65, 0.02) 100%),
-        radial-gradient(circle at 50% 20%, transparent 95%, rgba(0, 255, 65, 0.04) 100%);
-    animation: network-pulse 15s infinite ease-in-out;
-}
-
-@keyframes network-pulse {
-    0%, 100% { opacity: 0.3; }
-    50% { opacity: 0.7; }
-}
-
-/* АНОМАЛИИ - ЯРКИЕ ВСПЫШКИ */
-@keyframes supernova {
-    0%, 95% { 
-        opacity: 0; 
-        transform: scale(0) rotate(0deg);
-        box-shadow: 0 0 0px rgba(0, 255, 65, 0);
-    }
-    96% { 
-        opacity: 0.9; 
-        transform: scale(1.2) rotate(180deg);
-        box-shadow: 0 0 30px rgba(0, 255, 65, 0.8);
-    }
-    97% { 
-        opacity: 0.6; 
-        transform: scale(0.8) rotate(360deg);
-        box-shadow: 0 0 20px rgba(0, 255, 65, 0.6);
-    }
-    98% { 
-        opacity: 1; 
-        transform: scale(1.5) rotate(540deg);
-        box-shadow: 0 0 50px rgba(0, 255, 65, 1);
-    }
-    99% { 
-        opacity: 0.4; 
-        transform: scale(0.7) rotate(720deg);
-        box-shadow: 0 0 15px rgba(0, 255, 65, 0.4);
-    }
-    100% { 
-        opacity: 0; 
-        transform: scale(0) rotate(900deg);
-        box-shadow: 0 0 0px rgba(0, 255, 65, 0);
-    }
-}
-
-.noise .anomaly-1 {
-    position: absolute;
-    top: 25%;
-    left: 15%;
-    width: 8px;
-    height: 8px;
-    background: #00FF41;
-    border-radius: 50%;
-    animation: supernova 35s infinite;
-    animation-delay: 0s;
-}
-
-.noise .anomaly-2 {
-    position: absolute;
-    top: 75%;
-    left: 85%;
-    width: 6px;
-    height: 6px;
-    background: #00FF41;
-    border-radius: 50%;
-    animation: supernova 42s infinite;
-    animation-delay: 12s;
-}
-
-.noise .anomaly-3 {
-    position: absolute;
-    top: 10%;
-    left: 65%;
-    width: 10px;
-    height: 10px;
-    background: #00FF41;
-    border-radius: 50%;
-    animation: supernova 38s infinite;
-    animation-delay: 24s;
-}
-
-.noise .anomaly-4 {
-    position: absolute;
-    top: 90%;
-    left: 35%;
-    width: 7px;
-    height: 7px;
-    background: #00FF41;
-    border-radius: 50%;
-    animation: supernova 45s infinite;
-    animation-delay: 18s;
-}
-
-/* Экран запуска */
-#start-screen {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: black;
-    z-index: 20;
-}
-
-.start-message {
-    text-align: center;
-}
-
-#start-btn {
-    background: black;
-    border: 1px solid #00FF41;
-    color: #00FF41;
-    padding: 15px 30px;
-    margin-top: 30px;
-    cursor: pointer;
-    font-family: 'Courier New', monospace;
-    text-transform: uppercase;
-    font-size: 16px;
-}
-
-#start-btn:hover {
-    background: #00FF41;
-    color: black;
-}
-
-/* Экран загрузки */
-#boot-screen {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: black;
-    z-index: 10;
-}
-
-.boot-message {
-    text-align: left;
-}
-
-.logo pre {
-    font-size: 12px;
-    margin-bottom: 30px;
-    text-align: center;
-}
-
-/* Скрываем текст загрузки изначально и делаем плавное появление */
-#boot-screen .boot-text p {
-    opacity: 0;
-    margin: 10px 0;
-    transition: opacity 0.5s ease-in-out;
-}
-
-/* Экран логина */
-#login-screen {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: black;
-    z-index: 5;
-}
-
-.login-form {
-    text-align: center;
-    border: 1px solid #00FF41;
-    padding: 30px;
-    background: rgba(0, 0, 0, 0.8);
-}
-
-.login-prompt {
-    font-size: 18px;
-    margin-bottom: 20px;
-    text-transform: uppercase;
-}
-
-.input-group {
-    margin: 15px 0;
-    text-align: left;
-}
-
-.input-group label {
-    display: block;
-    margin-bottom: 5px;
+.neural-echo .line{
+    position:absolute;
+    left:6%;
+    color: rgba(200,255,190,0.06);
+    font-family: "VT323", monospace;
     font-size: 14px;
+    white-space:nowrap;
+    transform: translateY(0);
+    opacity:0;
+    text-shadow: 0 0 8px rgba(100,255,130,0.03);
 }
 
-.input-group input {
-    width: 250px;
-    background: black;
-    border: 1px solid #00FF41;
-    color: #00FF41;
-    padding: 8px;
-    font-family: 'Courier New', monospace;
-    outline: none;
+/* spark — быстрые импульсы/стрелы света */
+.neural-spark{
+    position:absolute;
+    width:2px; height:120px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(100,255,130,0.15));
+    opacity:0;
+    transform-origin: top center;
+    filter: blur(0.6px) contrast(1.2);
 }
 
-.input-group input:focus {
-    border-color: #00FF41;
-    box-shadow: 0 0 10px #00FF41;
+/* ---------- CRT / VHS LAYERS ---------- */
+/* Scanline поверх всего (тонкие полосы, как на ЭЛТ) */
+.scanline{
+    position:fixed; inset:0;
+    z-index:50;
+    pointer-events:none;
+    background-image:
+        linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.14) 1px, rgba(0,0,0,0) 2px);
+    background-size: 100% 3px;
+    opacity: var(--vhs-opacity);
+    mix-blend-mode: multiply;
 }
 
-#login-btn {
-    background: black;
-    border: 1px solid #00FF41;
-    color: #00FF41;
-    padding: 10px 20px;
-    margin-top: 15px;
-    cursor: pointer;
-    font-family: 'Courier New', monospace;
-    text-transform: uppercase;
+/* grain — мелкий шум, меняет силу с деградацией (JS меняет opacity через классы) */
+.grain{
+    position:fixed; inset:0;
+    z-index:60;
+    pointer-events:none;
+    background-image:
+        radial-gradient(circle, rgba(255,255,255,0.02) 1px, transparent 1px),
+        radial-gradient(circle, rgba(255,255,255,0.01) 1px, transparent 1px);
+    background-size: 3px 3px, 5px 5px;
+    opacity: var(--grain-opacity);
+    mix-blend-mode: overlay;
+    transform: translateZ(0);
+    animation: grain-flicker 6s steps(3) infinite;
+}
+@keyframes grain-flicker{
+    0%{opacity: var(--grain-opacity)}
+    50%{opacity: calc(var(--grain-opacity) * 1.8)}
+    100%{opacity: var(--grain-opacity)}
 }
 
-#login-btn:hover {
-    background: #00FF41;
-    color: black;
+/* VHS horizontal jitter (subtle movement layer) */
+.vhs-shift{
+    position:fixed; inset:0;
+    z-index:58;
+    pointer-events:none;
+    background: linear-gradient(90deg, rgba(0,0,0,0.02), rgba(0,0,0,0.0));
+    mix-blend-mode: multiply;
+    animation: vhs-jitter 8s infinite;
+    opacity: 0.06;
+}
+@keyframes vhs-jitter{
+    0%{ transform: translateX(0) }
+    10%{ transform: translateX(-1px) }
+    20%{ transform: translateX(0.6px) }
+    30%{ transform: translateX(-0.5px) }
+    40%{ transform: translateX(0) }
+    100%{ transform: translateX(0) }
 }
 
-.error {
-    color: #ff0000;
-    margin-top: 10px;
-    font-size: 14px;
-}
-
-.hidden {
-    display: none !important;
-}
-
-/* Стили терминала */
-#terminal {
-    padding: 20px;
-    height: 100vh;
+/* ---------- TERMINAL WINDOW (окно в корпусе) ---------- */
+/* Поддерживаем как #terminal и как #terminal-container */
+#terminal, #terminal-container {
+    position:relative;
+    z-index:100;
+    max-width: var(--terminal-width);
+    margin: 40px auto;
+    padding: var(--terminal-padding);
+    height: calc(100vh - 80px);
     overflow-y: auto;
-    background: #0a0a0a;
+    background: linear-gradient(180deg, rgba(0,0,0,0.86), rgba(3,3,3,0.92));
+    border-radius: 6px;
+    border: 1px solid rgba(100,255,130,0.12);
+    box-shadow:
+        0 10px 30px rgba(0,0,0,0.7),
+        0 0 40px rgba(100,255,130,0.02) inset;
+    outline: 1px solid rgba(255,255,255,0.015);
+    -webkit-backdrop-filter: blur(1px);
+    backdrop-filter: blur(0.5px);
+    font-family: "VT323", "Courier New", monospace;
+    color: var(--phosphor);
+    line-height: 1.35;
+    letter-spacing: -0.2px;
+    transform-origin:center;
 }
 
-.output {
-    margin: 5px 0;
+/* внутренний эффект искажения по краям — стекло/искривление */
+#terminal::before{
+    content:'';
+    position:absolute; inset:0;
+    pointer-events:none;
+    border-radius:6px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(0,0,0,0.02));
+    mix-blend-mode: overlay;
+    box-shadow: inset 0 0 24px rgba(0,0,0,0.5);
+}
+
+/* рамка "глубиной" (внешний корпус) */
+.shell-frame{
+    position:fixed;
+    inset:16px;
+    pointer-events:none;
+    border-radius:8px;
+    z-index:90;
+    box-shadow:
+        0 0 120px rgba(0,0,0,0.85),
+        0 0 40px rgba(100,255,130,0.02);
+    border: 1px solid rgba(100,255,130,0.03);
+}
+
+/* ---------- TEXT STYLES ---------- */
+.output{
+    margin:6px 0;
     white-space: pre-wrap;
-    line-height: 1.4;
+    font-size:16px;
+    color: rgba(200,255,210,0.95);
 }
 
-.command {
-    color: #FFFFFF;
-    margin: 5px 0;
-    line-height: 1.4;
+/* команды — белые, читаемые */
+.command { color: #e9e9ea; font-weight:600; }
+
+/* prompt */
+.prompt { color: var(--phosphor); margin-right:8px }
+
+/* input cursor */
+.cursor{
+    display:inline-block;
+    width:8px;
+    height:16px;
+    margin-left:6px;
+    background: var(--phosphor);
+    vertical-align: middle;
+    animation: cursor-blink 1s steps(2) infinite;
+    box-shadow: 0 0 8px rgba(100,255,130,0.15);
+}
+@keyframes cursor-blink{ 50%{ opacity:0 } }
+
+/* error */
+.error { color: var(--blood); font-weight:700 }
+
+/* small muted */
+.muted { color: rgba(200,220,200,0.35); font-size:13px }
+
+/* ---------- DEGRADATION PANEL ---------- */
+#degradation-panel{
+    position:fixed;
+    top:16px;
+    right:18px;
+    z-index:220;
+    background: linear-gradient(180deg, rgba(0,0,0,0.72), rgba(0,0,0,0.55));
+    border: 1px solid rgba(100,255,130,0.14);
+    padding:8px 12px;
+    border-radius:6px;
+    font-family: "VT323", monospace;
+    color: var(--phosphor-dim);
+    min-width:170px;
+    text-align:right;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.6);
+}
+#degradation-panel .label{ font-size:12px; color: rgba(200,255,200,0.7); }
+#degradation-bar{
+    margin-top:8px;
+    height:8px;
+    width:100%;
+    background: rgba(255,255,255,0.03);
+    border-radius:3px;
+    overflow:hidden;
+    border:1px solid rgba(0,0,0,0.5);
+}
+#degradation-fill{
+    height:100%;
+    width:0%;
+    background: linear-gradient(90deg, rgba(100,255,130,1) 0%, rgba(255,220,120,1) 55%, rgba(216,63,71,1) 85%, rgba(192,0,255,1) 100%);
+    box-shadow: 0 0 8px rgba(100,255,130,0.12) inset;
+    transition: width 350ms linear, filter 300ms linear;
+}
+#degradation-hint{
+    margin-top:6px; font-size:12px; color: var(--amber); opacity:0; transition:opacity 250ms ease;
 }
 
-.error {
-    color: #FF0000;
-    margin: 5px 0;
-    line-height: 1.4;
+/* ---------- GLITCH / RGB / GHOST EFFECTS ---------- */
+/* Обёртка для глитча — JS добавляет .glitch или .glitch-heavy к #terminal или body */
+.glitch .output, .glitch .command {
+    text-shadow:
+        -1px 0 rgba(200,0,80,0.06),
+         1px 0 rgba(20,255,160,0.04);
 }
 
-.input-line {
-    display: flex;
-    align-items: center;
-    margin: 10px 0;
+/* RGB shift — делает дубли трех цветовых слоёв через filter + pseudo elements */
+.rgb-shift .output {
+    position:relative;
+    transform: translateZ(0);
+}
+.rgb-shift .output::before, .rgb-shift .output::after {
+    content: attr(data-text);
+    position:absolute; left:0; top:0;
+    width:100%;
+    pointer-events:none;
+    opacity:0.7; mix-blend-mode: screen;
+}
+.rgb-shift .output::before{
+    color: rgba(216,63,71,0.85); transform: translateX(-1px); clip-path: inset(0 0 0 0);
+    filter: blur(0.2px);
+}
+.rgb-shift .output::after{
+    color: rgba(100,255,130,0.85); transform: translateX(1px);
+    filter: blur(0.6px) saturate(1.1);
 }
 
-.prompt {
-    color: #00FF41;
+/* Phantom cursor — появление второго курсора */
+.phantom-cursor::after{
+    content:'_';
+    display:inline-block;
+    margin-left:12px;
+    color: rgba(255,255,255,0.06);
+    animation: phantom-blink 1.6s steps(2) infinite;
+    transform: translateY(-2px);
+}
+@keyframes phantom-blink{ 50%{opacity:0} }
+
+/* Ghost trail (призрачные тени текста) */
+.ghost-trail .output{
+    text-shadow:
+        0 2px 0 rgba(0,0,0,0.6),
+        0 6px 18px rgba(0,0,0,0.8);
+}
+.ghost-trail .output::after{
+    content: attr(data-text);
+    position: absolute;
+    left:6px;
+    top:2px;
+    color: rgba(255,255,255,0.03);
+    opacity:0.6;
+    transform: translateY(2px);
+    filter: blur(1px);
 }
 
-.cmd {
-    color: #FFFFFF;
+/* Replace characters effect - used at high degradation (JS toggles .chars-degrade) */
+.chars-degrade .output {
+    font-family: "VT323", monospace;
+    letter-spacing: 0;
+}
+.chars-degrade .output[data-degrade="1"]{
+    /* individual lines to be mutated by JS using data-degrade attr */
+    font-variant-ligatures: none;
 }
 
-.cursor {
-    animation: blink 1s step-end infinite;
-    background-color: #00FF41;
-    margin-left: 2px;
+/* Ripped typing - text appears with random pauses (JS controls typing timing) */
+/* CSS used only to emphasize the pause with an underline flicker */
+.ripped .output::after{
+    content: '';
+    display:inline-block;
+    width:6px;
+    height:2px;
+    background: rgba(255,255,255,0.02);
+    margin-left:6px;
+    animation: rip-flick 1.2s steps(2) infinite;
+}
+@keyframes rip-flick{ 50%{ opacity:0 } }
+
+/* VHS noise overlay for stronger degradation */
+.vhs .grain{ opacity:0.14 }
+.vhs .scanline{ opacity:0.55 }
+.vhs .vhs-shift{ opacity:0.18 }
+
+/* heavy glitches (near-critical) */
+.glitch-heavy .output{ letter-spacing:0.8px; transform-origin:left center; }
+.glitch-heavy .command{ text-shadow: 0 0 12px rgba(200,0,80,0.12); }
+
+/* ---------- ANOMALY FLASH (для входа VIGIL999) ---------- */
+.anomaly-flash{
+    position:fixed; inset:0; z-index:999;
+    background: radial-gradient(circle at 50% 40%, rgba(220,255,200,0.98), rgba(0,0,0,0));
+    mix-blend-mode: screen;
+    opacity:0; pointer-events:none;
+    transition:opacity 280ms ease;
 }
 
-@keyframes blink {
-    50% { opacity: 0; }
+/* ---------- AUDIO HINT (визуальная подсказка при проигрывании reset_com) ---------- */
+.audio-beat{
+    position: fixed; left: 50%; transform: translateX(-50%); bottom: 36px;
+    z-index: 230; padding: 6px 12px;
+    background: rgba(0,0,0,0.6); border: 1px solid rgba(100,255,130,0.12);
+    color: var(--phosphor-dim); font-family: "VT323", monospace; font-size:13px;
+    border-radius:6px; box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+    opacity:0; pointer-events:none; transition: opacity 220ms ease;
 }
+
+/* ---------- SCREEN TRANSITIONS (start/boot/login) ---------- */
+#start-screen, #boot-screen, #login-screen {
+    position:fixed; inset:0; z-index:300;
+    display:flex; align-items:center; justify-content:center;
+    background: rgba(0,0,0,0.98);
+    color: var(--phosphor);
+    font-family: "VT323", monospace;
+    transition: opacity 300ms ease, transform 480ms ease;
+}
+.screen-flick{
+    animation: screen-flicker 1.1s ease-in-out;
+}
+@keyframes screen-flicker{
+    0%{ opacity:0.2; transform: translateY(6px) scale(0.998) }
+    30%{ opacity:1; transform: translateY(0) scale(1) }
+    100%{ opacity:1; transform: translateY(0) scale(1) }
+}
+
+/* ---------- DEGRADATION LEVEL CLASSES (JS будет ставить body.degrade-XX) ---------- */
+/* 0–30% — stable: почти ничего не происходит (базовые небольшие эффекты) */
+body.degrade-0, body.degrade-10, body.degrade-20, body.degrade-30 {
+    --grain-opacity: 0.02;
+    --vhs-opacity: 0.03;
+}
+/* 30–60% — лёгкая нестабильность (дрожание, дыхание усилено) */
+body.degrade-40, body.degrade-50, body.degrade-60 {
+    --grain-opacity: 0.035;
+    --vhs-opacity: 0.06;
+    /* активируем лёгкое дрожание окна */
+    #terminal, #terminal-container { animation: subtle-shake 6s ease-in-out infinite; }
+    .neural-echo .line { opacity:0; } /* JS покажет вспышки */
+    .cursor{ box-shadow: 0 0 10px rgba(100,255,130,0.2) }
+}
+@keyframes subtle-shake{
+    0%{ transform: translateY(0) }
+    40%{ transform: translateY(-0.4px) }
+    70%{ transform: translateY(0.2px) }
+    100%{ transform: translateY(0) }
+}
+
+/* 60–80% — CRITICAL (RGB shift, фантомный курсор, вспышки) */
+body.degrade-70, body.degrade-75, body.degrade-80 {
+    --grain-opacity: 0.06;
+    --vhs-opacity: 0.12;
+    /* включаем усиленные VHS эффекты (JS добавляет класс .vhs также) */
+    .neural-network{ animation-duration: 10s; filter: contrast(1.18) blur(0.4px) }
+    /* курсор пульсирует (дыхание) */
+    .cursor{ animation-duration: 0.6s; box-shadow:0 0 18px rgba(100,255,130,0.28) }
+    /* подсказка RESET появляется (JS покажет) */
+    #degradation-hint{ opacity:1; color: var(--amber); }
+    /* ghost text more visible via class toggles */
+    .neural-echo .line{ opacity:0.08; transform: translateY(-4px); }
+}
+
+/* 80–95% — STRUCTURE BREAK (инверсия, вибрация контейнера, замена символов) */
+body.degrade-85, body.degrade-90, body.degrade-95 {
+    --grain-opacity: 0.12;
+    --vhs-opacity: 0.26;
+    /* усиленное дрожание контейнера */
+    #terminal, #terminal-container { animation: container-vibrate 0.9s ease-in-out infinite; }
+    @keyframes container-vibrate{
+        0%{ transform: translate(0,0) rotate(0) }
+        20%{ transform: translate(-1.6px, 0.6px) rotate(-0.2deg) }
+        40%{ transform: translate(1.2px, -0.8px) rotate(0.12deg) }
+        60%{ transform: translate(-0.8px, 0.4px) rotate(-0.08deg) }
+        80%{ transform: translate(0.6px, -0.2px) rotate(0.05deg) }
+        100%{ transform: translate(0,0) rotate(0) }
+    }
+    /* сильный RGB shift via class toggles */
+    .rgb-shift .output::before{ transform: translate(-2px, 0); opacity:0.95; }
+    .rgb-shift .output::after{ transform: translate(2px, 0); opacity:0.95; }
+    /* подсказки видимее */
+    #degradation-hint{ opacity:1; color: var(--blood); font-weight:700; }
+}
+
+/* 95–100% — TERMINAL COLLAPSE (всё ломается — JS включает .glitch-heavy .vhs .chars-degrade) */
+body.degrade-98, body.degrade-99, body.degrade-100 {
+    --grain-opacity: 0.28;
+    --vhs-opacity: 0.5;
+    /* экран иногда инвертируется (JS будет применять .invert-flash на body на короткие кадры) */
+    filter: none;
+    #terminal, #terminal-container { animation: catastrophic 0.5s linear infinite; }
+    @keyframes catastrophic{
+        0%{ transform: translate(0,0) scale(1) }
+        30%{ transform: translate(-4px, 2px) scale(0.998) skewX(-0.2deg) }
+        60%{ transform: translate(3px,-3px) scale(1.002) skewX(0.5deg) }
+        100%{ transform: translate(0,0) scale(1) skewX(0) }
+    }
+}
+
+/* ---------- UTILITIES (visible helper classes) ---------- */
+/* visible hint */
+.show{ opacity:1 !important; pointer-events:auto !important }
+.hide{ opacity:0 !important; pointer-events:none !important }
+
+/* color buckets */
+.terminal-output-stable{ color: var(--phosphor) }
+.terminal-output-unstable{ color: var(--amber) }
+.terminal-output-critical{ color: var(--blood) }
+.terminal-output-terminal{ color: var(--anomaly) }
+
+/* ---------- ACCESSIBLE FALLBACKS ---------- */
+/* если браузер не поддерживает filter / animations — всё останется читаемым */
+@supports (animation: name 1s) {
+    /* nothing here; presence ensures fallback handled gracefully */
+}
+
+/* ---------- OPTIONAL SELECTORS (совместимость с существующим проектом) ---------- */
+/* если в проекте ты используешь #terminal-container внутри body, эти правила работают */
+#terminal-container #terminal { background: transparent; padding: 0; }
+
+/* ---------- COMMENTS / INTEGRATION NOTES ----------
+JS должен:
+- Помещать/удалять классы на <body>:
+   body.degrade-40, body.degrade-70, body.degrade-85, body.degrade-98 и т.д.
+- Для эффектов, которые не могут быть только CSS (например: рандомные нейронные вспышки,
+  замена отдельных букв на ▓ █ ∎, воспроизведение audio в 70%/75%/85%/90%):
+   — JS создаёт элементы внутри .neural-echo и .noise (например .neural-spark, .neural-echo .line),
+     ставит inline-стили left/top и включает их анимацию (opacity -> 1 -> 0).
+- Для RGB-слоёв: JS добавляет .rgb-shift к #terminal (или body) когда деградация >= 70.
+- Для VHS усиления: JS добавляет .vhs или .glitch-heavy соответственно.
+- Для эффекта "инверсии на 1–2 кадра": JS быстро добавляет класс .invert-flash на body,
+  который задаёт filter: invert(1) contrast(1.2) и затем убирает через 80–200ms.
+- Для подсказки RESET: JS меняет #degradation-hint.textContent и даёт класс .show.
+- Для "анимации активации VIGIL999": JS ставит на body .anomaly-flash (или увеличивает opacity)
+  на ~900–1200ms, одновременно проигрывает короткий звук и затем навигирует.
+- Для grain/scanline strength: JS регулирует root-переменные (--grain-opacity, --vhs-opacity)
+  либо переключает классы body.degrade-XX.
+
+===================================================
+END OF FILE
+*/
