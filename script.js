@@ -1,4 +1,4 @@
-/ Данные для входа
+// Данные для входа
 const VALID_CREDENTIALS = {
     username: "qq",
     password: "ww"
