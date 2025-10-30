@@ -283,3 +283,30 @@ body {
 @keyframes blink {
     50% { opacity: 0; }
 }
+
+/* === DEBUG FIX для видимости 3D мозга === */
+canvas#brainCanvas {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: -2;
+  pointer-events: none;
+}
+
+canvas#neuroCanvas {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: -1;
+  pointer-events: none;
+}
+
+body {
+  background: black !important;
+  overflow: hidden;
+}
+
