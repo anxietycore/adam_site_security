@@ -1,38 +1,37 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta charset="UTF-8">
     <title>A.D.A.M. TERMINAL // VIGIL-9</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <!-- ambient & cue audio -->
-    <audio id="ambientHum" src="sounds/ambient_hum.mp3" loop preload="auto"></audio>
-    <audio id="reset_com" src="sounds/reset_com.mp3" preload="auto"></audio>
-    <audio id="reset_com_reverse" src="sounds/reset_com_reverse.mp3" preload="auto"></audio>
-    <audio id="glich_e" src="sounds/glich_e.mp3" preload="auto"></audio>
-
-    <div class="noise" aria-hidden="true">
-        <div class="neural-layer"></div>
-        <div class="neural-echo"></div>
-        <div class="vhs-grain"></div>
-        <div class="vhs-lines"></div>
-        <div class="screen-scratches"></div>
+    <div class="scanline"></div>
+<!-- ЭПИЧНЫЙ КОСМИЧЕСКИЙ ПОРТАЛ -->
+<div class="noise">
+    <div class="nebula nebula-1"></div>
+    <div class="nebula nebula-2"></div>
+    <div class="nebula nebula-3"></div>
+    <div class="gravity-lens gravity-lens-1"></div>
+    <div class="gravity-lens gravity-lens-2"></div>
+    <div class="neural-network"></div>
+    <div class="anomaly-1"></div>
+    <div class="anomaly-2"></div>
+    <div class="anomaly-3"></div>
+    <div class="anomaly-4"></div>
+</div>
+    
+    <div id="terminal">
+        <!-- Терминал будет заполняться через JavaScript -->
     </div>
 
-    <div id="degradation-indicator" aria-hidden="true">
-        <div style="font-weight:600">ВИГИЛ-9 / ДЕГРАДАЦИЯ</div>
-        <div id="degradation-percent" style="font-size:13px; margin-top:6px">27%</div>
-        <div id="degradation-bar"><i style="width:27%"></i></div>
-        <div id="degradation-hint">&gt; используйте команду RESET для стабилизации</div>
-    </div>
-
-    <main id="terminal" role="region" aria-live="polite" tabindex="0"></main>
-
-    <!-- RGB-shift pseudo overlay implemented via a small element -->
-    <div id="rgb-shift-overlay" aria-hidden="true" style="pointer-events:none; position:fixed; inset:0; z-index:50;"></div>
-
+    <script>
+        // Защита от кнопки "Назад"
+        history.pushState(null, null, location.href);
+        window.onpopstate = function() {
+            history.go(1);
+        };
+    </script>
     <script src="terminal.js"></script>
 </body>
 </html>
