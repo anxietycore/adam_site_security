@@ -238,7 +238,7 @@ body {
     padding: 15px 30px;
     margin-top: 30px;
     cursor: pointer;
-    font-family: 'Courier New', monospace;
+    font-family: ' New', monospace;
     text-transform: uppercase;
     font-size: 16px;
 }
@@ -323,7 +323,7 @@ body {
     border: 1px solid #00FF41;
     color: #00FF41;
     padding: 8px;
-    font-family: 'Courier New', monospace;
+    font-family: 'Press Start 2P', 'Courier New', monospace;
     outline: none;
 }
 
@@ -339,7 +339,7 @@ body {
     padding: 10px 20px;
     margin-top: 15px;
     cursor: pointer;
-    font-family: 'Courier New', monospace;
+    font-family: 'Press Start 2P', 'Courier New', monospace;
     text-transform: uppercase;
 }
 
