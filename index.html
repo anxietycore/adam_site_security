@@ -16,14 +16,6 @@
 <body>
     <div class="scanline"></div>
     
-    <!-- 3D МОЗГ КАК ФОН -->
-    <script src="brain.js"></script>
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            new BrainBackground();
-        });
-    </script>
-    
     <!-- Экран запуска -->
     <div id="start-screen">
         <div class="start-message">
@@ -77,6 +69,15 @@
         </div>
     </div>
 
+    <!-- ПОДКЛЮЧАЕМ СКРИПТЫ В КОНЦЕ -->
+    <script src="brain.js"></script>
     <script src="script.js?v=3"></script>
+    <script>
+        // Запускаем мозг после загрузки всей страницы
+        window.addEventListener('load', function() {
+            console.log('🚀 Запускаем 3D мозг A.D.A.M....');
+            new BrainBackground();
+        });
+    </script>
 </body>
 </html>
