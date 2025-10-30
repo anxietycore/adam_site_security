@@ -1,0 +1,973 @@
+/* ====================================================
+   A.D.A.M. - ANALOG HORROR TERMINAL v2.0
+   CRITICAL SYSTEM FAILURE DETECTED
+   ==================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&family=Orbitron:wght@400;700&display=swap');
+
+:root {
+    /* Цветовая схема апокалипсиса */
+    --glitch-green: #00ff41;
+    --glitch-green-dark: #00cc33;
+    --glitch-green-light: #33ff6b;
+    --blood-red: #ff003c;
+    --corruption-purple: #8a2be2;
+    --static-blue: #00ffff;
+    --warning-orange: #ff7700;
+    --decay-yellow: #ffff00;
+    --void-black: #000000;
+    --abyss-dark: #0a0a0a;
+    --static-gray: #1a1a1a;
+    --corpse-white: #e0e0e0;
+    
+    /* Эффекты */
+    --scan-speed: 0.8s;
+    --glitch-interval: 7s;
+    --corruption-delay: 15s;
+    --system-fail-chance: 3%;
+}
+
+/* ==================== СБРОС И БАЗА ==================== */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    cursor: url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjE2IiBoZWlnaHQ9IjE2IiBmaWxsPSIjMDBGRjQxIiBmaWxsLW9wYWNpdHk9IjAuNSIvPgo8L3N2Zz4K'), auto;
+}
+
+body {
+    background: var(--void-black);
+    color: var(--glitch-green);
+    font-family: 'Share Tech Mono', 'VT323', monospace;
+    overflow: hidden;
+    position: relative;
+    min-height: 100vh;
+    line-height: 1.2;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+}
+
+/* ==================== СЛОЙ 1: ФОН АПОКАЛИПСИСА ==================== */
+.apocalypse-bg {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -9999;
+    background: 
+        radial-gradient(circle at 20% 30%, transparent 40%, var(--void-black) 90%),
+        radial-gradient(circle at 80% 70%, var(--abyss-dark) 10%, transparent 50%),
+        linear-gradient(45deg, var(--void-black) 0%, var(--abyss-dark) 50%, var(--void-black) 100%);
+    opacity: 0.9;
+}
+
+/* ==================== СЛОЙ 2: СТАТИКА СМЕРТИ ==================== */
+.static-layer {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: 
+        repeating-linear-gradient(
+            0deg,
+            transparent,
+            transparent 2px,
+            rgba(0, 255, 65, 0.02) 2px,
+            rgba(0, 255, 65, 0.02) 4px
+        ),
+        repeating-linear-gradient(
+            90deg,
+            transparent,
+            transparent 1px,
+            rgba(255, 0, 60, 0.01) 1px,
+            rgba(255, 0, 60, 0.01) 3px
+        );
+    animation: static-flicker 0.1s infinite;
+    z-index: -9998;
+    opacity: 0.3;
+    mix-blend-mode: overlay;
+}
+
+@keyframes static-flicker {
+    0%, 100% { opacity: 0.2; }
+    50% { opacity: 0.4; }
+}
+
+/* ==================== СЛОЙ 3: ГЛИТЧ-ЭФФЕКТЫ ==================== */
+.glitch-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: 
+        linear-gradient(90deg, 
+            transparent 49%, 
+            var(--blood-red) 49%, 
+            var(--blood-red) 51%, 
+            transparent 51%
+        ),
+        linear-gradient(0deg, 
+            transparent 49%, 
+            var(--static-blue) 49%, 
+            var(--static-blue) 51%, 
+            transparent 51%
+        );
+    opacity: 0;
+    z-index: 9997;
+    pointer-events: none;
+    animation: glitch-burst 0.3s var(--glitch-interval) infinite;
+}
+
+@keyframes glitch-burst {
+    0%, 95% { opacity: 0; transform: translate(0, 0); }
+    1% { opacity: 0.1; transform: translate(-5px, 2px); }
+    2% { opacity: 0.05; transform: translate(3px, -2px); }
+    3% { opacity: 0.08; transform: translate(-2px, 4px); }
+    4% { opacity: 0; transform: translate(0, 0); }
+}
+
+/* ==================== СЛОЙ 4: КОРРУПЦИЯ ДАННЫХ ==================== */
+.data-corruption {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: 
+        repeating-linear-gradient(
+            90deg,
+            transparent,
+            var(--corruption-purple) 1px,
+            transparent 3px
+        );
+    opacity: 0;
+    z-index: 9996;
+    pointer-events: none;
+    animation: corruption-wave 4s var(--corruption-delay) infinite;
+    mask: linear-gradient(90deg, transparent, black 20%, black 80%, transparent);
+}
+
+@keyframes corruption-wave {
+    0% { opacity: 0; transform: translateX(-100%); }
+    10% { opacity: 0.1; }
+    50% { opacity: 0.05; }
+    90% { opacity: 0.1; }
+    100% { opacity: 0; transform: translateX(100%); }
+}
+
+/* ==================== СКАН-ЛАЙН С ЭФФЕКТОМ СБОЯ ==================== */
+.scanline {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        var(--glitch-green) 20%,
+        var(--blood-red) 50%,
+        var(--glitch-green) 80%,
+        transparent
+    );
+    box-shadow: 
+        0 0 10px var(--glitch-green),
+        0 0 20px var(--blood-red);
+    z-index: 9999;
+    animation: scan-move var(--scan-speed) linear infinite, scan-glitch 5s infinite;
+    opacity: 0.8;
+}
+
+@keyframes scan-move {
+    0% { top: 0; opacity: 0.9; }
+    50% { opacity: 0.7; }
+    100% { top: 100vh; opacity: 0.9; }
+}
+
+@keyframes scan-glitch {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-3px); }
+    50% { transform: translateX(2px); }
+    75% { transform: translateX(-1px); }
+}
+
+/* ==================== ЭКРАН ЗАПУСКА ==================== */
+#start-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--void-black);
+    z-index: 100;
+    animation: system-boot-flicker 10s infinite;
+}
+
+.start-message {
+    text-align: center;
+    padding: 2rem;
+    border: 1px solid var(--glitch-green);
+    background: rgba(10, 10, 10, 0.95);
+    box-shadow: 
+        0 0 30px var(--glitch-green),
+        inset 0 0 20px rgba(0, 255, 65, 0.1);
+    position: relative;
+    overflow: hidden;
+}
+
+.start-message::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: conic-gradient(
+        transparent,
+        var(--glitch-green),
+        transparent 30%
+    );
+    animation: rotate-border 4s linear infinite;
+    z-index: -1;
+}
+
+@keyframes rotate-border {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.logo pre {
+    font-size: 0.8rem;
+    margin-bottom: 2rem;
+    text-align: center;
+    color: var(--glitch-green);
+    text-shadow: 
+        0 0 10px var(--glitch-green),
+        0 0 20px var(--glitch-green);
+    animation: text-flicker 3s infinite;
+}
+
+@keyframes text-flicker {
+    0%, 100% { opacity: 1; }
+    2% { opacity: 0.8; }
+    4% { opacity: 1; }
+    6% { opacity: 0.9; }
+    8% { opacity: 1; }
+}
+
+#start-btn {
+    background: transparent;
+    border: 2px solid var(--glitch-green);
+    color: var(--glitch-green);
+    padding: 1rem 2rem;
+    margin-top: 2rem;
+    cursor: pointer;
+    font-family: 'Share Tech Mono', monospace;
+    text-transform: uppercase;
+    font-size: 1.1rem;
+    letter-spacing: 3px;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s ease;
+    text-shadow: 0 0 10px var(--glitch-green);
+}
+
+#start-btn:hover {
+    background: var(--glitch-green);
+    color: var(--void-black);
+    box-shadow: 
+        0 0 20px var(--glitch-green),
+        0 0 40px var(--glitch-green);
+    animation: button-glitch 0.5s;
+}
+
+@keyframes button-glitch {
+    0% { transform: translate(0, 0); }
+    20% { transform: translate(-2px, 1px); }
+    40% { transform: translate(1px, -2px); }
+    60% { transform: translate(-1px, 2px); }
+    80% { transform: translate(2px, -1px); }
+    100% { transform: translate(0, 0); }
+}
+
+/* ==================== ЭКРАН ЗАГРУЗКИ ==================== */
+#boot-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--void-black);
+    z-index: 90;
+    font-family: 'VT323', monospace;
+}
+
+.boot-message {
+    text-align: left;
+    padding: 3rem;
+    border: 1px solid var(--warning-orange);
+    background: rgba(0, 0, 0, 0.95);
+    box-shadow: 
+        0 0 50px var(--warning-orange),
+        inset 0 0 30px rgba(255, 119, 0, 0.1);
+    max-width: 800px;
+    width: 90%;
+}
+
+.boot-text p {
+    margin: 1rem 0;
+    padding: 0.5rem;
+    border-left: 3px solid var(--warning-orange);
+    padding-left: 1rem;
+    opacity: 0;
+    transform: translateX(-20px);
+    animation: boot-line-appear 0.5s forwards;
+    position: relative;
+}
+
+.boot-text p::before {
+    content: '>';
+    position: absolute;
+    left: -1rem;
+    color: var(--warning-orange);
+    animation: prompt-blink 1s infinite;
+}
+
+@keyframes boot-line-appear {
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes prompt-blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
+}
+
+/* ==================== ЭКРАН ЛОГИНА ==================== */
+#login-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--void-black);
+    z-index: 80;
+}
+
+.login-form {
+    text-align: center;
+    border: 2px solid var(--static-blue);
+    padding: 3rem;
+    background: rgba(0, 0, 0, 0.95);
+    box-shadow: 
+        0 0 40px var(--static-blue),
+        inset 0 0 20px rgba(0, 255, 255, 0.1);
+    position: relative;
+    overflow: hidden;
+}
+
+.login-form::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(0, 255, 255, 0.1),
+        transparent
+    );
+    animation: login-scan 3s infinite;
+}
+
+@keyframes login-scan {
+    0% { left: -100%; }
+    100% { left: 100%; }
+}
+
+.login-prompt {
+    font-size: 1.5rem;
+    margin-bottom: 2rem;
+    text-transform: uppercase;
+    letter-spacing: 4px;
+    color: var(--static-blue);
+    text-shadow: 0 0 15px var(--static-blue);
+    animation: text-pulse 2s infinite;
+}
+
+@keyframes text-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+.input-group {
+    margin: 1.5rem 0;
+    text-align: left;
+    position: relative;
+}
+
+.input-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-size: 1rem;
+    color: var(--static-blue);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+.input-group input {
+    width: 300px;
+    background: rgba(0, 0, 0, 0.8);
+    border: 1px solid var(--static-blue);
+    color: var(--static-blue);
+    padding: 0.8rem 1rem;
+    font-family: 'Share Tech Mono', monospace;
+    outline: none;
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+.input-group input:focus {
+    border-color: var(--glitch-green);
+    box-shadow: 
+        0 0 15px var(--glitch-green),
+        inset 0 0 10px rgba(0, 255, 65, 0.1);
+    background: rgba(0, 10, 0, 0.9);
+}
+
+.input-group::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 1px;
+    background: var(--static-blue);
+    transform: scaleX(0);
+    transition: transform 0.3s ease;
+}
+
+.input-group:focus-within::after {
+    transform: scaleX(1);
+}
+
+#login-btn {
+    background: transparent;
+    border: 2px solid var(--static-blue);
+    color: var(--static-blue);
+    padding: 1rem 2rem;
+    margin-top: 1.5rem;
+    cursor: pointer;
+    font-family: 'Share Tech Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+#login-btn:hover {
+    background: var(--static-blue);
+    color: var(--void-black);
+    box-shadow: 
+        0 0 25px var(--static-blue),
+        0 0 50px var(--static-blue);
+}
+
+#login-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(0, 255, 255, 0.4),
+        transparent
+    );
+    transition: left 0.5s ease;
+}
+
+#login-btn:hover::before {
+    left: 100%;
+}
+
+/* ==================== ТЕРМИНАЛ ==================== */
+#terminal {
+    padding: 2rem;
+    height: 100vh;
+    overflow-y: auto;
+    background: rgba(10, 10, 10, 0.7);
+    font-family: 'VT323', monospace;
+    font-size: 1.2rem;
+    position: relative;
+    z-index: 10;
+}
+
+#terminal::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: 
+        repeating-linear-gradient(
+            0deg,
+            rgba(0, 255, 65, 0.03) 0px,
+            rgba(0, 255, 65, 0.03) 1px,
+            transparent 1px,
+            transparent 2px
+        );
+    pointer-events: none;
+    z-index: -1;
+}
+
+.output {
+    margin: 0.5rem 0;
+    white-space: pre-wrap;
+    line-height: 1.3;
+    text-shadow: 0 0 5px currentColor;
+    animation: text-glitch-small 10s infinite;
+}
+
+.command {
+    color: var(--corpse-white);
+    margin: 0.5rem 0;
+    line-height: 1.3;
+}
+
+.error {
+    color: var(--blood-red);
+    margin: 0.5rem 0;
+    line-height: 1.3;
+    text-shadow: 
+        0 0 10px var(--blood-red),
+        0 0 20px var(--blood-red);
+    animation: error-flicker 2s infinite;
+}
+
+@keyframes error-flicker {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+.input-line {
+    display: flex;
+    align-items: center;
+    margin: 1rem 0;
+    position: relative;
+}
+
+.prompt {
+    color: var(--glitch-green);
+    margin-right: 0.5rem;
+    text-shadow: 0 0 10px var(--glitch-green);
+}
+
+.cmd {
+    color: var(--corpse-white);
+    background: transparent;
+    border: none;
+    outline: none;
+    font-family: 'VT323', monospace;
+    font-size: 1.2rem;
+    width: 100%;
+    caret-color: var(--glitch-green);
+}
+
+.cursor {
+    animation: blink 1s step-end infinite;
+    background-color: var(--glitch-green);
+    margin-left: 2px;
+    box-shadow: 0 0 10px var(--glitch-green);
+}
+
+@keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
+}
+
+/* ==================== СИСТЕМНЫЕ СБОИ ==================== */
+.system-failure {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: 
+        radial-gradient(circle at 30% 40%, var(--blood-red) 0%, transparent 50%),
+        radial-gradient(circle at 70% 60%, var(--corruption-purple) 0%, transparent 50%);
+    opacity: 0;
+    z-index: 9995;
+    pointer-events: none;
+    animation: system-failure-burst 0.5s calc(var(--glitch-interval) * 2) infinite;
+    mix-blend-mode: screen;
+}
+
+@keyframes system-failure-burst {
+    0%, 96% { opacity: 0; }
+    1% { opacity: 0.3; }
+    2% { opacity: 0.1; }
+    3% { opacity: 0.4; }
+    4% { opacity: 0; }
+}
+
+/* ==================== ЭФФЕКТ ТЕКСТОВОГО ГЛИТЧА ==================== */
+@keyframes text-glitch-small {
+    0%, 100% { transform: translate(0, 0); }
+    1% { transform: translate(-1px, 0); }
+    2% { transform: translate(1px, 0); }
+    3% { transform: translate(0, -1px); }
+    4% { transform: translate(0, 1px); }
+    5% { transform: translate(0, 0); }
+}
+
+/* ==================== АДАПТИВНОСТЬ ==================== */
+@media (max-width: 768px) {
+    .boot-message,
+    .login-form,
+    .start-message {
+        width: 95%;
+        padding: 1.5rem;
+        margin: 1rem;
+    }
+    
+    .input-group input {
+        width: 100%;
+    }
+    
+    .logo pre {
+        font-size: 0.6rem;
+    }
+}
+
+/* ==================== СКРОЛЛБАР В СТИЛЕ ТЕРМИНАЛА ==================== */
+#terminal::-webkit-scrollbar {
+    width: 12px;
+}
+
+#terminal::-webkit-scrollbar-track {
+    background: var(--abyss-dark);
+    border-left: 1px solid var(--glitch-green);
+}
+
+#terminal::-webkit-scrollbar-thumb {
+    background: var(--glitch-green);
+    border: 1px solid var(--void-black);
+    box-shadow: inset 0 0 10px var(--void-black);
+}
+
+#terminal::-webkit-scrollbar-thumb:hover {
+    background: var(--glitch-green-light);
+    box-shadow: 
+        inset 0 0 10px var(--void-black),
+        0 0 10px var(--glitch-green);
+}
+
+/* ==================== АНИМАЦИЯ ЗАГРУЗКИ СИСТЕМЫ ==================== */
+@keyframes system-boot-flicker {
+    0%, 100% { opacity: 1; }
+    1% { opacity: 0.9; }
+    2% { opacity: 1; }
+    5% { opacity: 0.95; }
+    6% { opacity: 1; }
+    10% { opacity: 0.98; }
+    11% { opacity: 1; }
+}
+
+/* ==================== ЭФФЕКТ ЦИФРОВОГО ДОЖДЯ ==================== */
+.matrix-rain {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: transparent;
+    z-index: -9997;
+    opacity: 0.1;
+    pointer-events: none;
+}
+
+.matrix-rain::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: 
+        linear-gradient(transparent 90%, var(--glitch-green) 100%);
+    animation: matrix-fall 20s linear infinite;
+}
+
+@keyframes matrix-fall {
+    0% { transform: translateY(-100%); }
+    100% { transform: translateY(100%); }
+}
+
+/* ==================== КРИТИЧЕСКИЕ УВЕДОМЛЕНИЯ ==================== */
+.critical-alert {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(255, 0, 60, 0.1);
+    border: 3px solid var(--blood-red);
+    padding: 2rem;
+    color: var(--blood-red);
+    text-align: center;
+    z-index: 10000;
+    animation: critical-pulse 0.5s infinite, critical-shake 0.2s infinite;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    font-size: 1.5rem;
+    backdrop-filter: blur(10px);
+}
+
+@keyframes critical-pulse {
+    0%, 100% { box-shadow: 0 0 30px var(--blood-red); }
+    50% { box-shadow: 0 0 60px var(--blood-red); }
+}
+
+@keyframes critical-shake {
+    0%, 100% { transform: translate(-50%, -50%) translateX(0); }
+    25% { transform: translate(-50%, -50%) translateX(-2px); }
+    75% { transform: translate(-50%, -50%) translateX(2px); }
+}
+
+/* ==================== ХОВЕР-ЭФФЕКТЫ ДЛЯ ИНТЕРАКТИВНЫХ ЭЛЕМЕНТОВ ==================== */
+.interactive:hover {
+    filter: brightness(1.3);
+    text-shadow: 
+        0 0 10px currentColor,
+        0 0 20px currentColor;
+    transition: all 0.2s ease;
+}
+
+/* ==================== ЭФФЕКТ СТАРОГО МОНИТОРА ==================== */
+.crt-effect {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: 
+        radial-gradient(
+            ellipse at center,
+            transparent 0%,
+            rgba(0, 255, 65, 0.05) 100%
+        );
+    z-index: 9998;
+    pointer-events: none;
+    mix-blend-mode: overlay;
+}
+
+.crt-effect::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: 
+        repeating-linear-gradient(
+            0deg,
+            rgba(0, 0, 0, 0.03) 0px,
+            rgba(0, 0, 0, 0.03) 1px,
+            transparent 1px,
+            transparent 2px
+        );
+    animation: crt-scan 0.1s linear infinite;
+}
+
+@keyframes crt-scan {
+    0% { transform: translateY(-100%); }
+    100% { transform: translateY(100%); }
+}
+
+/* ==================== ФИНАЛЬНЫЕ ШТРИХИ ==================== */
+.noise-grain {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.1'/%3E%3C/svg%3E");
+    z-index: 9994;
+    pointer-events: none;
+    opacity: 0.4;
+    mix-blend-mode: overlay;
+}
+
+/* ==================== СИСТЕМНЫЕ ПРЕДУПРЕЖДЕНИЯ ==================== */
+.system-warning {
+    position: fixed;
+    bottom: 1rem;
+    right: 1rem;
+    background: rgba(255, 119, 0, 0.1);
+    border: 1px solid var(--warning-orange);
+    padding: 0.5rem 1rem;
+    color: var(--warning-orange);
+    font-size: 0.8rem;
+    z-index: 100;
+    animation: warning-pulse 2s infinite;
+}
+
+@keyframes warning-pulse {
+    0%, 100% { opacity: 0.7; }
+    50% { opacity: 1; }
+}
+
+/* ==================== КОНЕЦ СТИЛЕЙ A.D.A.M. ==================== */
+
+/* ДОПОЛНИТЕЛЬНЫЕ ЭФФЕКТЫ ДЛЯ МАКСИМАЛЬНОЙ ЕБАНУТОСТИ */
+.quantum-fluctuation {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: 
+        conic-gradient(
+            from 0deg at 50% 50%,
+            var(--glitch-green),
+            var(--blood-red),
+            var(--corruption-purple),
+            var(--static-blue),
+            var(--glitch-green)
+        );
+    opacity: 0;
+    z-index: 9993;
+    pointer-events: none;
+    mix-blend-mode: screen;
+    animation: quantum-appear 30s infinite;
+}
+
+@keyframes quantum-appear {
+    0%, 98% { opacity: 0; }
+    99% { opacity: 0.1; }
+    100% { opacity: 0; }
+}
+
+.reality-glitch {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: transparent;
+    z-index: 9992;
+    pointer-events: none;
+    animation: reality-distortion 60s infinite;
+}
+
+@keyframes reality-distortion {
+    0% { transform: scale(1) rotate(0deg); }
+    50% { transform: scale(1.01) rotate(0.5deg); }
+    100% { transform: scale(1) rotate(0deg); }
+}
+
+/* ЭФФЕКТ ДРОЖАНИЯ ЭКРАНА ПРИ ОШИБКАХ */
+.screen-shake {
+    animation: screen-shake 0.5s;
+}
+
+@keyframes screen-shake {
+    0%, 100% { transform: translateX(0); }
+    10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+    20%, 40%, 60%, 80% { transform: translateX(5px); }
+}
+
+/* ГЛУБИННЫЕ ТЕНИ И СВЕТ */
+.deep-glow {
+    text-shadow: 
+        0 0 5px currentColor,
+        0 0 10px currentColor,
+        0 0 15px currentColor,
+        0 0 20px currentColor;
+}
+
+.neon-pulse {
+    animation: neon-pulse 2s ease-in-out infinite;
+}
+
+@keyframes neon-pulse {
+    0%, 100% { 
+        text-shadow: 0 0 5px currentColor;
+        opacity: 1;
+    }
+    50% { 
+        text-shadow: 0 0 20px currentColor, 0 0 30px currentColor;
+        opacity: 0.8;
+    }
+}
+
+/* ФИНАЛЬНЫЙ АПГРЕЙД - 3D ПЕРСПЕКТИВА */
+.perspective-3d {
+    perspective: 1000px;
+}
+
+.transform-3d {
+    transform-style: preserve-3d;
+    animation: float-3d 10s ease-in-out infinite;
+}
+
+@keyframes float-3d {
+    0%, 100% { transform: rotateX(0deg) rotateY(0deg); }
+    25% { transform: rotateX(5deg) rotateY(5deg); }
+    50% { transform: rotateX(0deg) rotateY(10deg); }
+    75% { transform: rotateX(-5deg) rotateY(5deg); }
+}
+
+/* УЛЬТИМАТИВНЫЙ ЭФФЕКТ РАЗРУШЕНИЯ СИСТЕМЫ */
+.system-meltdown {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: 
+        radial-gradient(circle at 20% 80%, var(--blood-red) 0%, transparent 50%),
+        radial-gradient(circle at 80% 20%, var(--corruption-purple) 0%, transparent 50%),
+        radial-gradient(circle at 40% 40%, var(--warning-orange) 0%, transparent 50%);
+    opacity: 0;
+    z-index: 10001;
+    pointer-events: none;
+    mix-blend-mode: hard-light;
+    animation: meltdown-sequence 0.5s 10;
+}
+
+@keyframes meltdown-sequence {
+    0% { opacity: 0; filter: hue-rotate(0deg); }
+    10% { opacity: 0.3; filter: hue-rotate(90deg); }
+    20% { opacity: 0.1; filter: hue-rotate(180deg); }
+    30% { opacity: 0.5; filter: hue-rotate(270deg); }
+    40% { opacity: 0.2; filter: hue-rotate(360deg); }
+    50% { opacity: 0.7; filter: hue-rotate(450deg); }
+    60% { opacity: 0.3; filter: hue-rotate(540deg); }
+    70% { opacity: 0.9; filter: hue-rotate(630deg); }
+    80% { opacity: 0.4; filter: hue-rotate(720deg); }
+    90% { opacity: 1; filter: hue-rotate(810deg); }
+    100% { opacity: 0; filter: hue-rotate(900deg); }
+}
+
+/* === КОНЕЦ A.D.A.M. ANALOG HORROR TERMINAL v2.0 === */
