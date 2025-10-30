@@ -59,7 +59,7 @@ body {
     pointer-events: none;
     z-index: 9;
 }
-/* === ГЛУБИННЫЙ ИНТЕРФЕЙС A.D.A.M. === */
+/* === НЕЙРО-ИНТЕРФЕЙС A.D.A.M. === */
 .adam-interface {
     position: fixed;
     top: 0;
@@ -68,120 +68,15 @@ body {
     height: 100%;
     pointer-events: none;
     z-index: 1;
-    filter: contrast(1.2) brightness(0.8);
+    filter: contrast(1.3) brightness(0.7);
 }
 
-/* СЛОЙ 0: Фоновая текстура (ЭЛТ-шум) */
-.crt-texture {
+#neuroCanvas {
     position: absolute;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background: 
-        repeating-linear-gradient(
-            0deg,
-            rgba(0, 255, 65, 0.03) 0px,
-            rgba(0, 255, 65, 0.03) 1px,
-            transparent 1px,
-            transparent 2px
-        );
-    background-size: 100% 4px;
-    animation: scanline 10s linear infinite;
-}
-
-@keyframes scanline {
-    0% { transform: translateY(0px); }
-    100% { transform: translateY(100vh); }
-}
-
-/* СЛОЙ 1: Глубинный нейрослой (МРТ/ЭЭГ) */
-.neural-layer {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: 
-        radial-gradient(circle at 20% 50%, transparent 70%, rgba(100, 255, 130, 0.02) 70%),
-        radial-gradient(circle at 80% 20%, transparent 70%, rgba(100, 255, 130, 0.015) 70%),
-        radial-gradient(circle at 40% 80%, transparent 70%, rgba(100, 255, 130, 0.025) 70%);
-    background-size: 400px 400px, 600px 600px, 300px 300px;
-    opacity: 0.4;
-    animation: neural-pulse 25s ease-in-out infinite;
-}
-
-@keyframes neural-pulse {
-    0%, 100% { opacity: 0.3; transform: scale(1); }
-    50% { opacity: 0.6; transform: scale(1.02); }
-}
-
-/* СЛОЙ 2: Эхо-памяти (всплывающие фразы) */
-.memory-echo::before {
-    content: "subject lost...";
-    position: absolute;
-    top: 20%;
-    left: 15%;
-    color: rgba(100, 255, 130, 0.1);
-    font-size: 14px;
-    font-family: 'Courier New', monospace;
-    animation: echo-flicker 7s infinite;
-}
-.memory-echo::after {
-    content: "не смотри";
-    position: absolute;
-    top: 70%;
-    left: 80%;
-    color: rgba(100, 255, 130, 0.08);
-    font-size: 12px;
-    font-family: 'Courier New', monospace;
-    animation: echo-flicker 12s infinite;
-}
-
-@keyframes echo-flicker {
-    0%, 90%, 100% { opacity: 0; }
-    5%, 85% { opacity: 0.1; }
-}
-
-/* СЛОЙ 3: Активная сеть (импульсы) */
-.pulse-network {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(90deg, transparent 95%, rgba(100, 255, 130, 0.05) 100%);
-    background-size: 50px 100%;
-    animation: pulse-sweep 15s linear infinite;
-}
-
-@keyframes pulse-sweep {
-    0% { transform: translateX(-100%); }
-    100% { transform: translateX(100vw); }
-}
-
-/* СЛОЙ 4: Поверхностные помехи (VHS-рябь) */
-.surface-noise {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: 
-        repeating-linear-gradient(
-            90deg,
-            rgba(0, 0, 0, 0) 0px,
-            rgba(0, 0, 0, 0) 1px,
-            rgba(100, 255, 130, 0.01) 1px,
-            rgba(100, 255, 130, 0.01) 2px
-        );
-    background-size: 10px 100%;
-    animation: noise-shift 0.1s infinite;
-}
-
-@keyframes noise-shift {
-    0% { transform: translateY(0px); }
-    100% { transform: translateY(2px); }
 }
 
 /* Экран запуска */
