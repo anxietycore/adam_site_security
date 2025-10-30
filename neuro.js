@@ -5,10 +5,9 @@ class NeuroBackground {
         if (!this.canvas) return;
         
         this.ctx = this.canvas.getContext('2d');
-        this.resize();
         
+        // ПЕРЕНЕСИ this.opts СЮДА, перед resize()
         this.opts = {
-            // Структура мозга
             range: 220,
             baseConnections: 4,
             addedConnections: 6,
@@ -21,18 +20,15 @@ class NeuroBackground {
             addedDist: 25,
             connectionAttempts: 150,
             
-            // Импульсы
             dataToConnections: 2,
             baseSpeed: .03,
             addedSpeed: .04,
             baseGlowSpeed: .3,
             addedGlowSpeed: .5,
             
-            // Вращение
             rotVelX: .0015,
             rotVelY: .001,
             
-            // Цвета A.D.A.M.
             repaintColor: 'rgba(5, 15, 5, 0.3)',
             connectionColor: 'hsla(160, 70%, light%, alp)',
             rootColor: 'hsla(140, 90%, light%, alp)',
@@ -47,6 +43,9 @@ class NeuroBackground {
             vanishPoint: { x: 0, y: 0 }
         };
         
+        // ТЕПЕРЬ вызываем resize() после инициализации opts
+        this.resize();
+            
         this.squareRange = this.opts.range * this.opts.range;
         this.squareAllowed = this.opts.allowedDist * this.opts.allowedDist;
         this.mostDistant = this.opts.depth + this.opts.range;
@@ -80,6 +79,7 @@ class NeuroBackground {
             this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         }
     }
+
     
     init() {
         this.connections = [];
