@@ -11,23 +11,26 @@
 <head>
     <meta charset="UTF-8">
     <title>A.D.A.M. // ТЕРМИНАЛ</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="psychosis.css">
 </head>
 <body>
-    <div class="scanline"></div>
-    <!-- ЭПИЧНЫЙ КОСМИЧЕСКИЙ ПОРТАЛ -->
-<div class="noise">
-    <div class="nebula nebula-1"></div>
-    <div class="nebula nebula-2"></div>
-    <div class="nebula nebula-3"></div>
-    <div class="gravity-lens gravity-lens-1"></div>
-    <div class="gravity-lens gravity-lens-2"></div>
-    <div class="neural-network"></div>
-    <div class="anomaly-1"></div>
-    <div class="anomaly-2"></div>
-    <div class="anomaly-3"></div>
-    <div class="anomaly-4"></div>
-</div>
+    <!-- СЛОИ ПСИХОЛОГИЧЕСКОГО РАСПАДА -->
+    <div class="reality-decay"></div>
+    <div class="cognitive-static"></div>
+    <div class="hallucination-layer"></div>
+    <div class="temporal-distortion"></div>
+    <div class="paranoia-field"></div>
+    <div class="dissociation-fog"></div>
+    <div class="existential-void"></div>
+
+    <!-- СИСТЕМНЫЕ ИНДИКАТОРЫ -->
+    <div class="system-alert hidden" id="system-alert">
+        > СИСТЕМНОЕ ПРЕДУПРЕЖДЕНИЕ: ЦЕЛОСТНОСТЬ РЕАЛЬНОСТИ НАРУШЕНА
+    </div>
+
+    <div class="sanity-meter">
+        <div class="sanity-level"></div>
+    </div>
     
     <!-- Экран запуска -->
     <div id="start-screen">
@@ -82,6 +85,97 @@
         </div>
     </div>
 
-    <script src="script.js?v=3"></script>
+    <script src="script.js?v=4"></script>
+    <script>
+        // ДИНАМИЧЕСКАЯ СИСТЕМА БЕЗУМИЯ
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('=== A.D.A.M. PSYCHOSIS SYSTEM INITIALIZED ===');
+            
+            // Инициализация переменных безумия
+            let psychosisVars = {
+                mouseX: 0,
+                mouseY: 0,
+                timeMultiplier: 1,
+                psychosisLevel: 0,
+                realityStability: 100,
+                lastUpdate: Date.now()
+            };
+
+            // Отслеживание мыши для динамического безумия
+            document.addEventListener('mousemove', function(e) {
+                psychosisVars.mouseX = e.clientX;
+                psychosisVars.mouseY = e.clientY;
+                
+                // Обновление CSS переменных
+                document.documentElement.style.setProperty('--mouse-x', psychosisVars.mouseX);
+                document.documentElement.style.setProperty('--mouse-y', psychosisVars.mouseY);
+                
+                // Увеличение уровня психоза при движении
+                psychosisVars.psychosisLevel = Math.min(100, psychosisVars.psychosisLevel + 0.1);
+                updatePsychosisVars();
+            });
+
+            // Случайные всплески психоза
+            setInterval(function() {
+                if (Math.random() < 0.02) { // 2% шанс каждую секунду
+                    psychosisVars.psychosisLevel = Math.min(100, psychosisVars.psychosisLevel + Math.random() * 15);
+                    updatePsychosisVars();
+                    
+                    // Показать системное предупреждение
+                    showSystemAlert();
+                }
+            }, 1000);
+
+            // Медленное нарастание безумия со временем
+            setInterval(function() {
+                psychosisVars.psychosisLevel = Math.min(100, psychosisVars.psychosisLevel + 0.05);
+                psychosisVars.realityStability = Math.max(0, psychosisVars.realityStability - 0.03);
+                updatePsychosisVars();
+            }, 5000);
+
+            function updatePsychosisVars() {
+                const now = Date.now();
+                const deltaTime = (now - psychosisVars.lastUpdate) / 1000;
+                psychosisVars.lastUpdate = now;
+                
+                // Обновление всех CSS переменных
+                document.documentElement.style.setProperty('--psychosis-level', psychosisVars.psychosisLevel);
+                document.documentElement.style.setProperty('--reality-stability', psychosisVars.realityStability + '%');
+                document.documentElement.style.setProperty('--time-distortion', Math.max(0.5, 2 - psychosisVars.psychosisLevel / 100));
+                document.documentElement.style.setProperty('--sanity-drain', psychosisVars.psychosisLevel + '%');
+                document.documentElement.style.setProperty('--hallucination-intensity', psychosisVars.psychosisLevel / 100);
+                document.documentElement.style.setProperty('--paranoia-factor', psychosisVars.psychosisLevel / 50);
+                document.documentElement.style.setProperty('--depersonalization', psychosisVars.psychosisLevel);
+                document.documentElement.style.setProperty('--cognitive-overload', psychosisVars.psychosisLevel / 20);
+                document.documentElement.style.setProperty('--sensory-overload', psychosisVars.psychosisLevel / 30);
+                document.documentElement.style.setProperty('--temporal-displacement', psychosisVars.psychosisLevel / 10);
+                document.documentElement.style.setProperty('--spatial-disruption', psychosisVars.psychosisLevel / 15);
+                document.documentElement.style.setProperty('--identity-crisis', psychosisVars.psychosisLevel / 25);
+                document.documentElement.style.setProperty('--existential-dread', psychosisVars.psychosisLevel / 40);
+                document.documentElement.style.setProperty('--existence-failure', psychosisVars.psychosisLevel / 60);
+                
+                // Обновление индикатора рассудка
+                const sanityLevel = document.querySelector('.sanity-level');
+                if (sanityLevel) {
+                    sanityLevel.style.width = psychosisVars.psychosisLevel + '%';
+                }
+            }
+
+            function showSystemAlert() {
+                const alert = document.getElementById('system-alert');
+                if (alert) {
+                    alert.classList.remove('hidden');
+                    setTimeout(() => {
+                        alert.classList.add('hidden');
+                    }, 3000);
+                }
+            }
+
+            // Инициализация начальных значений
+            updatePsychosisVars();
+            
+            console.log('Psychosis system active. Reality integrity: ' + psychosisVars.realityStability + '%');
+        });
+    </script>
 </body>
 </html>
