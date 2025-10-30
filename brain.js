@@ -1,6 +1,6 @@
 // brain.js — версия 0.1 (основной фон)
 
-import * as THREE from "three";
+const THREE = window.THREE;
 
 let scene, camera, renderer, brain, clock;
 
