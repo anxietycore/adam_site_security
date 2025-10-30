@@ -67,9 +67,8 @@ body {
     width: 100%;
     height: 100%;
     pointer-events: none;
-    z-index: 1; /* Должен быть ниже экранов (20,10,5) но выше фона */
+    z-index: 100; /* УВЕЛИЧИВАЕМ чтобы был ПОВЕРХ всех экранов */
     filter: contrast(1.3) brightness(0.7);
-    background: red !important; /* ВРЕМЕННО: чтобы УВИДЕТЬ контейнер */
 }
 
 #neuroCanvas {
@@ -78,7 +77,6 @@ body {
     left: 0;
     width: 100%;
     height: 100%;
-    background: blue !important; /* ВРЕМЕННО: чтобы УВИДЕТЬ canvas */
 }
 
 /* Экран запуска */
