@@ -1,87 +1,84 @@
 <!DOCTYPE html>
 <html lang="ru">
-<!-- Google Analytics -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-M30NK9KWVH"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-  gtag('config', 'G-M30NK9KWVH');
-</script>
 <head>
-    <meta charset="UTF-8">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>A.D.A.M. // ТЕРМИНАЛ</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <!-- Ambient / global audio elements (preloaded, controlled in JS) -->
+    <audio id="ambientHum" src="sounds/ambient_hum.mp3" loop preload="auto"></audio>
+    <audio id="reset_com" src="sounds/reset_com.mp3" preload="auto"></audio>
+    <audio id="reset_com_reverse" src="sounds/reset_com_reverse.mp3" preload="auto"></audio>
+    <audio id="glich_e" src="sounds/glich_e.mp3" preload="auto"></audio>
+
     <div class="scanline"></div>
-    <!-- ЭПИЧНЫЙ КОСМИЧЕСКИЙ ПОРТАЛ -->
-<div class="noise">
-    <div class="nebula nebula-1"></div>
-    <div class="nebula nebula-2"></div>
-    <div class="nebula nebula-3"></div>
-    <div class="gravity-lens gravity-lens-1"></div>
-    <div class="gravity-lens gravity-lens-2"></div>
-    <div class="neural-network"></div>
-    <div class="anomaly-1"></div>
-    <div class="anomaly-2"></div>
-    <div class="anomaly-3"></div>
-    <div class="anomaly-4"></div>
-</div>
-    
-    <!-- Экран запуска -->
-    <div id="start-screen">
+
+    <div class="noise" aria-hidden="true">
+        <div class="neural-layer"></div>
+        <div class="neural-echo"></div>
+        <div class="vhs-grain"></div>
+        <div class="vhs-lines"></div>
+        <div class="screen-scratches"></div>
+        <div class="anomaly-1"></div>
+        <div class="anomaly-2"></div>
+    </div>
+
+    <!-- Start screen -->
+    <div id="start-screen" class="screen">
         <div class="start-message">
             <div class="logo">
-                <pre>
-    \    _ \    \     \  | 
-   _ \   |  |  _ \   |\/ | 
- _/  _\ ___/ _/  _\ _|  _| 
-                </pre>
+<pre>
+\    _ \    \     \  | 
+ _ \   |  |  _ \   |\/ | 
+_/  _\ ___/ _/  _\ _|  _| 
+</pre>
             </div>
-            <p>> СИСТЕМА A.D.A.M. ГОТОВА К ЗАПУСКУ</p>
-            <button id="start-btn">ЗАПУСТИТЬ СИСТЕМУ</button>
+            <p class="muted">&gt; СИСТЕМА A.D.A.M. ГОТОВА К ЗАПУСКУ</p>
+            <button id="start-btn" class="btn">ЗАПУСТИТЬ СИСТЕМУ</button>
+            <div class="visit-note" id="visit-note"></div>
         </div>
     </div>
-    
-    <!-- Экран загрузки -->
-    <div id="boot-screen" class="hidden">
+
+    <!-- Boot screen -->
+    <div id="boot-screen" class="screen hidden">
         <div class="boot-message">
-            <div class="logo">
-                <pre>
-    \    _ \    \     \  | 
-   _ \   |  |  _ \   |\/ | 
- _/  _\ ___/ _/  _\ _|  _| 
-                </pre>
+            <div class="logo small">
+<pre>
+\    _ \    \     \  | 
+ _ \   |  |  _ \   |\/ | 
+_/  _\ ___/ _/  _\ _|  _| 
+</pre>
             </div>
-            <div class="boot-text">
-                <p>> ИНИЦИАЛИЗАЦИЯ ПРОТОКОЛА БЕЗОПАСНОСТИ A.D.A.M...</p>
-                <p>> ЗАГРУЗКА ПОДСИСТЕМЫ VIGIL-9...</p>
-                <p>> ТЕСТ ПАМЯТИ: УСПЕШНО</p>
-                <p>> КРИПТОМОДУЛЬ: АКТИВИРОВАН</p>
-                <p>> ПРЕДУПРЕЖДЕНИЕ: НЕСАНКЦИОНИРОВАННЫЙ ДОСТУП ЗАПРЕЩЁН</p>
-                <p>> СИСТЕМА ГОТОВА</p>
+            <div class="boot-text" id="boot-text">
+                <p>&gt; ИНИЦИАЛИЗАЦИЯ ПРОТОКОЛА БЕЗОПАСНОСТИ A.D.A.M...</p>
+                <p>&gt; ЗАГРУЗКА ПОДСИСТЕМЫ VIGIL-9...</p>
+                <p>&gt; ТЕСТ ПАМЯТИ: УСПЕШНО</p>
+                <p>&gt; КРИПТОМОДУЛЬ: АКТИВИРОВАН</p>
+                <p>&gt; ПРЕДУПРЕЖДЕНИЕ: НЕСАНКЦИОНИРОВАННЫЙ ДОСТУП ЗАПРЕЩЁН</p>
+                <p>&gt; СИСТЕМА ГОТОВА</p>
             </div>
         </div>
     </div>
 
-    <!-- Экран логина -->
-    <div id="login-screen" class="hidden">
+    <!-- Login screen -->
+    <div id="login-screen" class="screen hidden">
         <div class="login-form">
             <p class="login-prompt">ДОСТУП К ТЕРМИНАЛУ</p>
             <div class="input-group">
                 <label for="username">ИМЯ ПОЛЬЗОВАТЕЛЯ:</label>
-                <input type="text" id="username" autocomplete="off">
+                <input type="text" id="username" autocomplete="off" spellcheck="false" />
             </div>
             <div class="input-group">
                 <label for="password">ПАРОЛЬ:</label>
-                <input type="password" id="password" autocomplete="off">
+                <input type="password" id="password" autocomplete="off" spellcheck="false" />
             </div>
-            <button id="login-btn">АУТЕНТИФИКАЦИЯ</button>
+            <button id="login-btn" class="btn">АУТЕНТИФИКАЦИЯ</button>
             <p id="login-error" class="error hidden">ДОСТУП ЗАПРЕЩЁН</p>
         </div>
     </div>
 
-    <script src="script.js?v=3"></script>
+    <script src="script.js"></script>
 </body>
 </html>
