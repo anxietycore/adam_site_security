@@ -1,10 +1,23 @@
 // NEURO PIZDEC - Живой нейро-фон A.D.A.M.
 class NeuroBackground {
     constructor() {
+        // ЖЁСТКАЯ ДИАГНОСТИКА - ДОБАВЬ ЭТИ 4 СТРОЧКИ
+        console.log('=== NEURO DEBUG START ===');
         this.canvas = document.getElementById('neuroCanvas');
-        if (!this.canvas) return;
+        console.log('Canvas элемент:', this.canvas);
+        
+        if (!this.canvas) {
+            console.error('❌ Canvas не найден! Ищем #neuroCanvas');
+            return;
+        }
         
         this.ctx = this.canvas.getContext('2d');
+        console.log('Context:', this.ctx);
+        
+        // ВРЕМЕННО: зальём canvas красным чтобы УВИДЕТЬ его
+        this.ctx.fillStyle = 'red';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        console.log('Canvas залит красным - ДОЛЖЕН БЫТЬ ВИДЕН!');
         
         // ПЕРЕНЕСИ this.opts СЮДА, перед resize()
         this.opts = {
@@ -401,7 +414,23 @@ class NeuroData {
         this.screen.y = this.neuro.opts.vanishPoint.y + y * this.screen.scale;
     }
 }
+// Запуск при загрузке
+console.log('NEURO.JS ЗАГРУЖЕН - запускаем NeuroBackground...'); // ДИАГНОСТИКА
 
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM загружен - создаём NeuroBackground'); // ДИАГНОСТИКА
+    const neuro = new NeuroBackground();
+    console.log('NeuroBackground создан:', neuro); // ДИАГНОСТИКА
+});
+
+// Дублирующий запуск на всякий случай
+setTimeout(() => {
+    console.log('Проверка через timeout...');
+    if (!window.neuroInstance) {
+        console.log('Создаём NeuroBackground через timeout');
+        window.neuroInstance = new NeuroBackground();
+    }
+}, 1000);
 // Запуск при загрузке
 document.addEventListener('DOMContentLoaded', () => {
     new NeuroBackground();
