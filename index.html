@@ -9,83 +9,79 @@
   gtag('config', 'G-M30NK9KWVH');
 </script>
 <head>
-  <meta charset="UTF-8">
-  <title>A.D.A.M. // ТЕРМИНАЛ</title>
-  <link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <title>A.D.A.M. // ТЕРМИНАЛ</title>
+    <link rel="stylesheet" href="style.css">
 </head>
-
 <body>
-  <!-- === МОЗГ (ФОН) === -->
-  <canvas id="brainCanvas"></canvas>
-
-  <div class="scanline"></div>
-
-  <!-- НЕЙРО-ИНТЕРФЕЙС A.D.A.M. -->
-  <div class="adam-interface">
-      <canvas id="neuroCanvas"></canvas>
-  </div>
-  
-  <!-- Экран запуска -->
-  <div id="start-screen">
-      <div class="start-message">
-          <div class="logo">
-              <pre>
+    <div class="scanline"></div>
+    <!-- ЭПИЧНЫЙ КОСМИЧЕСКИЙ ПОРТАЛ -->
+<div class="noise">
+    <div class="nebula nebula-1"></div>
+    <div class="nebula nebula-2"></div>
+    <div class="nebula nebula-3"></div>
+    <div class="gravity-lens gravity-lens-1"></div>
+    <div class="gravity-lens gravity-lens-2"></div>
+    <div class="neural-network"></div>
+    <div class="anomaly-1"></div>
+    <div class="anomaly-2"></div>
+    <div class="anomaly-3"></div>
+    <div class="anomaly-4"></div>
+</div>
+    
+    <!-- Экран запуска -->
+    <div id="start-screen">
+        <div class="start-message">
+            <div class="logo">
+                <pre>
     \    _ \    \     \  | 
    _ \   |  |  _ \   |\/ | 
  _/  _\ ___/ _/  _\ _|  _| 
-              </pre>
-          </div>
-          <p>> СИСТЕМА A.D.A.M. ГОТОВА К ЗАПУСКУ</p>
-          <button id="start-btn">ЗАПУСТИТЬ СИСТЕМУ</button>
-      </div>
-  </div>
-  
-  <!-- Экран загрузки -->
-  <div id="boot-screen" class="hidden">
-      <div class="boot-message">
-          <div class="logo">
-              <pre>
+                </pre>
+            </div>
+            <p>> СИСТЕМА A.D.A.M. ГОТОВА К ЗАПУСКУ</p>
+            <button id="start-btn">ЗАПУСТИТЬ СИСТЕМУ</button>
+        </div>
+    </div>
+    
+    <!-- Экран загрузки -->
+    <div id="boot-screen" class="hidden">
+        <div class="boot-message">
+            <div class="logo">
+                <pre>
     \    _ \    \     \  | 
    _ \   |  |  _ \   |\/ | 
  _/  _\ ___/ _/  _\ _|  _| 
-              </pre>
-          </div>
-          <div class="boot-text">
-              <p>> ИНИЦИАЛИЗАЦИЯ ПРОТОКОЛА БЕЗОПАСНОСТИ A.D.A.M...</p>
-              <p>> ЗАГРУЗКА ПОДСИСТЕМЫ VIGIL-9...</p>
-              <p>> ТЕСТ ПАМЯТИ: УСПЕШНО</p>
-              <p>> КРИПТОМОДУЛЬ: АКТИВИРОВАН</p>
-              <p>> ПРЕДУПРЕЖДЕНИЕ: НЕСАНКЦИОНИРОВАННЫЙ ДОСТУП ЗАПРЕЩЁН</p>
-              <p>> СИСТЕМА ГОТОВА</p>
-          </div>
-      </div>
-  </div>
+                </pre>
+            </div>
+            <div class="boot-text">
+                <p>> ИНИЦИАЛИЗАЦИЯ ПРОТОКОЛА БЕЗОПАСНОСТИ A.D.A.M...</p>
+                <p>> ЗАГРУЗКА ПОДСИСТЕМЫ VIGIL-9...</p>
+                <p>> ТЕСТ ПАМЯТИ: УСПЕШНО</p>
+                <p>> КРИПТОМОДУЛЬ: АКТИВИРОВАН</p>
+                <p>> ПРЕДУПРЕЖДЕНИЕ: НЕСАНКЦИОНИРОВАННЫЙ ДОСТУП ЗАПРЕЩЁН</p>
+                <p>> СИСТЕМА ГОТОВА</p>
+            </div>
+        </div>
+    </div>
 
-  <!-- Экран логина -->
-  <div id="login-screen" class="hidden">
-      <div class="login-form">
-          <p class="login-prompt">ДОСТУП К ТЕРМИНАЛУ</p>
-          <div class="input-group">
-              <label for="username">ИМЯ ПОЛЬЗОВАТЕЛЯ:</label>
-              <input type="text" id="username" autocomplete="off">
-          </div>
-          <div class="input-group">
-              <label for="password">ПАРОЛЬ:</label>
-              <input type="password" id="password" autocomplete="off">
-          </div>
-          <button id="login-btn">АУТЕНТИФИКАЦИЯ</button>
-          <p id="login-error" class="error hidden">ДОСТУП ЗАПРЕЩЁН</p>
-      </div>
-  </div>
+    <!-- Экран логина -->
+    <div id="login-screen" class="hidden">
+        <div class="login-form">
+            <p class="login-prompt">ДОСТУП К ТЕРМИНАЛУ</p>
+            <div class="input-group">
+                <label for="username">ИМЯ ПОЛЬЗОВАТЕЛЯ:</label>
+                <input type="text" id="username" autocomplete="off">
+            </div>
+            <div class="input-group">
+                <label for="password">ПАРОЛЬ:</label>
+                <input type="password" id="password" autocomplete="off">
+            </div>
+            <button id="login-btn">АУТЕНТИФИКАЦИЯ</button>
+            <p id="login-error" class="error hidden">ДОСТУП ЗАПРЕЩЁН</p>
+        </div>
+    </div>
 
-  <!-- Основной JS сайта -->
-<script src="script.js"></script>
-
-<!-- Three.js (3D библиотека) -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-
-<!-- Визуальные эффекты -->
-<script src="brain.js"></script>
-<script src="neuro.js"></script>
+    <script src="script.js?v=3"></script>
 </body>
 </html>
