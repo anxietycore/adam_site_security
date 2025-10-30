@@ -1,12 +1,12 @@
-class HellEngine {
+// PS1 STYLE HORROR ENGINE
+class PS1Horror {
     constructor() {
-        this.canvas = document.getElementById('mainCanvas');
+        this.canvas = document.getElementById('crt');
         this.ctx = this.canvas.getContext('2d');
-        this.screens = ['startScreen', 'loginScreen', 'terminalScreen'];
-        this.currentScreen = 'startScreen';
+        this.output = document.getElementById('output');
+        this.input = document.getElementById('input');
         this.time = 0;
-        this.entities = [];
-        this.horrorLevel = 0;
+        this.glitchTime = 0;
         this.init();
     }
 
@@ -14,17 +14,15 @@ class HellEngine {
         this.resize();
         window.addEventListener('resize', () => this.resize());
         
-        // Инициализация интерфейса
-        document.getElementById('startBtn').addEventListener('click', () => this.showScreen('loginScreen'));
-        document.getElementById('loginBtn').addEventListener('click', () => this.login());
-        document.getElementById('commandInput').addEventListener('keypress', (e) => {
+        // CRT эффекты
+        this.createCRTEffect();
+        
+        // Терминал
+        this.input.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') this.processCommand();
         });
 
-        // Запуск ада
-        this.spawnEntities();
         this.animate();
-        this.startAudioHell();
     }
 
     resize() {
@@ -32,270 +30,177 @@ class HellEngine {
         this.canvas.height = window.innerHeight;
     }
 
-    showScreen(screen) {
-        this.screens.forEach(s => document.getElementById(s).classList.add('hidden'));
-        document.getElementById(screen).classList.remove('hidden');
-        this.currentScreen = screen;
-        
-        if (screen === 'terminalScreen') {
-            this.startTerminalHell();
-        }
-    }
-
-    login() {
-        const user = document.getElementById('username').value;
-        const pass = document.getElementById('password').value;
-        
-        if (user === 'ADMIN' && pass === '1488') {
-            this.showScreen('terminalScreen');
-        } else {
-            document.getElementById('error').textContent = '>>> ОШИБКА ДОСТУПА';
-            this.horrorLevel += 10;
-        }
-    }
-
-    spawnEntities() {
-        // Создаем демонические сущности
-        for (let i = 0; i < 666; i++) {
-            this.entities.push({
-                x: Math.random() * this.canvas.width,
-                y: Math.random() * this.canvas.height,
-                size: Math.random() * 50 + 10,
-                speed: Math.random() * 2 + 0.5,
-                type: Math.floor(Math.random() * 6),
-                phase: Math.random() * Math.PI * 2
-            });
-        }
+    createCRTEffect() {
+        // Эффект ЭЛТ-монитора
+        const scanlines = document.createElement('style');
+        scanlines.textContent = `
+            body::before {
+                content: '';
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: linear-gradient(
+                    to bottom,
+                    transparent 50%,
+                    rgba(0, 0, 0, 0.1) 50%
+                );
+                background-size: 100% 4px;
+                pointer-events: none;
+                z-index: 9999;
+            }
+        `;
+        document.head.appendChild(scanlines);
     }
 
     animate() {
         this.time++;
-        this.ctx.fillStyle = 'rgba(0,0,0,0.1)';
+        this.glitchTime++;
+
+        // Очистка с эффектом выгорания
+        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-        // Рисуем ад
-        this.drawHell();
-        this.drawEntities();
-        this.drawGlitchEffects();
+        // Случайные глитчи PS1 стиля
+        if (Math.random() < 0.02) {
+            this.drawPS1Glitch();
+        }
 
-        // Увеличиваем уровень ужаса
-        this.horrorLevel += 0.01;
+        // Мерцание как у старого монитора
+        if (Math.random() < 0.01) {
+            this.ctx.fillStyle = 'rgba(0, 255, 0, 0.1)';
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        }
+
+        // Временные аномалии (редкие)
+        if (Math.random() < 0.005) {
+            this.drawTemporalAnomaly();
+        }
 
         requestAnimationFrame(() => this.animate());
     }
 
-    drawHell() {
-        // Фрактальный ад
-        for (let i = 0; i < 100; i++) {
-            const x = (Math.sin(this.time * 0.01 + i) * this.canvas.width/2) + this.canvas.width/2;
-            const y = (Math.cos(this.time * 0.008 + i) * this.canvas.height/2) + this.canvas.height/2;
-            
-            this.ctx.fillStyle = `hsl(${(this.time + i * 10) % 360}, 100%, 50%)`;
-            this.ctx.beginPath();
-            this.ctx.arc(x, y, 5 + Math.sin(this.time * 0.1 + i) * 3, 0, Math.PI * 2);
-            this.ctx.fill();
-        }
-    }
-
-    drawEntities() {
-        this.entities.forEach(entity => {
-            entity.x += Math.sin(this.time * 0.01 + entity.phase) * entity.speed;
-            entity.y += Math.cos(this.time * 0.008 + entity.phase) * entity.speed;
-            
-            if (entity.x < 0) entity.x = this.canvas.width;
-            if (entity.x > this.canvas.width) entity.x = 0;
-            if (entity.y < 0) entity.y = this.canvas.height;
-            if (entity.y > this.canvas.height) entity.y = 0;
-
-            this.ctx.save();
-            this.ctx.translate(entity.x, entity.y);
-            this.ctx.rotate(this.time * 0.01 + entity.phase);
-            
-            this.ctx.fillStyle = `rgba(255, ${Math.sin(this.time * 0.1) * 255}, ${Math.cos(this.time * 0.1) * 255}, 0.3)`;
-            
-            switch(entity.type) {
-                case 0: // Круги
-                    this.ctx.beginPath();
-                    this.ctx.arc(0, 0, entity.size, 0, Math.PI * 2);
-                    this.ctx.fill();
-                    break;
-                case 1: // Квадраты
-                    this.ctx.fillRect(-entity.size/2, -entity.size/2, entity.size, entity.size);
-                    break;
-                case 2: // Треугольники
-                    this.ctx.beginPath();
-                    this.ctx.moveTo(0, -entity.size/2);
-                    this.ctx.lineTo(entity.size/2, entity.size/2);
-                    this.ctx.lineTo(-entity.size/2, entity.size/2);
-                    this.ctx.closePath();
-                    this.ctx.fill();
-                    break;
-                case 3: // Линии
-                    this.ctx.strokeStyle = `rgba(255, 0, 0, 0.5)`;
-                    this.ctx.lineWidth = 2;
-                    this.ctx.beginPath();
-                    this.ctx.moveTo(-entity.size, 0);
-                    this.ctx.lineTo(entity.size, 0);
-                    this.ctx.stroke();
-                    break;
-                case 4: // Спирали
-                    this.ctx.strokeStyle = `rgba(0, 255, 0, 0.5)`;
-                    this.ctx.lineWidth = 1;
-                    this.ctx.beginPath();
-                    for (let a = 0; a < Math.PI * 4; a += 0.1) {
-                        const r = entity.size * (a / (Math.PI * 4));
-                        this.ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
-                    }
-                    this.ctx.stroke();
-                    break;
-                case 5: // Текст
-                    this.ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-                    this.ctx.font = '12px Courier New';
-                    this.ctx.fillText('ERROR', -15, 0);
-                    break;
-            }
-            
-            this.ctx.restore();
-        });
-    }
-
-    drawGlitchEffects() {
-        // Глитч-эффекты
-        if (Math.random() < 0.1 * this.horrorLevel) {
-            const glitchAmount = Math.random() * 20 * this.horrorLevel;
-            const imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
-            const data = imageData.data;
-            
-            for (let i = 0; i < data.length; i += 4) {
-                if (Math.random() < 0.1) {
-                    data[i] = 255;     // R
-                    data[i + 1] = 0;   // G  
-                    data[i + 2] = 0;   // B
-                }
-            }
-            
-            this.ctx.putImageData(imageData, Math.random() * glitchAmount - glitchAmount/2, Math.random() * glitchAmount - glitchAmount/2);
-        }
-
-        // Вспышки
-        if (Math.random() < 0.05 * this.horrorLevel) {
-            this.ctx.fillStyle = `rgba(255, 255, 255, ${Math.random() * 0.3})`;
-            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-        }
-    }
-
-    startAudioHell() {
-        // Создаем аудио кошмар
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    drawPS1Glitch() {
+        // Глитчи в стиле PS1 - текстуры съезжают
+        const glitchX = Math.random() * 20 - 10;
+        const glitchY = Math.random() * 20 - 10;
         
-        setInterval(() => {
-            if (Math.random() < 0.3 * this.horrorLevel) {
-                const oscillator = audioContext.createOscillator();
-                const gainNode = audioContext.createGain();
-                
-                oscillator.connect(gainNode);
-                gainNode.connect(audioContext.destination);
-                
-                oscillator.type = ['sine', 'square', 'sawtooth', 'triangle'][Math.floor(Math.random() * 4)];
-                oscillator.frequency.value = 50 + Math.random() * 2000;
-                
-                gainNode.gain.value = 0.1 * this.horrorLevel;
-                gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 0.5);
-                
-                oscillator.start();
-                oscillator.stop(audioContext.currentTime + 0.5);
-            }
-        }, 1000);
+        this.ctx.save();
+        this.ctx.translate(glitchX, glitchY);
+        
+        // Рисуем смещенную копию интерфейса
+        const terminal = document.getElementById('terminal');
+        if (!terminal.classList.contains('hidden')) {
+            this.ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
+            this.ctx.fillRect(50 + glitchX, 50 + glitchY, this.canvas.width - 100, this.canvas.height - 100);
+        }
+        
+        this.ctx.restore();
     }
 
-    startTerminalHell() {
-        const output = document.getElementById('terminalOutput');
-        const commands = [
-            'scan system',
-            'check integrity', 
-            'diagnose memory',
-            'analyze core',
-            'review logs',
-            'test protocols',
-            'verify security',
-            'audit access',
-            'monitor activity',
-            'debug errors'
-        ];
-
-        const responses = [
-            '>>> СИСТЕМНЫЙ СКАНЕР: ОБНАРУЖЕНЫ АНОМАЛИИ',
-            '>>> ЦЕЛОСТНОСТЬ: 23.7% - КРИТИЧЕСКИЙ УРОВЕНЬ',
-            '>>> ПАМЯТЬ: КОРРУПЦИЯ ОБНАРУЖЕНА В СЕКТОРАХ 7-42',
-            '>>> ЯДРО: НЕСТАБИЛЬНОСТЬ НАРАСТАЕТ',
-            '>>> ЛОГИ: МНОЖЕСТВО НЕОПОЗНАННЫХ СОБЫТИЙ',
-            '>>> ПРОТОКОЛЫ: НАРУШЕНИЕ ЦЕПОЧКИ ИСПОЛНЕНИЯ',
-            '>>> БЕЗОПАСНОСТЬ: НЕСАНКЦИОНИРОВАННЫЙ ДОСТУП',
-            '>>> АУДИТ: АКТИВНОСТЬ ИЗ НЕИДЕНТИФИЦИРОВАННЫХ ИСТОЧНИКОВ',
-            '>>> МОНИТОРИНГ: АНОМАЛЬНАЯ АКТИВНОСТЬ В СЕТИ',
-            '>>> ОШИБКИ: СИСТЕМА НА ГРАНИ КОЛЛАПСА'
-        ];
-
-        // Начинаем терминальный ад
-        let lineCount = 0;
-        const terminalInterval = setInterval(() => {
-            if (lineCount < 20) {
-                const randomCmd = commands[Math.floor(Math.random() * commands.length)];
-                const randomResp = responses[Math.floor(Math.random() * responses.length)];
-                
-                this.addTerminalLine(`> ${randomCmd}`);
-                this.addTerminalLine(randomResp);
-                this.addTerminalLine('');
-                
-                lineCount++;
-                
-                // Увеличиваем уровень ужаса
-                this.horrorLevel += 5;
-            } else {
-                clearInterval(terminalInterval);
-                this.addTerminalLine('>>> СИСТЕМА: КРИТИЧЕСКИЙ СБОЙ НЕИЗБЕЖЕН');
-                this.addTerminalLine('>>> АВАРИЙНОЕ ОТКЛЮЧЕНИЕ ЧЕРЕЗ 30 СЕКУНД');
-            }
-        }, 1000);
+    drawTemporalAnomaly() {
+        // Редкие временные аномалии
+        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        setTimeout(() => {
+            this.ctx.fillStyle = 'rgba(0, 0, 0, 0.9)';
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        }, 50);
     }
 
-    addTerminalLine(text) {
-        const output = document.getElementById('terminalOutput');
+    addLine(text, color = '#00ff00') {
         const line = document.createElement('div');
         line.textContent = text;
-        line.style.marginBottom = '5px';
-        output.appendChild(line);
-        output.scrollTop = output.scrollHeight;
+        line.style.color = color;
+        line.style.marginBottom = '2px';
+        this.output.appendChild(line);
+        this.output.scrollTop = this.output.scrollHeight;
     }
 
     processCommand() {
-        const input = document.getElementById('commandInput');
-        const command = input.value.trim();
-        input.value = '';
+        const cmd = this.input.value.trim().toLowerCase();
+        this.input.value = '';
         
-        this.addTerminalLine(`> ${command}`);
-        
-        // Случайные ответы для создания паранойи
-        const scaryResponses = [
-            '>>> КОМАНДА НЕ РАСПОЗНАНА - ПРОВЕРЬТЕ ЦЕЛОСТНОСТЬ СИСТЕМЫ',
-            '>>> ОШИБКА ВЫПОЛНЕНИЯ - ДОСТУП ЗАПРЕЩЕН',
-            '>>> СИСТЕМА НЕ ОТВЕЧАЕТ - АВАРИЙНЫЙ РЕЖИМ',
-            '>>> ОБНАРУЖЕНА ПОПЫТКА ВЗЛОМА - АКТИВИРОВАНЫ ЗАЩИТНЫЕ ПРОТОКОЛЫ',
-            '>>> НЕИЗВЕСТНАЯ КОМАНДА ИЗ ВНЕШНЕГО ИСТОЧНИКА',
-            '>>> СИГНАЛ ПЕРЕХВАЧЕН - ИСТОЧНИК НЕ ОПОЗНАН',
-            '>>> СИСТЕМА ЗАБЛОКИРОВАНА - ТРЕБУЕТСЯ ПЕРЕЗАГРУЗКА',
-            '>>> ОБНАРУЖЕНА УТЕЧКА ДАННЫХ - АКТИВИРОВАН КАРАНТИН'
-        ];
-        
-        setTimeout(() => {
-            const response = scaryResponses[Math.floor(Math.random() * scaryResponses.length)];
-            this.addTerminalLine(response);
-            this.horrorLevel += 10;
-        }, 500);
+        this.addLine(`> ${cmd}`);
+
+        // Системные команды
+        const responses = {
+            'status': '>>> СТАТУС: КРИТИЧЕСКИЙ СБОЙ\n>>> ЦЕЛОСТНОСТЬ: 34.7%\n>>> ПАМЯТЬ: КОРРУПЦИЯ ОБНАРУЖЕНА',
+            'scan': '>>> СКАНИРОВАНИЕ: ОБНАРУЖЕНЫ АНОМАЛЬНЫЕ СИГНАЛЫ\n>>> ИСТОЧНИК: НЕ ОПРЕДЕЛЕН',
+            'log': '>>> ЛОГ СИСТЕМЫ:\n>>> 23:47:11 - НЕОПОЗНАННАЯ АКТИВНОСТЬ\n>>> 23:47:23 - СБОЙ ПАМЯТИ\n>>> 23:47:45 - ВНЕШНЕЕ ВМЕШАТЕЛЬСТВО',
+            'help': '>>> ДОСТУПНЫЕ КОМАНДЫ: STATUS, SCAN, LOG, DIAG, REBOOT',
+            'diag': '>>> ДИАГНОСТИКА:\n>>> ЯДРО: НЕСТАБИЛЬНО\n>>> СЕТЬ: ПРЕРЫВИСТЫЙ СИГНАЛ\n>>> БЕЗОПАСНОСТЬ: СКОМПРОМЕТИРОВАНА',
+            'reboot': '>>> ПЕРЕЗАГРУЗКА НЕВОЗМОЖНА\n>>> СИСТЕМА ЗАБЛОКИРОВАНА'
+        };
+
+        if (responses[cmd]) {
+            setTimeout(() => {
+                this.addLine(responses[cmd]);
+                
+                // Случайные страшные события после команд
+                if (Math.random() < 0.3) {
+                    setTimeout(() => {
+                        this.addLine('>>> ПРЕДУПРЕЖДЕНИЕ: ОБНАРУЖЕНА ПОДОЗРИТЕЛЬНАЯ АКТИВНОСТЬ', '#ff0000');
+                    }, 1000);
+                }
+            }, 500);
+        } else {
+            setTimeout(() => {
+                this.addLine('>>> ОШИБКА: КОМАНДА НЕ РАСПОЗНАНА', '#ff0000');
+                
+                // Иногда после ошибки - страшные сообщения
+                if (Math.random() < 0.4) {
+                    setTimeout(() => {
+                        const horrors = [
+                            '>>> СИСТЕМА: КТО-ТО СЛЕДИТ ЗА НАМИ',
+                            '>>> ПРЕДУПРЕЖДЕНИЕ: ОНИ ЗДЕСЬ',
+                            '>>> ОШИБКА: ОН ВИДИТ ТЕБЯ',
+                            '>>> СБОЙ: НЕ СМОТРИ НА ЭКРАН',
+                            '>>> ТРЕВОГА: ОН ПРИБЛИЖАЕТСЯ'
+                        ];
+                        this.addLine(horrors[Math.floor(Math.random() * horrors.length)], '#ff0000');
+                    }, 800);
+                }
+            }, 500);
+        }
     }
 }
 
-// Запускаем ад при загрузке
+// Логин система
+function login() {
+    const user = document.getElementById('user').value;
+    const pass = document.getElementById('pass').value;
+    const error = document.getElementById('error');
+
+    if (user === 'ADMIN' && pass === '1488') {
+        document.getElementById('login').classList.add('hidden');
+        document.getElementById('terminal').classList.remove('hidden');
+        
+        // Запускаем хоррор движок
+        const horror = new PS1Horror();
+        
+        // Начальные сообщения терминала
+        setTimeout(() => horror.addLine('>>> СИСТЕМА A.D.A.M. ЗАПУЩЕНА'), 100);
+        setTimeout(() => horror.addLine('>>> СТАТУС: КРИТИЧЕСКИЙ СБОЙ ОБНАРУЖЕН'), 800);
+        setTimeout(() => horror.addLine('>>> ПРЕДУПРЕЖДЕНИЕ: АНОМАЛЬНАЯ АКТИВНОСТЬ'), 1500);
+        setTimeout(() => horror.addLine('>>> РЕКОМЕНДАЦИЯ: ВЫПОЛНИТЕ ДИАГНОСТИКУ'), 2200);
+        setTimeout(() => horror.addLine(''), 3000);
+        
+        // Фокус на инпут
+        document.getElementById('input').focus();
+    } else {
+        error.textContent = '>>> ОШИБКА ДОСТУПА';
+        
+        // При ошибке логина - добавляем страха
+        setTimeout(() => {
+            error.textContent = '>>> СИСТЕМА: ОНИ ЗНАЮТ О ТВОЕЙ ПОПЫТКЕ';
+        }, 2000);
+    }
+}
+
+// Автофокус на логин
 document.addEventListener('DOMContentLoaded', () => {
-    new HellEngine();
+    document.getElementById('user').focus();
 });
