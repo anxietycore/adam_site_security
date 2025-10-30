@@ -9,71 +9,81 @@
   gtag('config', 'G-M30NK9KWVH');
 </script>
 <head>
-    <meta charset="UTF-8">
-    <title>A.D.A.M. // ТЕРМИНАЛ</title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <title>A.D.A.M. // ТЕРМИНАЛ</title>
+  <link rel="stylesheet" href="style.css">
+
+  <!-- Подключаем движок 3D -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.min.js"></script>
 </head>
+
 <body>
-    <div class="scanline"></div>
-    <!-- НЕЙРО-ИНТЕРФЕЙС A.D.A.M. -->
-<div class="adam-interface">
-    <canvas id="neuroCanvas"></canvas>
-</div>
-    
-    <!-- Экран запуска -->
-    <div id="start-screen">
-        <div class="start-message">
-            <div class="logo">
-                <pre>
+  <!-- === МОЗГ (ФОН) === -->
+  <canvas id="brainCanvas"></canvas>
+
+  <div class="scanline"></div>
+
+  <!-- НЕЙРО-ИНТЕРФЕЙС A.D.A.M. -->
+  <div class="adam-interface">
+      <canvas id="neuroCanvas"></canvas>
+  </div>
+  
+  <!-- Экран запуска -->
+  <div id="start-screen">
+      <div class="start-message">
+          <div class="logo">
+              <pre>
     \    _ \    \     \  | 
    _ \   |  |  _ \   |\/ | 
  _/  _\ ___/ _/  _\ _|  _| 
-                </pre>
-            </div>
-            <p>> СИСТЕМА A.D.A.M. ГОТОВА К ЗАПУСКУ</p>
-            <button id="start-btn">ЗАПУСТИТЬ СИСТЕМУ</button>
-        </div>
-    </div>
-    
-    <!-- Экран загрузки -->
-    <div id="boot-screen" class="hidden">
-        <div class="boot-message">
-            <div class="logo">
-                <pre>
+              </pre>
+          </div>
+          <p>> СИСТЕМА A.D.A.M. ГОТОВА К ЗАПУСКУ</p>
+          <button id="start-btn">ЗАПУСТИТЬ СИСТЕМУ</button>
+      </div>
+  </div>
+  
+  <!-- Экран загрузки -->
+  <div id="boot-screen" class="hidden">
+      <div class="boot-message">
+          <div class="logo">
+              <pre>
     \    _ \    \     \  | 
    _ \   |  |  _ \   |\/ | 
  _/  _\ ___/ _/  _\ _|  _| 
-                </pre>
-            </div>
-            <div class="boot-text">
-                <p>> ИНИЦИАЛИЗАЦИЯ ПРОТОКОЛА БЕЗОПАСНОСТИ A.D.A.M...</p>
-                <p>> ЗАГРУЗКА ПОДСИСТЕМЫ VIGIL-9...</p>
-                <p>> ТЕСТ ПАМЯТИ: УСПЕШНО</p>
-                <p>> КРИПТОМОДУЛЬ: АКТИВИРОВАН</p>
-                <p>> ПРЕДУПРЕЖДЕНИЕ: НЕСАНКЦИОНИРОВАННЫЙ ДОСТУП ЗАПРЕЩЁН</p>
-                <p>> СИСТЕМА ГОТОВА</p>
-            </div>
-        </div>
-    </div>
+              </pre>
+          </div>
+          <div class="boot-text">
+              <p>> ИНИЦИАЛИЗАЦИЯ ПРОТОКОЛА БЕЗОПАСНОСТИ A.D.A.M...</p>
+              <p>> ЗАГРУЗКА ПОДСИСТЕМЫ VIGIL-9...</p>
+              <p>> ТЕСТ ПАМЯТИ: УСПЕШНО</p>
+              <p>> КРИПТОМОДУЛЬ: АКТИВИРОВАН</p>
+              <p>> ПРЕДУПРЕЖДЕНИЕ: НЕСАНКЦИОНИРОВАННЫЙ ДОСТУП ЗАПРЕЩЁН</p>
+              <p>> СИСТЕМА ГОТОВА</p>
+          </div>
+      </div>
+  </div>
 
-    <!-- Экран логина -->
-    <div id="login-screen" class="hidden">
-        <div class="login-form">
-            <p class="login-prompt">ДОСТУП К ТЕРМИНАЛУ</p>
-            <div class="input-group">
-                <label for="username">ИМЯ ПОЛЬЗОВАТЕЛЯ:</label>
-                <input type="text" id="username" autocomplete="off">
-            </div>
-            <div class="input-group">
-                <label for="password">ПАРОЛЬ:</label>
-                <input type="password" id="password" autocomplete="off">
-            </div>
-            <button id="login-btn">АУТЕНТИФИКАЦИЯ</button>
-            <p id="login-error" class="error hidden">ДОСТУП ЗАПРЕЩЁН</p>
-        </div>
-    </div>
+  <!-- Экран логина -->
+  <div id="login-screen" class="hidden">
+      <div class="login-form">
+          <p class="login-prompt">ДОСТУП К ТЕРМИНАЛУ</p>
+          <div class="input-group">
+              <label for="username">ИМЯ ПОЛЬЗОВАТЕЛЯ:</label>
+              <input type="text" id="username" autocomplete="off">
+          </div>
+          <div class="input-group">
+              <label for="password">ПАРОЛЬ:</label>
+              <input type="password" id="password" autocomplete="off">
+          </div>
+          <button id="login-btn">АУТЕНТИФИКАЦИЯ</button>
+          <p id="login-error" class="error hidden">ДОСТУП ЗАПРЕЩЁН</p>
+      </div>
+  </div>
 
-    <script src="script.js?v=3"></script>
-    <script src="neuro.js"></script>
+  <!-- === Скрипты === -->
+  <script src="script.js?v=3"></script>
+  <script src="neuro.js"></script>
+  <script type="module" src="brain.js"></script> <!-- добавили сюда -->
 </body>
 </html>
