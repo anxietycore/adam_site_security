@@ -244,7 +244,6 @@ const VALID_CREDENTIALS = { username: "qq", password: "ww" };
 document.addEventListener('DOMContentLoaded', () => {
     let visits = parseInt(localStorage.getItem('adam_visits')) || 0;
     localStorage.setItem('adam_visits', ++visits);
-    console.log(\`Посещений A.D.A.M.: \${visits}\`);
 
     const startBtn = document.getElementById('start-btn');
     if (startBtn) startBtn.addEventListener('click', startBootSequence);
