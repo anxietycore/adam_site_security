@@ -16,8 +16,12 @@
 <body>
     <!-- Fullscreen WebGL canvas (фон) -->
     <canvas id="shader-canvas" aria-hidden="true"></canvas>
+    
     <div class="scanline"></div>
 
+    <!-- Содержимое сайта (оставлено как у тебя) -->
+    <!-- ЭПИЧНЫЙ КОСМИЧЕСКИЙ ПОРТАЛ — теперь удалённые декоративные div'ы, фон рисует шейдер -->
+    
     <!-- Экран запуска -->
     <div id="start-screen">
         <div class="start-message">
@@ -32,7 +36,7 @@
             <button id="start-btn">ЗАПУСТИТЬ СИСТЕМУ</button>
         </div>
     </div>
-
+    
     <!-- Экран загрузки -->
     <div id="boot-screen" class="hidden">
         <div class="boot-message">
@@ -71,12 +75,8 @@
         </div>
     </div>
 
-    <!-- Терминал (изначально скрыт) -->
-    <div id="terminal" class="hidden"></div>
-
     <!-- Подключаем основной скрипт (включает WebGL + логику интерфейса) -->
     <script src="background.js"></script>
     <script src="script.js"></script>
-    <script src="terminal.js"></script>
 </body>
 </html>
