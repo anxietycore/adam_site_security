@@ -5,8 +5,9 @@ uniform float iTime;
 uniform vec4 iMouse;
 
 #define S(a,b,t) smoothstep(a,b,t)
-#define NUM_LAYERS 3.0
+#define NUM_LAYERS 3.0  // ЕДИНСТВЕННОЕ ИЗМЕНЕНИЕ - было 4.0
 
+// ВСЁ ОСТАЛЬНОЕ КАК В ОРИГИНАЛЕ
 float N21(vec2 p){
     vec3 a = fract(vec3(p.xyx)*vec3(613.897,553.453,80.098));
     a += dot(a,a.yzx+88.76);
@@ -18,7 +19,7 @@ vec2 GetPos(vec2 id, vec2 offs, float t){
     float n1 = fract(n*0.7);
     float n2 = fract(n*79.7);
     float a = t+n;
-    return offs + vec2(sin(a*n1), cos(a*n2))*0.4; // УМЕНЬШЕНА АМПЛИТУДА
+    return offs + vec2(sin(a*n1), cos(a*n2))*0.5;
 }
 
 float df_line(vec2 a, vec2 b, vec2 p){
@@ -29,7 +30,7 @@ float df_line(vec2 a, vec2 b, vec2 p){
 }
 
 float line(vec2 a, vec2 b, vec2 uv){
-    float r1 = 0.004;
+    float r1 = 0.005;
     float r2 = 0.0001;
     float d = df_line(a,b,uv);
     float d2 = length(a-b);
@@ -55,26 +56,25 @@ float NetLayer(vec2 st, float n, float t){
 
     float m = 0.0;
     float sparkle = 0.0;
-    
     for (int i = 0; i < 9; i++) {
         vec2 pt = p[i];
         m += line(p[4], pt, st);
         float d = length(st - pt);
-        
-        // УПРОЩЁННЫЙ SPARKLE
-        float s = 0.0015/(d*d + 0.001);
-        float pulse = sin(t + n + float(i)) * 0.3 + 0.7;
+        float s = 0.002/(d*d + 0.0001);
+        s *= S(1.0,0.1,d);
+        float pulse = sin((fract(pt.x)+fract(pt.y)+t)*5.0)*0.4+0.6;
+        pulse = pow(pulse,20.0);
         s *= pulse;
         sparkle += s;
     }
 
-    // ВОССТАНАВЛИВАЕМ ВСЕ ЛИНИИ
     m += line(p[1],p[3],st);
     m += line(p[1],p[5],st);
     m += line(p[7],p[5],st);
     m += line(p[7],p[3],st);
 
-    float sPhase = sin(t + n) * 0.3 + 0.7;
+    float sPhase = (sin(t + n) + sin(t * 0.1)) * 0.25 + 0.5;
+    sPhase += pow(sin(t * 0.1) * 0.5 + 0.5, 50.0) * 5.0;
     m += sparkle * sPhase;
 
     return m;
@@ -85,7 +85,7 @@ void main(){
     float aspect = min(iResolution.x, iResolution.y);
     vec2 uv = (fragCoord - iResolution.xy * 0.5) / aspect;
     vec2 M = iMouse.xy / iResolution.xy - 0.5;
-    float t = iTime * 0.0003; // ЗАМЕДЛЕНА АНИМАЦИЯ
+    float t = iTime * 0.0005;
 
     float s = sin(t);
     float c = cos(t);
@@ -96,15 +96,15 @@ void main(){
     float m = 0.0;
     for(float i = 0.0; i < 1.0; i += 1.0 / NUM_LAYERS){
         float z = fract(t + i);
-        // БОЛЬШЕ OVERLAP МЕЖДУ СЛОЯМИ
-        float size = mix(25.0, 5.0, z);
-        float fade = S(0.0, 0.01, z) * S(0.0, 0.15, z);
+        float size = mix(15.0, 0.0, z);
+        float fade = S(0.0, 0.006, z) * S(0.0, 0.08, z);
         m += fade * NetLayer(st * size - M * z, i, iTime);
     }
 
-    vec3 baseCol = vec3(0.7, 0.7, 0.8);
+    vec3 baseCol = vec3(s, cos(t * 0.1), -sin(t * 0.14)) * 0.3 + 0.3;
     vec3 col = baseCol * m;
-    col *= 2.2;
+    col *= 1.0;
+    col *= 2.0;
     col += vec3(0.12, 0.12, 0.15);
     gl_FragColor = vec4(col, 1.0);
 }
