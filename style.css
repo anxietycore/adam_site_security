@@ -39,9 +39,6 @@ body {
     z-index: 10;
 }
 
-/* Сохранены остальные стили твоего сайта (скороченный / оригинал) */
-
-/* (Ниже — твои существующие стили, немного сокращены только для читабельности) */
 
 .scanline {
     /* если нужны scanline эффекты — можно добавить */
@@ -57,7 +54,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0,0,0,0.85); /* чуть прозрачный, чтобы фон видно было */
+    background: rgba(0,0,0,0.9); /* чуть прозрачный, чтобы фон видно было */
     z-index: 20;
 }
 
@@ -131,7 +128,7 @@ body {
     text-align: center;
     border: 1px solid #00FF41;
     padding: 30px;
-    background: rgba(0, 0, 0, 0.85);
+    background: rgba(0, 0, 0, 0.9);
 }
 
 .login-prompt {
@@ -197,7 +194,7 @@ body {
     padding: 20px;
     height: 100vh;
     overflow-y: auto;
-    background: transparent; /* фон обеспечивает шейдер */
+    background: rgba(0, 0, 0, 0.9); /* фон обеспечивает шейдер */
 }
 
 .output {
