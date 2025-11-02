@@ -10,7 +10,7 @@
     width: "100vw",
     height: "100vh",
     pointerEvents: "none",
-    zIndex: "9999" // под интерфейсом, над WebGL
+    zIndex: "1" // под интерфейсом, над WebGL
   });
   document.body.appendChild(canvas);
 
