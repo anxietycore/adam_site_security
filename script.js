@@ -1,12 +1,10 @@
 // script.js
 // Логика интерфейса A.D.A.M. (главная страница)
-
 const VALID_CREDENTIALS = { username: "qq", password: "ww" };
 
 document.addEventListener('DOMContentLoaded', () => {
     let visits = parseInt(localStorage.getItem('adam_visits')) || 0;
     localStorage.setItem('adam_visits', ++visits);
-
     const startBtn = document.getElementById('start-btn');
     if (startBtn) startBtn.addEventListener('click', startBootSequence);
 });
@@ -16,7 +14,6 @@ function startBootSequence() {
     const bootScreen = document.getElementById('boot-screen');
     if (startScreen) startScreen.classList.add('hidden');
     if (bootScreen) bootScreen.classList.remove('hidden');
-
     const bootTexts = document.querySelectorAll('#boot-screen .boot-text p');
     let i = 0;
     (function next() {
@@ -40,14 +37,22 @@ function login() {
     const u = document.getElementById('username')?.value;
     const p = document.getElementById('password')?.value;
     const err = document.getElementById('login-error');
-
     if (u === VALID_CREDENTIALS.username && p === VALID_CREDENTIALS.password) {
         err.textContent = 'ДОСТУП РАЗРЕШЁН';
         err.style.color = '#00FF41';
         err.classList.remove('hidden');
         document.body.style.transition = 'opacity 0.8s ease-in-out';
         document.body.style.opacity = '0';
-        setTimeout(() => window.location.href = 'terminal.html', 800);
+        setTimeout(() => {
+            document.body.style.opacity = '1';
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('terminal').classList.remove('hidden');
+            if (typeof initTerminal === 'function') {
+                initTerminal();
+            } else {
+                console.error('Функция initTerminal не найдена');
+            }
+        }, 800);
     } else {
         err.textContent = 'ДОСТУП ЗАПРЕЩЁН';
         err.style.color = '#FF0000';
