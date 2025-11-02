@@ -1,5 +1,9 @@
-// screenGlass.js optimized
+window.addEventListener('DOMContentLoaded',()=>{
+    initGlass();
+});
 
+function initGlass(){
+    
 const c = document.createElement('canvas');
 c.id = "glassFX";
 document.body.appendChild(c);
@@ -71,3 +75,6 @@ setTimeout(drawStatic,200);
 
 // update noise ~5fps
 setInterval(addNoise,200);
+
+}
+
