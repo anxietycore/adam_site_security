@@ -109,7 +109,8 @@
 
     void main(){
         vec2 fragCoord = vUv * iResolution.xy;
-        vec2 uv = (fragCoord - iResolution.xy * 0.5) / iResolution.y;
+        float aspect = min(iResolution.x, iResolution.y);
+        vec2 uv = (fragCoord - iResolution.xy * 0.5) / aspect;
         vec2 M = iMouse.xy / iResolution.xy - 0.5;
         float t = iTime * 0.0005;
 
