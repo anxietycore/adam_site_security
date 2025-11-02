@@ -130,7 +130,7 @@
 
         vec3 baseCol = vec3(s, cos(t * 0.1), -sin(t * 0.14)) * 0.3 + 0.3;
         vec3 col = baseCol * m;
-        col *= 1.0 - dot(uv, uv);
+        col *= 1.0;
         col *= 2.0;
         col += vec3(0.12, 0.12, 0.15);
         gl_FragColor = vec4(col, 1.0);
