@@ -1,23 +1,20 @@
 // script.js
-// 2025-11-02 — Полностью рабочая версия: vanilla WebGL фон + логика A.D.A.M.
+// 2025-11-02 — Финальная оптимизированная версия: WebGL фон + логика A.D.A.M.
 
-// ----------------------
-// ЧАСТЬ A: WebGL background (vanilla)
-// ----------------------
 (() => {
     const canvas = document.getElementById('shader-canvas');
     if (!canvas) {
-        console.warn('Canvas #shader-canvas не найден. Фон не будет отображаться.');
+        console.warn('Canvas #shader-canvas не найден — фон не отображается.');
         return;
     }
 
     const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
     if (!gl) {
-        console.warn('WebGL не поддерживается в этом браузере — фон не будет отображаться.');
+        console.warn('WebGL не поддерживается — фон отключён.');
         return;
     }
 
-    // Vertex shader (full-screen quad)
+    // ---------- ВЕРШИННЫЙ ШЕЙДЕР ----------
     const vertSrc = `
     attribute vec2 aPosition;
     varying vec2 vUv;
@@ -27,7 +24,7 @@
     }
     `;
 
-    // Safe fragment shader (адаптирован, без динамической индексации)
+    // ---------- ФРАГМЕНТНЫЙ ШЕЙДЕР ----------
     const fragSrc = `
     precision mediump float;
     varying vec2 vUv;
@@ -73,136 +70,35 @@
         vec2 id = floor(st)+n;
         st = fract(st)-0.5;
 
-        // явно вычисляем 9 точек (чтобы избежать динамической индексации)
-        vec2 p0 = GetPos(id, vec2(-1.0,-1.0), t);
-        vec2 p1 = GetPos(id, vec2( 0.0,-1.0), t);
-        vec2 p2 = GetPos(id, vec2( 1.0,-1.0), t);
-        vec2 p3 = GetPos(id, vec2(-1.0, 0.0), t);
-        vec2 p4 = GetPos(id, vec2( 0.0, 0.0), t);
-        vec2 p5 = GetPos(id, vec2( 1.0, 0.0), t);
-        vec2 p6 = GetPos(id, vec2(-1.0, 1.0), t);
-        vec2 p7 = GetPos(id, vec2( 0.0, 1.0), t);
-        vec2 p8 = GetPos(id, vec2( 1.0, 1.0), t);
-
-        // Массив для удобства чтения (индексация в цикле с константным индексом int i)
-        vec2 pts0 = p0;
-        vec2 pts1 = p1;
-        vec2 pts2 = p2;
-        vec2 pts3 = p3;
-        vec2 pts4 = p4;
-        vec2 pts5 = p5;
-        vec2 pts6 = p6;
-        vec2 pts7 = p7;
-        vec2 pts8 = p8;
+        vec2 p[9];
+        p[0] = GetPos(id, vec2(-1.0,-1.0), t);
+        p[1] = GetPos(id, vec2( 0.0,-1.0), t);
+        p[2] = GetPos(id, vec2( 1.0,-1.0), t);
+        p[3] = GetPos(id, vec2(-1.0, 0.0), t);
+        p[4] = GetPos(id, vec2( 0.0, 0.0), t);
+        p[5] = GetPos(id, vec2( 1.0, 0.0), t);
+        p[6] = GetPos(id, vec2(-1.0, 1.0), t);
+        p[7] = GetPos(id, vec2( 0.0, 1.0), t);
+        p[8] = GetPos(id, vec2( 1.0, 1.0), t);
 
         float m = 0.0;
         float sparkle = 0.0;
-
-        // Перебираем вручную — это работает стабильно
-        {
-            vec2 p = pts0;
-            m += line(p4,p,st);
-            float d = length(st - p);
+        for (int i = 0; i < 9; i++) {
+            vec2 pt = p[i];
+            m += line(p[4], pt, st);
+            float d = length(st - pt);
             float s = 0.002/(d*d + 0.0001);
             s *= S(1.0,0.1,d);
-            float pulse = sin((fract(p.x)+fract(p.y)+t)*5.0)*0.4+0.6;
-            pulse = pow(pulse,20.0);
-            s *= pulse;
-            sparkle += s;
-        }
-        {
-            vec2 p = pts1;
-            m += line(p4,p,st);
-            float d = length(st - p);
-            float s = 0.002/(d*d + 0.0001);
-            s *= S(1.0,0.1,d);
-            float pulse = sin((fract(p.x)+fract(p.y)+t)*5.0)*0.4+0.6;
-            pulse = pow(pulse,20.0);
-            s *= pulse;
-            sparkle += s;
-        }
-        {
-            vec2 p = pts2;
-            m += line(p4,p,st);
-            float d = length(st - p);
-            float s = 0.002/(d*d + 0.0001);
-            s *= S(1.0,0.1,d);
-            float pulse = sin((fract(p.x)+fract(p.y)+t)*5.0)*0.4+0.6;
-            pulse = pow(pulse,20.0);
-            s *= pulse;
-            sparkle += s;
-        }
-        {
-            vec2 p = pts3;
-            m += line(p4,p,st);
-            float d = length(st - p);
-            float s = 0.002/(d*d + 0.0001);
-            s *= S(1.0,0.1,d);
-            float pulse = sin((fract(p.x)+fract(p.y)+t)*5.0)*0.4+0.6;
-            pulse = pow(pulse,20.0);
-            s *= pulse;
-            sparkle += s;
-        }
-        {
-            vec2 p = pts4;
-            m += line(p4,p,st);
-            float d = length(st - p);
-            float s = 0.002/(d*d + 0.0001);
-            s *= S(1.0,0.1,d);
-            float pulse = sin((fract(p.x)+fract(p.y)+t)*5.0)*0.4+0.6;
-            pulse = pow(pulse,20.0);
-            s *= pulse;
-            sparkle += s;
-        }
-        {
-            vec2 p = pts5;
-            m += line(p4,p,st);
-            float d = length(st - p);
-            float s = 0.002/(d*d + 0.0001);
-            s *= S(1.0,0.1,d);
-            float pulse = sin((fract(p.x)+fract(p.y)+t)*5.0)*0.4+0.6;
-            pulse = pow(pulse,20.0);
-            s *= pulse;
-            sparkle += s;
-        }
-        {
-            vec2 p = pts6;
-            m += line(p4,p,st);
-            float d = length(st - p);
-            float s = 0.002/(d*d + 0.0001);
-            s *= S(1.0,0.1,d);
-            float pulse = sin((fract(p.x)+fract(p.y)+t)*5.0)*0.4+0.6;
-            pulse = pow(pulse,20.0);
-            s *= pulse;
-            sparkle += s;
-        }
-        {
-            vec2 p = pts7;
-            m += line(p4,p,st);
-            float d = length(st - p);
-            float s = 0.002/(d*d + 0.0001);
-            s *= S(1.0,0.1,d);
-            float pulse = sin((fract(p.x)+fract(p.y)+t)*5.0)*0.4+0.6;
-            pulse = pow(pulse,20.0);
-            s *= pulse;
-            sparkle += s;
-        }
-        {
-            vec2 p = pts8;
-            m += line(p4,p,st);
-            float d = length(st - p);
-            float s = 0.002/(d*d + 0.0001);
-            s *= S(1.0,0.1,d);
-            float pulse = sin((fract(p.x)+fract(p.y)+t)*5.0)*0.4+0.6;
+            float pulse = sin((fract(pt.x)+fract(pt.y)+t)*5.0)*0.4+0.6;
             pulse = pow(pulse,20.0);
             s *= pulse;
             sparkle += s;
         }
 
-        m += line(p1,p3,st);
-        m += line(p1,p5,st);
-        m += line(p7,p5,st);
-        m += line(p7,p3,st);
+        m += line(p[1],p[3],st);
+        m += line(p[1],p[5],st);
+        m += line(p[7],p[5],st);
+        m += line(p[7],p[3],st);
 
         float sPhase = (sin(t + n) + sin(t * 0.1)) * 0.25 + 0.5;
         sPhase += pow(sin(t * 0.1) * 0.5 + 0.5, 50.0) * 5.0;
@@ -231,24 +127,23 @@
             m += fade * NetLayer(st * size - M * z, i, iTime);
         }
 
-        vec3 baseCol = vec3(s, cos(t * 0.1), -sin(t * 0.14)) * 0.1 + 0.1;
+        // ✨ ЯРКОСТЬ УВЕЛИЧЕНА ×3
+        vec3 baseCol = vec3(s, cos(t * 0.1), -sin(t * 0.14)) * 0.3 + 0.3;
         vec3 col = baseCol * m;
         col *= 1.0 - dot(uv, uv);
         col *= 2.0;
-        col += vec3(0.05, 0.05, 0.08);
+        col += vec3(0.12, 0.12, 0.15);
         gl_FragColor = vec4(col, 1.0);
     }
     `;
 
+    // ---------- КОМПИЛЯЦИЯ ----------
     function compileShader(src, type) {
         const sh = gl.createShader(type);
         gl.shaderSource(sh, src);
         gl.compileShader(sh);
         if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
             console.error('Shader compile error:', gl.getShaderInfoLog(sh));
-            // не печатаем очень длинный шейдер полностью — только короткий превью
-            console.log('--- shader preview ---\n' + src.slice(0, 500) + '\n--- end preview ---');
-            gl.deleteShader(sh);
             return null;
         }
         return sh;
@@ -268,205 +163,135 @@
     }
     gl.useProgram(program);
 
-    // Fullscreen quad
+    // ---------- ПОЛНОЭКРАННЫЙ КВАД ----------
     const posLoc = gl.getAttribLocation(program, 'aPosition');
     const buf = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buf);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-        -1, -1,
-         1, -1,
-        -1,  1,
-        -1,  1,
-         1, -1,
-         1,  1
+        -1, -1,  1, -1,  -1,  1,
+        -1,  1,  1, -1,   1,  1
     ]), gl.STATIC_DRAW);
     gl.enableVertexAttribArray(posLoc);
     gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
 
-    // Uniform locations
+    // ---------- UNIFORMS ----------
     const uniRes = gl.getUniformLocation(program, 'iResolution');
     const uniTime = gl.getUniformLocation(program, 'iTime');
     const uniMouse = gl.getUniformLocation(program, 'iMouse');
 
-    // Resize handling
+    // ---------- ОПТИМИЗИРОВАННЫЙ resize ----------
     function resizeCanvas() {
-        const dpr = 0.5 * (window.devicePixelRatio || 1);
-        const width = Math.max(1, Math.floor(canvas.clientWidth * dpr));
-        const height = Math.max(1, Math.floor(canvas.clientHeight * dpr));
+        const dpr = Math.min(window.devicePixelRatio || 1, 1.25);
+        const width = Math.floor(canvas.clientWidth * dpr);
+        const height = Math.floor(canvas.clientHeight * dpr);
         if (canvas.width !== width || canvas.height !== height) {
             canvas.width = width;
             canvas.height = height;
-            canvas.style.width = '100%';
-            canvas.style.height = '100%';
             gl.viewport(0, 0, width, height);
         }
     }
-
     function fitCanvas() {
-        // canvas styled in CSS to cover; ensure pixel size matches
-        canvas.style.width = window.innerWidth + 'px';
-        canvas.style.height = window.innerHeight + 'px';
+        canvas.style.width = '100vw';
+        canvas.style.height = '100vh';
         resizeCanvas();
     }
     fitCanvas();
-    window.addEventListener('resize', () => { fitCanvas(); });
+    window.addEventListener('resize', fitCanvas);
 
-    // Mouse handling (uniform coords in pixels)
+    // ---------- МЫШЬ ----------
     let mouseX = 0, mouseY = 0, clickX = 0, clickY = 0;
-    window.addEventListener('mousemove', (e) => {
+    window.addEventListener('mousemove', e => {
         const rect = canvas.getBoundingClientRect();
         const dpr = window.devicePixelRatio || 1;
         mouseX = (e.clientX - rect.left) * dpr;
-        // flip Y to match shader coordinate scheme
         mouseY = (rect.height - (e.clientY - rect.top)) * dpr;
     });
-    window.addEventListener('mousedown', (e) => {
+    window.addEventListener('mousedown', e => {
         const rect = canvas.getBoundingClientRect();
         const dpr = window.devicePixelRatio || 1;
         clickX = (e.clientX - rect.left) * dpr;
         clickY = (rect.height - (e.clientY - rect.top)) * dpr;
     });
-    window.addEventListener('mouseup', () => { /* keep last click */ });
 
-    // Animation loop
+    // ---------- АНИМАЦИЯ (FPS ~30) ----------
     let startTime = performance.now();
     let lastFrame = 0;
-function render(now) {
-    resizeCanvas();
-    const delta = now - lastFrame;
+    function render(now) {
+        const delta = now - lastFrame;
+        if (delta < 33) { requestAnimationFrame(render); return; } // ~30fps
+        lastFrame = now;
 
-    // 🔧 ограничиваем FPS до ~30 (1000 мс / 30 ≈ 33)
-    if (delta < 33) {
+        resizeCanvas();
+        const t = now - startTime;
+
+        gl.uniform3f(uniRes, canvas.width, canvas.height, 0.0);
+        gl.uniform1f(uniTime, t * 0.001);
+        gl.uniform4f(uniMouse, mouseX, mouseY, clickX, clickY);
+
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+
         requestAnimationFrame(render);
-        return;
     }
-    lastFrame = now;
-
-    const t = now - startTime;
-
-    if (uniRes) gl.uniform3f(uniRes, canvas.width, canvas.height, 0.0);
-    gl.uniform1f(uniTime, t * 0.001);
-    if (uniMouse) gl.uniform4f(uniMouse, mouseX, mouseY, clickX, clickY);
-
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    gl.drawArrays(gl.TRIANGLES, 0, 6);
-
-    requestAnimationFrame(render);
-}
-
     requestAnimationFrame(render);
 })();
 
-// ----------------------
-// ЧАСТЬ B: Original site logic (login / boot / terminal)
-// ----------------------
+// ==========================================================
+// ЧАСТЬ B: ЛОГИКА САЙТА A.D.A.M.
+// ==========================================================
+const VALID_CREDENTIALS = { username: "qq", password: "ww" };
 
-// Данные для входа
-const VALID_CREDENTIALS = {
-    username: "qq",
-    password: "ww"
-};
-
-console.log('=== A.D.A.M. DEBUG START ===');
-console.log('Ожидаемые данные:', VALID_CREDENTIALS);
-
-// Загрузка системы
-document.addEventListener('DOMContentLoaded', function() {
-    // === СЧЁТЧИК ПОСЕЩЕНИЙ ===
+document.addEventListener('DOMContentLoaded', () => {
     let visits = parseInt(localStorage.getItem('adam_visits')) || 0;
-    visits++;
-    localStorage.setItem('adam_visits', visits);
-    console.log(`Посещений A.D.A.M.: ${visits}`);
-    // === КОНЕЦ СЧЁТЧИКА ===
+    localStorage.setItem('adam_visits', ++visits);
+    console.log(\`Посещений A.D.A.M.: \${visits}\`);
 
-    console.log('DOM загружен');
-
-    // Обработчик кнопки запуска
     const startBtn = document.getElementById('start-btn');
-    if (startBtn) {
-        startBtn.addEventListener('click', function() {
-            console.log('Кнопка запуска нажата');
-            startBootSequence();
-        });
-    }
+    if (startBtn) startBtn.addEventListener('click', startBootSequence);
 });
 
 function startBootSequence() {
-    console.log('Запуск последовательности загрузки');
     const startScreen = document.getElementById('start-screen');
     const bootScreen = document.getElementById('boot-screen');
     if (startScreen) startScreen.classList.add('hidden');
     if (bootScreen) bootScreen.classList.remove('hidden');
 
     const bootTexts = document.querySelectorAll('#boot-screen .boot-text p');
-    console.log('Найдено строк загрузки:', bootTexts.length);
-
-    let currentIndex = 0;
-
-    function showNextLine() {
-        if (currentIndex < bootTexts.length) {
-            const text = bootTexts[currentIndex];
-            text.style.opacity = 1;
-            currentIndex++;
-            setTimeout(showNextLine, 1000);
-        } else {
-            setTimeout(showLoginScreen, 1000);
-        }
-    }
-    setTimeout(showNextLine, 500);
+    let i = 0;
+    (function next() {
+        if (i < bootTexts.length) {
+            bootTexts[i++].style.opacity = 1;
+            setTimeout(next, 1000);
+        } else setTimeout(showLoginScreen, 1000);
+    })();
 }
 
 function showLoginScreen() {
-    console.log('Показ экрана логина');
-    const bootScreen = document.getElementById('boot-screen');
-    const loginScreen = document.getElementById('login-screen');
-    if (bootScreen) bootScreen.classList.add('hidden');
-    if (loginScreen) loginScreen.classList.remove('hidden');
-    const username = document.getElementById('username');
-    if (username) username.focus();
+    document.getElementById('boot-screen')?.classList.add('hidden');
+    document.getElementById('login-screen')?.classList.remove('hidden');
+    document.getElementById('username')?.focus();
 }
 
-// Обработка логина
-const loginBtn = document.getElementById('login-btn');
-if (loginBtn) loginBtn.addEventListener('click', login);
-document.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') login();
-});
+document.getElementById('login-btn')?.addEventListener('click', login);
+document.addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
 
 function login() {
-    const usernameEl = document.getElementById('username');
-    const passwordEl = document.getElementById('password');
-    const errorElement = document.getElementById('login-error');
+    const u = document.getElementById('username')?.value;
+    const p = document.getElementById('password')?.value;
+    const err = document.getElementById('login-error');
 
-    const username = usernameEl ? usernameEl.value : '';
-    const password = passwordEl ? passwordEl.value : '';
-
-    console.log('=== ПОПЫТКА ВХОДА ===');
-
-    const isUsernameMatch = username === VALID_CREDENTIALS.username;
-    const isPasswordMatch = password === VALID_CREDENTIALS.password;
-
-    if (isUsernameMatch && isPasswordMatch) {
-        console.log('✅ УСПЕШНЫЙ ВХОД!');
-        if (errorElement) {
-            errorElement.textContent = 'ДОСТУП РАЗРЕШЁН';
-            errorElement.style.color = '#00FF41';
-            errorElement.classList.remove('hidden');
-        }
-
+    if (u === VALID_CREDENTIALS.username && p === VALID_CREDENTIALS.password) {
+        err.textContent = 'ДОСТУП РАЗРЕШЁН';
+        err.style.color = '#00FF41';
+        err.classList.remove('hidden');
         document.body.style.transition = 'opacity 0.8s ease-in-out';
         document.body.style.opacity = '0';
-        setTimeout(() => {
-            window.location.href = 'terminal.html';
-        }, 800);
+        setTimeout(() => window.location.href = 'terminal.html', 800);
     } else {
-        console.log('❌ ОШИБКА ВХОДА!');
-        if (errorElement) {
-            errorElement.textContent = 'ДОСТУП ЗАПРЕЩЁН';
-            errorElement.style.color = '#ff0000';
-            errorElement.classList.remove('hidden');
-        }
-        if (passwordEl) passwordEl.value = '';
-        if (document.getElementById('username')) document.getElementById('username').focus();
+        err.textContent = 'ДОСТУП ЗАПРЕЩЁН';
+        err.style.color = '#FF0000';
+        err.classList.remove('hidden');
+        document.getElementById('password').value = '';
+        document.getElementById('username')?.focus();
     }
 }
