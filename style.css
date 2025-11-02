@@ -76,31 +76,40 @@ body {
 }
 
 /* ===========================
-   VHS GRAIN OVERLAY
+   VHS DARK OVERLAY (fix)
 =========================== */
-body::before {
-  content: "";
+
+/* Добавь такой div сразу после <canvas> в index.html и terminal.html:
+   <div class="vhs-overlay"></div>
+*/
+
+.vhs-overlay {
   position: fixed;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  pointer-events: none;
+  background: rgba(0, 0, 0, 0.75);
   z-index: 5;
-  background: rgba(0, 0, 0, 0.7);
-  background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQI12M4c+bMfwAIAgOBQvC9ygAAAABJRU5ErkJggg==");
-  opacity: 0.2;
-  mix-blend-mode: overlay;
-  animation: noise 0.2s infinite;
+  pointer-events: none;
 }
 
-@keyframes noise {
-  0% { transform: translate(0,0); }
-  25% { transform: translate(-2px,1px); }
-  50% { transform: translate(1px,-1px); }
-  75% { transform: translate(1px,2px); }
-  100% { transform: translate(0,0); }
+/* Лёгкое VHS дрожание текста */
+.output, .command {
+  animation: textJitter 0.25s infinite alternate;
 }
+@keyframes textJitter {
+  0% { transform: translate(0,0); }
+  50% { transform: translate(0.4px, -0.4px); }
+  100% { transform: translate(-0.4px, 0.4px); }
+}
+
+/* Лёгкое мерцание экрана */
+@keyframes flicker {
+  0%, 100% { opacity: 0.9; }
+  50% { opacity: 1; }
+}
+
 
 /* ===========================
    START SCREEN
