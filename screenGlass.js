@@ -82,7 +82,7 @@
     else spike = 1;
 
     // шум
-    const frame = frames[Math.floor(t / 4) % 4];
+    const frame = frames[Math.floor(t / 4) % 15];
     ctx.globalAlpha = 0.28 * spike;
     ctx.drawImage(frame, 0, 0, w, h);
     ctx.globalAlpha = 1;
