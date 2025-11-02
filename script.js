@@ -234,6 +234,8 @@
         vec3 baseCol = vec3(s, cos(t * 0.1), -sin(t * 0.14)) * 0.1 + 0.1;
         vec3 col = baseCol * m;
         col *= 1.0 - dot(uv, uv);
+        col *= 2.0;
+        col += vec3(0.05, 0.05, 0.08);
         gl_FragColor = vec4(col, 1.0);
     }
     `;
