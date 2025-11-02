@@ -25,8 +25,8 @@
 
   // === создаём 4 кадра настоящего белого шума ===
   const frames = [];
-  const fw = Math.floor(w * 0.15);
-  const fh = Math.floor(h * 0.15);
+  const fw = Math.floor(w * 0.8);
+  const fh = Math.floor(h * 0.8);
   for (let f = 0; f < 15; f++) {
     const c = document.createElement("canvas");
     c.width = fw; c.height = fh;
