@@ -3,6 +3,11 @@
     padding: 0;
     box-sizing: border-box;
 }
+
+html, body {
+    height: 100%;
+}
+
 body {
     background-color: #0a0a0a;
     color: #00FF41;
@@ -11,9 +16,37 @@ body {
     cursor: default;
     position: relative;
 }
-.scanline {
-    display: none; /* если не используется — можно убрать */
+
+/* Canvas background */
+#shader-canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0; /* фон */
+    display: block;
+    pointer-events: none; /* не мешает кликам по интерфейсу */
 }
+
+/* Слой контента должен быть выше фона */
+.scanline,
+#start-screen,
+#boot-screen,
+#login-screen,
+#terminal {
+    position: relative;
+    z-index: 10;
+}
+
+/* Сохранены остальные стили твоего сайта (скороченный / оригинал) */
+
+/* (Ниже — твои существующие стили, немного сокращены только для читабельности) */
+
+.scanline {
+    /* если нужны scanline эффекты — можно добавить */
+}
+
 /* Экран запуска */
 #start-screen {
     position: fixed;
@@ -24,12 +57,14 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: black;
+    background: rgba(0,0,0,0.85); /* чуть прозрачный, чтобы фон видно было */
     z-index: 20;
 }
+
 .start-message {
     text-align: center;
 }
+
 #start-btn {
     background: black;
     border: 1px solid #00FF41;
@@ -41,10 +76,12 @@ body {
     text-transform: uppercase;
     font-size: 16px;
 }
+
 #start-btn:hover {
     background: #00FF41;
     color: black;
 }
+
 /* Экран загрузки */
 #boot-screen {
     position: fixed;
@@ -55,22 +92,27 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: black;
+    background: rgba(0,0,0,0.9);
     z-index: 10;
 }
+
 .boot-message {
     text-align: left;
 }
+
 .logo pre {
     font-size: 12px;
     margin-bottom: 30px;
     text-align: center;
 }
+
+/* Скрываем текст загрузки изначально и делаем плавное появление */
 #boot-screen .boot-text p {
     opacity: 0;
     margin: 10px 0;
     transition: opacity 0.5s ease-in-out;
 }
+
 /* Экран логина */
 #login-screen {
     position: fixed;
@@ -81,29 +123,34 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: black;
+    background: rgba(0,0,0,0.9);
     z-index: 5;
 }
+
 .login-form {
     text-align: center;
     border: 1px solid #00FF41;
     padding: 30px;
-    background: rgba(0, 0, 0, 0.8);
+    background: rgba(0, 0, 0, 0.85);
 }
+
 .login-prompt {
     font-size: 18px;
     margin-bottom: 20px;
     text-transform: uppercase;
 }
+
 .input-group {
     margin: 15px 0;
     text-align: left;
 }
+
 .input-group label {
     display: block;
     margin-bottom: 5px;
     font-size: 14px;
 }
+
 .input-group input {
     width: 250px;
     background: black;
@@ -113,10 +160,12 @@ body {
     font-family: 'Courier New', monospace;
     outline: none;
 }
+
 .input-group input:focus {
     border-color: #00FF41;
     box-shadow: 0 0 10px #00FF41;
 }
+
 #login-btn {
     background: black;
     border: 1px solid #00FF41;
@@ -127,56 +176,62 @@ body {
     font-family: 'Courier New', monospace;
     text-transform: uppercase;
 }
+
 #login-btn:hover {
     background: #00FF41;
     color: black;
 }
+
 .error {
     color: #ff0000;
     margin-top: 10px;
     font-size: 14px;
 }
+
 .hidden {
     display: none !important;
 }
-/* Стили терминала */
+
+/* Стили терминала (взяты из оригинала) */
 #terminal {
     padding: 20px;
     height: 100vh;
     overflow-y: auto;
-    background: #0a0a0a;
+    background: transparent; /* фон обеспечивает шейдер */
 }
+
 .output {
     margin: 5px 0;
     white-space: pre-wrap;
     line-height: 1.4;
 }
+
 .command {
     color: #FFFFFF;
     margin: 5px 0;
     line-height: 1.4;
 }
-.error {
-    color: #FF0000;
-    margin: 5px 0;
-    line-height: 1.4;
-}
+
 .input-line {
     display: flex;
     align-items: center;
     margin: 10px 0;
 }
+
 .prompt {
     color: #00FF41;
 }
+
 .cmd {
     color: #FFFFFF;
 }
+
 .cursor {
     animation: blink 1s step-end infinite;
     background-color: #00FF41;
     margin-left: 2px;
 }
+
 @keyframes blink {
     50% { opacity: 0; }
 }
