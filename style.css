@@ -3,7 +3,6 @@
     padding: 0;
     box-sizing: border-box;
 }
-
 body {
     background-color: #0a0a0a;
     color: #00FF41;
@@ -12,202 +11,9 @@ body {
     cursor: default;
     position: relative;
 }
-
-/* ЭПИЧНЫЙ КОСМИЧЕСКИЙ ПОРТАЛ A.D.A.M. */
-.noise {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    z-index: 99;
+.scanline {
+    display: none; /* если не используется — можно убрать */
 }
-
-/* СЛОЙ 1: БЛИЖНИЕ ЯРКИЕ ЗВЁЗДЫ */
-.noise::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: 
-        radial-gradient(circle at 20% 50%, rgba(0, 255, 65, 0.3) 2px, transparent 2px),
-        radial-gradient(circle at 80% 20%, rgba(0, 255, 65, 0.25) 1px, transparent 1px),
-        radial-gradient(circle at 40% 80%, rgba(0, 255, 65, 0.35) 3px, transparent 3px),
-        radial-gradient(circle at 60% 10%, rgba(0, 255, 65, 0.22) 1px, transparent 1px),
-        radial-gradient(circle at 10% 90%, rgba(0, 255, 65, 0.28) 2px, transparent 2px);
-    background-size: 200px 200px, 300px 300px, 250px 250px, 350px 350px, 400px 400px;
-    animation: stars-fast-rotate 40s infinite linear;
-}
-
-/* СЛОЙ 2: ДАЛЬНИЕ ТУСКЛЫЕ ЗВЁЗДЫ */
-.noise::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: 
-        radial-gradient(circle at 90% 30%, rgba(0, 255, 65, 0.15) 1px, transparent 1px),
-        radial-gradient(circle at 10% 70%, rgba(0, 255, 65, 0.12) 1px, transparent 1px),
-        radial-gradient(circle at 50% 20%, rgba(0, 255, 65, 0.08) 1px, transparent 1px),
-        radial-gradient(circle at 30% 80%, rgba(0, 255, 65, 0.10) 1px, transparent 1px),
-        radial-gradient(circle at 70% 40%, rgba(0, 255, 65, 0.07) 1px, transparent 1px);
-    background-size: 500px 500px, 600px 600px, 700px 700px, 800px 800px, 900px 900px;
-    animation: stars-slow-rotate 120s infinite linear;
-}
-
-/* АНИМАЦИИ ЗВЁЗД */
-@keyframes stars-fast-rotate {
-    0% { 
-        transform: translate(0, 0) rotate(0deg) scale(1);
-        opacity: 0.9;
-    }
-    25% { 
-        transform: translate(-15px, 8px) rotate(90deg) scale(1.1);
-        opacity: 1;
-    }
-    50% { 
-        transform: translate(10px, -12px) rotate(180deg) scale(1.15);
-        opacity: 0.8;
-    }
-    75% { 
-        transform: translate(12px, 15px) rotate(270deg) scale(1.05);
-        opacity: 1;
-    }
-    100% { 
-        transform: translate(0, 0) rotate(360deg) scale(1);
-        opacity: 0.9;
-    }
-}
-
-@keyframes stars-slow-rotate {
-    0% { 
-        transform: translate(0, 0) rotate(0deg) scale(1);
-        opacity: 0.7;
-    }
-    25% { 
-        transform: translate(20px, -10px) rotate(-45deg) scale(1.02);
-        opacity: 0.8;
-    }
-    50% { 
-        transform: translate(-15px, 18px) rotate(-90deg) scale(1.04);
-        opacity: 0.6;
-    }
-    75% { 
-        transform: translate(-18px, -15px) rotate(-135deg) scale(1.02);
-        opacity: 0.8;
-    }
-    100% { 
-        transform: translate(0, 0) rotate(-180deg) scale(1);
-        opacity: 0.7;
-    }
-}
-
-/* СВЕТЯЩИЕСЯ СЕТИ */
-.neural-network {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: 
-        radial-gradient(circle at 30% 40%, transparent 95%, rgba(0, 255, 65, 0.03) 100%),
-        radial-gradient(circle at 70% 60%, transparent 95%, rgba(0, 255, 65, 0.02) 100%),
-        radial-gradient(circle at 50% 20%, transparent 95%, rgba(0, 255, 65, 0.04) 100%);
-    animation: network-pulse 15s infinite ease-in-out;
-}
-
-@keyframes network-pulse {
-    0%, 100% { opacity: 0.3; }
-    50% { opacity: 0.7; }
-}
-
-/* АНОМАЛИИ - ЯРКИЕ ВСПЫШКИ */
-@keyframes supernova {
-    0%, 95% { 
-        opacity: 0; 
-        transform: scale(0) rotate(0deg);
-        box-shadow: 0 0 0px rgba(0, 255, 65, 0);
-    }
-    96% { 
-        opacity: 0.9; 
-        transform: scale(1.2) rotate(180deg);
-        box-shadow: 0 0 30px rgba(0, 255, 65, 0.8);
-    }
-    97% { 
-        opacity: 0.6; 
-        transform: scale(0.8) rotate(360deg);
-        box-shadow: 0 0 20px rgba(0, 255, 65, 0.6);
-    }
-    98% { 
-        opacity: 1; 
-        transform: scale(1.5) rotate(540deg);
-        box-shadow: 0 0 50px rgba(0, 255, 65, 1);
-    }
-    99% { 
-        opacity: 0.4; 
-        transform: scale(0.7) rotate(720deg);
-        box-shadow: 0 0 15px rgba(0, 255, 65, 0.4);
-    }
-    100% { 
-        opacity: 0; 
-        transform: scale(0) rotate(900deg);
-        box-shadow: 0 0 0px rgba(0, 255, 65, 0);
-    }
-}
-
-.noise .anomaly-1 {
-    position: absolute;
-    top: 25%;
-    left: 15%;
-    width: 8px;
-    height: 8px;
-    background: #00FF41;
-    border-radius: 50%;
-    animation: supernova 35s infinite;
-    animation-delay: 0s;
-}
-
-.noise .anomaly-2 {
-    position: absolute;
-    top: 75%;
-    left: 85%;
-    width: 6px;
-    height: 6px;
-    background: #00FF41;
-    border-radius: 50%;
-    animation: supernova 42s infinite;
-    animation-delay: 12s;
-}
-
-.noise .anomaly-3 {
-    position: absolute;
-    top: 10%;
-    left: 65%;
-    width: 10px;
-    height: 10px;
-    background: #00FF41;
-    border-radius: 50%;
-    animation: supernova 38s infinite;
-    animation-delay: 24s;
-}
-
-.noise .anomaly-4 {
-    position: absolute;
-    top: 90%;
-    left: 35%;
-    width: 7px;
-    height: 7px;
-    background: #00FF41;
-    border-radius: 50%;
-    animation: supernova 45s infinite;
-    animation-delay: 18s;
-}
-
 /* Экран запуска */
 #start-screen {
     position: fixed;
@@ -221,11 +27,9 @@ body {
     background: black;
     z-index: 20;
 }
-
 .start-message {
     text-align: center;
 }
-
 #start-btn {
     background: black;
     border: 1px solid #00FF41;
@@ -237,12 +41,10 @@ body {
     text-transform: uppercase;
     font-size: 16px;
 }
-
 #start-btn:hover {
     background: #00FF41;
     color: black;
 }
-
 /* Экран загрузки */
 #boot-screen {
     position: fixed;
@@ -256,24 +58,19 @@ body {
     background: black;
     z-index: 10;
 }
-
 .boot-message {
     text-align: left;
 }
-
 .logo pre {
     font-size: 12px;
     margin-bottom: 30px;
     text-align: center;
 }
-
-/* Скрываем текст загрузки изначально и делаем плавное появление */
 #boot-screen .boot-text p {
     opacity: 0;
     margin: 10px 0;
     transition: opacity 0.5s ease-in-out;
 }
-
 /* Экран логина */
 #login-screen {
     position: fixed;
@@ -287,31 +84,26 @@ body {
     background: black;
     z-index: 5;
 }
-
 .login-form {
     text-align: center;
     border: 1px solid #00FF41;
     padding: 30px;
     background: rgba(0, 0, 0, 0.8);
 }
-
 .login-prompt {
     font-size: 18px;
     margin-bottom: 20px;
     text-transform: uppercase;
 }
-
 .input-group {
     margin: 15px 0;
     text-align: left;
 }
-
 .input-group label {
     display: block;
     margin-bottom: 5px;
     font-size: 14px;
 }
-
 .input-group input {
     width: 250px;
     background: black;
@@ -321,12 +113,10 @@ body {
     font-family: 'Courier New', monospace;
     outline: none;
 }
-
 .input-group input:focus {
     border-color: #00FF41;
     box-shadow: 0 0 10px #00FF41;
 }
-
 #login-btn {
     background: black;
     border: 1px solid #00FF41;
@@ -337,22 +127,18 @@ body {
     font-family: 'Courier New', monospace;
     text-transform: uppercase;
 }
-
 #login-btn:hover {
     background: #00FF41;
     color: black;
 }
-
 .error {
     color: #ff0000;
     margin-top: 10px;
     font-size: 14px;
 }
-
 .hidden {
     display: none !important;
 }
-
 /* Стили терминала */
 #terminal {
     padding: 20px;
@@ -360,45 +146,37 @@ body {
     overflow-y: auto;
     background: #0a0a0a;
 }
-
 .output {
     margin: 5px 0;
     white-space: pre-wrap;
     line-height: 1.4;
 }
-
 .command {
     color: #FFFFFF;
     margin: 5px 0;
     line-height: 1.4;
 }
-
 .error {
     color: #FF0000;
     margin: 5px 0;
     line-height: 1.4;
 }
-
 .input-line {
     display: flex;
     align-items: center;
     margin: 10px 0;
 }
-
 .prompt {
     color: #00FF41;
 }
-
 .cmd {
     color: #FFFFFF;
 }
-
 .cursor {
     animation: blink 1s step-end infinite;
     background-color: #00FF41;
     margin-left: 2px;
 }
-
 @keyframes blink {
     50% { opacity: 0; }
 }
