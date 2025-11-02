@@ -333,7 +333,7 @@
         const t = now - startTime;
 
         if (uniRes) gl.uniform3f(uniRes, canvas.width, canvas.height, 0.0);
-        igl.uniform1f(uniTime, t * 0.001); // переводим миллисекунды в секунды
+        gl.uniform1f(uniTime, t * 0.001); // переводим миллисекунды в секунды
         if (uniMouse) gl.uniform4f(uniMouse, mouseX, mouseY, clickX, clickY);
 
         // clear lightly (not strictly necessary)
