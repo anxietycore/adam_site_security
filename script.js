@@ -36,7 +36,7 @@
     uniform vec4 iMouse;
 
     #define S(a,b,t) smoothstep(a,b,t)
-    #define NUM_LAYERS 4.0
+    #define NUM_LAYERS 3.0
 
     float N21(vec2 p){
         vec3 a = fract(vec3(p.xyx)*vec3(613.897,553.453,80.098));
@@ -290,7 +290,7 @@
 
     // Resize handling
     function resizeCanvas() {
-        const dpr = window.devicePixelRatio || 1;
+        const dpr = 0.5 * (window.devicePixelRatio || 1);
         const width = Math.max(1, Math.floor(canvas.clientWidth * dpr));
         const height = Math.max(1, Math.floor(canvas.clientHeight * dpr));
         if (canvas.width !== width || canvas.height !== height) {
@@ -330,22 +330,30 @@
 
     // Animation loop
     let startTime = performance.now();
-    function render(now) {
-        resizeCanvas();
-        const t = now - startTime;
+    let lastFrame = 0;
+function render(now) {
+    resizeCanvas();
+    const delta = now - lastFrame;
 
-        if (uniRes) gl.uniform3f(uniRes, canvas.width, canvas.height, 0.0);
-        gl.uniform1f(uniTime, t * 0.001); // переводим миллисекунды в секунды
-        if (uniMouse) gl.uniform4f(uniMouse, mouseX, mouseY, clickX, clickY);
-
-        // clear lightly (not strictly necessary)
-        gl.clearColor(0.0, 0.0, 0.0, 1.0);
-        gl.clear(gl.COLOR_BUFFER_BIT);
-
-        gl.drawArrays(gl.TRIANGLES, 0, 6);
-
+    // 🔧 ограничиваем FPS до ~30 (1000 мс / 30 ≈ 33)
+    if (delta < 33) {
         requestAnimationFrame(render);
+        return;
     }
+    lastFrame = now;
+
+    const t = now - startTime;
+
+    if (uniRes) gl.uniform3f(uniRes, canvas.width, canvas.height, 0.0);
+    gl.uniform1f(uniTime, t * 0.001);
+    if (uniMouse) gl.uniform4f(uniMouse, mouseX, mouseY, clickX, clickY);
+
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+    requestAnimationFrame(render);
+}
+
     requestAnimationFrame(render);
 })();
 
