@@ -1,62 +1,72 @@
-// screenGlass.js
-// OVERLAY GLASS+NOISE + SCRATCHES
+// screenGlass.js optimized
 
 const c = document.createElement('canvas');
 c.id = "glassFX";
 document.body.appendChild(c);
-
 const ctx = c.getContext('2d');
 
 function resize(){
     c.width = window.innerWidth;
     c.height = window.innerHeight;
+    drawStatic();
 }
 resize();
 window.addEventListener('resize', resize);
 
-// noise seed
-let t = 0;
-
-// SCRATCH IMAGE (dataURL tiny pattern)
+// tiny scratch texture
 const scratch = new Image();
 scratch.src = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAQAAAC1+jfqAAAAN0lEQVR4AWP4DwQMDAwMjIzc3EA8iMyMzPxgYGD08fHxD0iIiL+xsTEwYGBg+Pn5+X///3/DwMBkAAAjFguw5j3XpQAAAABJRU5ErkJggg==";
 
-function draw(){
-    t+=0.003;
+let staticImg = null;
+
+function drawStatic(){
     const W=c.width,H=c.height;
 
-    // DARK GLASS BASE
-    ctx.clearRect(0,0,W,H);
-    ctx.fillStyle="rgba(0,0,0,0.15)";
-    ctx.fillRect(0,0,W,H);
+    const tmp = document.createElement('canvas');
+    tmp.width=W;tmp.height=H;
+    const tctx=tmp.getContext('2d');
 
-    // subtle glare top
-    const grad=ctx.createLinearGradient(0,0,0,H);
+    // glass base
+    tctx.fillStyle="rgba(0,0,0,0.15)";
+    tctx.fillRect(0,0,W,H);
+
+    // glare top
+    const grad=tctx.createLinearGradient(0,0,0,H);
     grad.addColorStop(0,"rgba(255,255,255,0.06)");
     grad.addColorStop(0.25,"rgba(255,255,255,0.00)");
     grad.addColorStop(1,"rgba(255,255,255,0.02)");
-    ctx.fillStyle=grad;
-    ctx.fillRect(0,0,W,H);
+    tctx.fillStyle=grad;
+    tctx.fillRect(0,0,W,H);
 
-    // scratches overlay
-    ctx.globalAlpha=0.12;
-    ctx.drawImage(scratch,0,0,W*1.2,H*1.2);
-    ctx.globalAlpha=1;
+    // scratches
+    tctx.globalAlpha=0.12;
+    tctx.drawImage(scratch,0,0,W*1.2,H*1.2);
+    tctx.globalAlpha=1;
 
-    // static noise on borders
-    const imgData = ctx.getImageData(0, 0, W, H);
-    const d = imgData.data;
+    staticImg = tctx.getImageData(0,0,W,H);
+    ctx.putImageData(staticImg,0,0);
+}
+
+// noise update
+function addNoise(){
+    if(!staticImg) return;
+    const W=c.width,H=c.height;
+    const img = new ImageData(new Uint8ClampedArray(staticImg.data),W,H);
+    const d=img.data;
     for(let i=0;i<d.length;i+=4){
         const x=(i/4)%W;
-        const b=Math.min(x, W-x); 
-        const edge= (1- Math.min(b/140.0,1) );
+        const b=Math.min(x,W-x);
+        const edge=(1-Math.min(b/140,1));
         if(edge>0){
-            const n=(Math.random()*255*edge*0.25);
-            d[i]+=n;d[i+1]+=n;d[i+2]+=n;
+            const n=(Math.random()*80*edge);
+            d[i]+=n; d[i+1]+=n; d[i+2]+=n;
         }
     }
-    ctx.putImageData(imgData,0,0);
-
-    requestAnimationFrame(draw);
+    ctx.putImageData(img,0,0);
 }
-draw();
+
+// first draw
+setTimeout(drawStatic,200);
+
+// update noise ~5fps
+setInterval(addNoise,200);
