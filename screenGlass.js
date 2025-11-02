@@ -1,4 +1,4 @@
-// screenGlass.js — оптимизированное аналоговое стекло без лагов
+// screenGlass.js — гибридный VHS-шум без лагов
 (() => {
   const DPR = Math.min(window.devicePixelRatio || 1, 1.25);
   const canvas = document.createElement("canvas");
@@ -9,7 +9,7 @@
   canvas.style.width = "100vw";
   canvas.style.height = "100vh";
   canvas.style.pointerEvents = "none";
-  canvas.style.zIndex = "1"; // под интерфейсом, над фоном
+  canvas.style.zIndex = "1"; // над фоном, под интерфейсом
   document.body.appendChild(canvas);
 
   const ctx = canvas.getContext("2d");
@@ -21,20 +21,33 @@
   window.addEventListener("resize", resize);
   resize();
 
-  // === ПОДГОТОВКА ШУМА (низкое разрешение)
-  const noiseCanvas = document.createElement("canvas");
-  const noiseCtx = noiseCanvas.getContext("2d");
-  let nw = Math.floor(w * 0.33);
-  let nh = Math.floor(h * 0.33);
-  noiseCanvas.width = nw;
-  noiseCanvas.height = nh;
+  // === подготовка статичных слоёв ===
+  // создаём 4 «кадра» VHS-шума
+  const frames = [];
+  const fw = Math.floor(w * 0.25);
+  const fh = Math.floor(h * 0.25);
+  for (let f = 0; f < 4; f++) {
+    const noiseCanvas = document.createElement("canvas");
+    noiseCanvas.width = fw;
+    noiseCanvas.height = fh;
+    const nctx = noiseCanvas.getContext("2d");
+    const imgData = nctx.createImageData(fw, fh);
+    const d = imgData.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const n = Math.random() * 255;
+      d[i] = d[i + 1] = d[i + 2] = n;
+      d[i + 3] = Math.random() * 160 + 60;
+    }
+    nctx.putImageData(imgData, 0, 0);
+    frames.push(noiseCanvas);
+  }
 
-  // === ПОДГОТОВКА ЦАРАПИН (статические)
+  // царапины
   const scratchCanvas = document.createElement("canvas");
   const sc = scratchCanvas.getContext("2d");
   scratchCanvas.width = w;
   scratchCanvas.height = h;
-  const SCRATCH_DENSITY = 0.0018;
+  const SCRATCH_DENSITY = 0.0015;
   for (let i = 0; i < w * h * SCRATCH_DENSITY; i++) {
     const x = Math.random() * w;
     const y = Math.random() * h;
@@ -49,20 +62,6 @@
   }
 
   let t = 0;
-  let noiseTimer = 0;
-
-  function drawNoise() {
-    const imgData = noiseCtx.createImageData(nw, nh);
-    const d = imgData.data;
-    for (let i = 0; i < d.length; i += 4) {
-      const n = Math.random() * 255;
-      d[i] = d[i + 1] = d[i + 2] = n;
-      d[i + 3] = Math.random() * 180;
-    }
-    noiseCtx.putImageData(imgData, 0, 0);
-  }
-
-  drawNoise();
 
   function render() {
     t++;
@@ -75,13 +74,10 @@
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, w, h);
 
-    // шум (обновляется раз в ~12 кадров)
-    if (t - noiseTimer > 12) {
-      drawNoise();
-      noiseTimer = t;
-    }
-    ctx.globalAlpha = 0.25;
-    ctx.drawImage(noiseCanvas, 0, 0, w, h);
+    // шум — циклические кадры
+    const frame = frames[Math.floor(t / 4) % 4];
+    ctx.globalAlpha = 0.28;
+    ctx.drawImage(frame, 0, 0, w, h);
     ctx.globalAlpha = 1;
 
     // царапины
@@ -97,7 +93,7 @@
     ctx.fillStyle = lampGrad;
     ctx.fillRect(0, 0, w, h);
 
-    // лёгкое мерцание
+    // редкое лёгкое мерцание
     if (t % 600 === 0) {
       ctx.fillStyle = "rgba(255,255,255,0.07)";
       ctx.fillRect(0, 0, w, h);
