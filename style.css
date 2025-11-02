@@ -232,30 +232,3 @@ body {
 @keyframes blink {
     50% { opacity: 0; }
 }
-
-#glassFX {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    pointer-events: none;
-    z-index: 5000; /* чуть ниже абсолютного топа */
-    mix-blend-mode: screen;
-}
-
-body > canvas#shader-canvas {
-    z-index: 0 !important;
-}
-
-body > canvas#glassFX {
-    z-index: 1 !important;
-}
-
-#start-screen,
-#boot-screen,
-#login-screen,
-#terminal {
-    position: relative;
-    z-index: 2 !important;
-}
