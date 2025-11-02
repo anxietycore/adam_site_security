@@ -3,6 +3,7 @@
 const c = document.createElement('canvas');
 c.id = "glassFX";
 document.body.appendChild(c);
+c.style.mixBlendMode = "screen";
 const ctx = c.getContext('2d');
 
 function resize(){
