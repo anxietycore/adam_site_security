@@ -27,7 +27,7 @@
   const frames = [];
   const fw = Math.floor(w * 0.8);
   const fh = Math.floor(h * 0.8);
-  for (let f = 0; f < 15; f++) {
+  for (let f = 0; f < 50; f++) {
     const c = document.createElement("canvas");
     c.width = fw; c.height = fh;
     const nctx = c.getContext("2d");
