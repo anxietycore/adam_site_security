@@ -33,7 +33,7 @@
     uniform vec4 iMouse;
 
     #define S(a,b,t) smoothstep(a,b,t)
-    #define NUM_LAYERS 3.0
+    #define NUM_LAYERS 4.0
 
     float N21(vec2 p){
         vec3 a = fract(vec3(p.xyx)*vec3(613.897,553.453,80.098));
