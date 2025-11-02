@@ -27,13 +27,13 @@
   const frames = [];
   const fw = Math.floor(w * 0.3);
   const fh = Math.floor(h * 0.3);
-  for (let f = 0; f < 4; f++) {
+  for (let f = 0; f < 10; f++) {
     const c = document.createElement("canvas");
     c.width = fw; c.height = fh;
     const nctx = c.getContext("2d");
     const img = nctx.createImageData(fw, fh);
     const d = img.data;
-    for (let i = 0; i < d.length; i += 4) {
+    for (let i = 0; i < d.length; i += 10) {
       const n = Math.random() * 255;
       d[i] = d[i + 1] = d[i + 2] = n;
       d[i + 3] = 255;
