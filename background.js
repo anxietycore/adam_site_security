@@ -1,6 +1,4 @@
-// background.js
-// WebGL фон для всех страниц A.D.A.M.
-
+// background.js - ОПТИМИЗИРОВАННАЯ ВЕРСИЯ
 (() => {
     const canvas = document.getElementById('shader-canvas');
     if (!canvas) {
@@ -24,7 +22,7 @@
     }
     `;
 
-    // ---------- ФРАГМЕНТНЫЙ ШЕЙДЕР ----------
+    // ---------- ФРАГМЕНТНЫЙ ШЕЙДЕР (ОПТИМИЗИРОВАННЫЙ) ----------
     const fragSrc = `
     precision mediump float;
     varying vec2 vUv;
@@ -33,7 +31,7 @@
     uniform vec4 iMouse;
 
     #define S(a,b,t) smoothstep(a,b,t)
-    #define NUM_LAYERS 4.0
+    #define NUM_LAYERS 3.0  // УМЕНЬШЕНО С 4.0
 
     float N21(vec2 p){
         vec3 a = fract(vec3(p.xyx)*vec3(613.897,553.453,80.098));
@@ -83,25 +81,25 @@
 
         float m = 0.0;
         float sparkle = 0.0;
+        
         for (int i = 0; i < 9; i++) {
             vec2 pt = p[i];
             m += line(p[4], pt, st);
             float d = length(st - pt);
             float s = 0.002/(d*d + 0.0001);
             s *= S(1.0,0.1,d);
-            float pulse = sin((fract(pt.x)+fract(pt.y)+t)*5.0)*0.4+0.6;
-            pulse = pow(pulse,20.0);
+            
+            // ОПТИМИЗИРОВАННАЯ ПУЛЬСАЦИЯ (убрано pow)
+            float pulse = sin(t + n + float(i)) * 0.5 + 0.5;
             s *= pulse;
             sparkle += s;
         }
 
-        m += line(p[1],p[3],st);
+        // УБРАНЫ 2 ЛИНИИ для оптимизации
         m += line(p[1],p[5],st);
-        m += line(p[7],p[5],st);
         m += line(p[7],p[3],st);
 
         float sPhase = (sin(t + n) + sin(t * 0.1)) * 0.25 + 0.5;
-        sPhase += pow(sin(t * 0.1) * 0.5 + 0.5, 50.0) * 5.0;
         m += sparkle * sPhase;
 
         return m;
@@ -128,9 +126,9 @@
             m += fade * NetLayer(st * size - M * z, i, iTime);
         }
 
-        vec3 baseCol = vec3(s, cos(t * 0.1), -sin(t * 0.14)) * 0.3 + 0.3;
+        // ОПТИМИЗИРОВАННЫЙ ЦВЕТ (убраны лишние вычисления)
+        vec3 baseCol = vec3(0.7, 0.7, 0.8);
         vec3 col = baseCol * m;
-        col *= 1.0;
         col *= 2.0;
         col += vec3(0.12, 0.12, 0.15);
         gl_FragColor = vec4(col, 1.0);
@@ -215,12 +213,12 @@
         clickY = (rect.height - (e.clientY - rect.top)) * dpr;
     });
 
-    // ---------- АНИМАЦИЯ ----------
+    // ---------- АНИМАЦИЯ (ОПТИМИЗИРОВАННАЯ) ----------
     let startTime = performance.now();
     let lastFrame = 0;
     function render(now) {
         const delta = now - lastFrame;
-        if (delta < 33) { requestAnimationFrame(render); return; }
+        if (delta < 50) { requestAnimationFrame(render); return; } // 20 FPS вместо 30
         lastFrame = now;
 
         resizeCanvas();
