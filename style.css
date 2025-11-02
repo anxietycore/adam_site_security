@@ -24,12 +24,12 @@ body {
     left: 0;
     width: 100%;
     height: 100%;
-    z-index: 0; /* фон */
+    z-index: 0;
     display: block;
-    pointer-events: none; /* не мешает кликам по интерфейсу */
+    pointer-events: none;
 }
 
-/* Слой контента должен быть выше фона */
+/* Все интерфейсные слои — выше фона */
 .scanline,
 #start-screen,
 #boot-screen,
@@ -39,12 +39,27 @@ body {
     z-index: 10;
 }
 
-/* Сохранены остальные стили твоего сайта (скороченный / оригинал) */
-
-/* (Ниже — твои существующие стили, немного сокращены только для читабельности) */
-
+/* Scanline — движущиеся полоски */
 .scanline {
-    /* если нужны scanline эффекты — можно добавить */
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: repeating-linear-gradient(
+        to bottom,
+        transparent 0%,
+        rgba(0, 0, 0, 0.15) 1px,
+        transparent 2px
+    );
+    pointer-events: none;
+    z-index: 5;
+    animation: scanlineMove 8s linear infinite;
+}
+
+@keyframes scanlineMove {
+    0% { background-position: 0 0; }
+    100% { background-position: 0 100px; }
 }
 
 /* Экран запуска */
@@ -57,7 +72,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0,0,0,0.85); /* чуть прозрачный, чтобы фон видно было */
+    background: rgba(0,0,0,0.85);
     z-index: 20;
 }
 
@@ -106,7 +121,6 @@ body {
     text-align: center;
 }
 
-/* Скрываем текст загрузки изначально и делаем плавное появление */
 #boot-screen .boot-text p {
     opacity: 0;
     margin: 10px 0;
@@ -188,92 +202,17 @@ body {
     font-size: 14px;
 }
 
+/* Универсальный класс скрытия */
 .hidden {
     display: none !important;
 }
 
-/* Стили терминала (взяты из оригинала) */
-#terminal {
-    padding: 20px;
-    height: 100vh;
-    overflow-y: auto;
-    background: transparent; /* фон обеспечивает шейдер */
-}
-
-.output {
-    margin: 5px 0;
-    white-space: pre-wrap;
-    line-height: 1.4;
-}
-
-.command {
-    color: #FFFFFF;
-    margin: 5px 0;
-    line-height: 1.4;
-}
-
-.input-line {
-    display: flex;
-    align-items: center;
-    margin: 10px 0;
-}
-
-.prompt {
-    color: #00FF41;
-}
-
-.cmd {
-    color: #FFFFFF;
-}
-
-.cursor {
-    animation: blink 1s step-end infinite;
-    background-color: #00FF41;
-    margin-left: 2px;
-}
-
-@keyframes blink {
-    50% { opacity: 0; }
-}
-
-/* ... остальные стили ... */
-
-/* Движущиеся полоски (scanlines) */
-.scanline {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: repeating-linear-gradient(
-        to bottom,
-        transparent 0%,
-        rgba(0, 0, 0, 0.15) 1px,
-        transparent 2px
-    );
-    pointer-events: none;
-    z-index: 5;
-    animation: scanlineMove 8s linear infinite;
-}
-
-@keyframes scanlineMove {
-    0% { background-position: 0 0; }
-    100% { background-position: 0 100px; }
-}
-
-/* Стили терминала */
+/* Стили терминала — ЕДИНСТВЕННЫЙ БЛОК */
 #terminal {
     padding: 20px;
     height: 100vh;
     overflow-y: auto;
     background: transparent;
-    position: relative;
-    z-index: 10;
-    display: none;
-}
-
-#terminal:not(.hidden) {
-    display: block;
 }
 
 .output {
@@ -310,8 +249,4 @@ body {
 
 @keyframes blink {
     50% { opacity: 0; }
-}
-
-.hidden {
-    display: none !important;
 }
