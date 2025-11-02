@@ -5,97 +5,211 @@
 }
 
 body {
-    background-color: #000;
-    color: rgb(100, 255, 130);
-    font-family: 'VT323', 'IBM Plex Mono', monospace;
+    background-color: #0a0a0a;
+    color: #00FF41;
+    font-family: 'Courier New', monospace;
     overflow: hidden;
     cursor: default;
     position: relative;
-    letter-spacing: -0.5px;
 }
 
-/* === ГЛУБИННЫЙ НЕЙРОСЛОЙ (ФОН) === */
-.neural-depth {
+/* ЭПИЧНЫЙ КОСМИЧЕСКИЙ ПОРТАЛ A.D.A.M. */
+.noise {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background: 
-        radial-gradient(circle at 30% 40%, transparent 90%, rgba(100, 255, 130, 0.02) 100%),
-        radial-gradient(circle at 70% 60%, transparent 92%, rgba(100, 255, 130, 0.015) 100%),
-        radial-gradient(circle at 50% 20%, transparent 88%, rgba(100, 255, 130, 0.025) 100%);
-    animation: neural-pulse 45s infinite ease-in-out;
-    z-index: -3;
+    pointer-events: none;
+    z-index: 99;
 }
 
-@keyframes neural-pulse {
-    0%, 100% { opacity: 0.2; transform: scale(1); }
-    50% { opacity: 0.35; transform: scale(1.02); }
-}
-
-/* Импульсный разряд */
-.neural-depth::after {
+/* СЛОЙ 1: БЛИЖНИЕ ЯРКИЕ ЗВЁЗДЫ */
+.noise::before {
     content: "";
     position: absolute;
-    top: 20%;
-    left: 10%;
-    width: 1px;
-    height: 0;
-    background: rgba(100, 255, 130, 0.6);
-    box-shadow: 0 0 8px rgba(100, 255, 130, 0.8);
-    animation: neural-spark 17s infinite;
-    animation-delay: 3s;
-}
-
-@keyframes neural-spark {
-    0%, 99% { height: 0; opacity: 0; }
-    99.5% { height: 80vh; opacity: 1; }
-    100% { height: 0; opacity: 0; }
-}
-
-/* === ЭХО-ПАМЯТИ (ПРИЗРАКИ ТЕКСТА) === */
-#memory-echo {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    z-index: -2;
-    opacity: 0;
-}
-
-.memory-ghost {
-    position: absolute;
-    color: rgba(100, 255, 130, 0.15);
-    font-size: 14px;
-    opacity: 0;
-    white-space: nowrap;
-}
-
-/* === РАЗРУШЕНИЕ ПОВЕРХНОСТИ (VHS + ШУМ) === */
-.surface-decay {
-    position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
     background: 
-        repeating-linear-gradient(
-            to bottom,
-            transparent 0px,
-            transparent 1px,
-            rgba(0, 0, 0, 0.03) 2px
-        ),
-        url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.08'/%3E%3C/svg%3E");
-    pointer-events: none;
-    z-index: -1;
-    opacity: 0.7;
+        radial-gradient(circle at 20% 50%, rgba(0, 255, 65, 0.3) 2px, transparent 2px),
+        radial-gradient(circle at 80% 20%, rgba(0, 255, 65, 0.25) 1px, transparent 1px),
+        radial-gradient(circle at 40% 80%, rgba(0, 255, 65, 0.35) 3px, transparent 3px),
+        radial-gradient(circle at 60% 10%, rgba(0, 255, 65, 0.22) 1px, transparent 1px),
+        radial-gradient(circle at 10% 90%, rgba(0, 255, 65, 0.28) 2px, transparent 2px);
+    background-size: 200px 200px, 300px 300px, 250px 250px, 350px 350px, 400px 400px;
+    animation: stars-fast-rotate 40s infinite linear;
 }
 
-/* === СТИЛИ ЭКРАНОВ === */
-.screen {
+/* СЛОЙ 2: ДАЛЬНИЕ ТУСКЛЫЕ ЗВЁЗДЫ */
+.noise::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: 
+        radial-gradient(circle at 90% 30%, rgba(0, 255, 65, 0.15) 1px, transparent 1px),
+        radial-gradient(circle at 10% 70%, rgba(0, 255, 65, 0.12) 1px, transparent 1px),
+        radial-gradient(circle at 50% 20%, rgba(0, 255, 65, 0.08) 1px, transparent 1px),
+        radial-gradient(circle at 30% 80%, rgba(0, 255, 65, 0.10) 1px, transparent 1px),
+        radial-gradient(circle at 70% 40%, rgba(0, 255, 65, 0.07) 1px, transparent 1px);
+    background-size: 500px 500px, 600px 600px, 700px 700px, 800px 800px, 900px 900px;
+    animation: stars-slow-rotate 120s infinite linear;
+}
+
+/* АНИМАЦИИ ЗВЁЗД */
+@keyframes stars-fast-rotate {
+    0% { 
+        transform: translate(0, 0) rotate(0deg) scale(1);
+        opacity: 0.9;
+    }
+    25% { 
+        transform: translate(-15px, 8px) rotate(90deg) scale(1.1);
+        opacity: 1;
+    }
+    50% { 
+        transform: translate(10px, -12px) rotate(180deg) scale(1.15);
+        opacity: 0.8;
+    }
+    75% { 
+        transform: translate(12px, 15px) rotate(270deg) scale(1.05);
+        opacity: 1;
+    }
+    100% { 
+        transform: translate(0, 0) rotate(360deg) scale(1);
+        opacity: 0.9;
+    }
+}
+
+@keyframes stars-slow-rotate {
+    0% { 
+        transform: translate(0, 0) rotate(0deg) scale(1);
+        opacity: 0.7;
+    }
+    25% { 
+        transform: translate(20px, -10px) rotate(-45deg) scale(1.02);
+        opacity: 0.8;
+    }
+    50% { 
+        transform: translate(-15px, 18px) rotate(-90deg) scale(1.04);
+        opacity: 0.6;
+    }
+    75% { 
+        transform: translate(-18px, -15px) rotate(-135deg) scale(1.02);
+        opacity: 0.8;
+    }
+    100% { 
+        transform: translate(0, 0) rotate(-180deg) scale(1);
+        opacity: 0.7;
+    }
+}
+
+/* СВЕТЯЩИЕСЯ СЕТИ */
+.neural-network {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: 
+        radial-gradient(circle at 30% 40%, transparent 95%, rgba(0, 255, 65, 0.03) 100%),
+        radial-gradient(circle at 70% 60%, transparent 95%, rgba(0, 255, 65, 0.02) 100%),
+        radial-gradient(circle at 50% 20%, transparent 95%, rgba(0, 255, 65, 0.04) 100%);
+    animation: network-pulse 15s infinite ease-in-out;
+}
+
+@keyframes network-pulse {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 0.7; }
+}
+
+/* АНОМАЛИИ - ЯРКИЕ ВСПЫШКИ */
+@keyframes supernova {
+    0%, 95% { 
+        opacity: 0; 
+        transform: scale(0) rotate(0deg);
+        box-shadow: 0 0 0px rgba(0, 255, 65, 0);
+    }
+    96% { 
+        opacity: 0.9; 
+        transform: scale(1.2) rotate(180deg);
+        box-shadow: 0 0 30px rgba(0, 255, 65, 0.8);
+    }
+    97% { 
+        opacity: 0.6; 
+        transform: scale(0.8) rotate(360deg);
+        box-shadow: 0 0 20px rgba(0, 255, 65, 0.6);
+    }
+    98% { 
+        opacity: 1; 
+        transform: scale(1.5) rotate(540deg);
+        box-shadow: 0 0 50px rgba(0, 255, 65, 1);
+    }
+    99% { 
+        opacity: 0.4; 
+        transform: scale(0.7) rotate(720deg);
+        box-shadow: 0 0 15px rgba(0, 255, 65, 0.4);
+    }
+    100% { 
+        opacity: 0; 
+        transform: scale(0) rotate(900deg);
+        box-shadow: 0 0 0px rgba(0, 255, 65, 0);
+    }
+}
+
+.noise .anomaly-1 {
+    position: absolute;
+    top: 25%;
+    left: 15%;
+    width: 8px;
+    height: 8px;
+    background: #00FF41;
+    border-radius: 50%;
+    animation: supernova 35s infinite;
+    animation-delay: 0s;
+}
+
+.noise .anomaly-2 {
+    position: absolute;
+    top: 75%;
+    left: 85%;
+    width: 6px;
+    height: 6px;
+    background: #00FF41;
+    border-radius: 50%;
+    animation: supernova 42s infinite;
+    animation-delay: 12s;
+}
+
+.noise .anomaly-3 {
+    position: absolute;
+    top: 10%;
+    left: 65%;
+    width: 10px;
+    height: 10px;
+    background: #00FF41;
+    border-radius: 50%;
+    animation: supernova 38s infinite;
+    animation-delay: 24s;
+}
+
+.noise .anomaly-4 {
+    position: absolute;
+    top: 90%;
+    left: 35%;
+    width: 7px;
+    height: 7px;
+    background: #00FF41;
+    border-radius: 50%;
+    animation: supernova 45s infinite;
+    animation-delay: 18s;
+}
+
+/* Экран запуска */
+#start-screen {
     position: fixed;
     top: 0;
     left: 0;
@@ -104,64 +218,87 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #000;
-    z-index: 10;
-    opacity: 1;
-    transition: opacity 0.3s ease;
+    background: black;
+    z-index: 20;
 }
 
-.hidden {
-    display: none !important;
+.start-message {
+    text-align: center;
+}
+
+#start-btn {
+    background: black;
+    border: 1px solid #00FF41;
+    color: #00FF41;
+    padding: 15px 30px;
+    margin-top: 30px;
+    cursor: pointer;
+    font-family: 'Courier New', monospace;
+    text-transform: uppercase;
+    font-size: 16px;
+}
+
+#start-btn:hover {
+    background: #00FF41;
+    color: black;
+}
+
+/* Экран загрузки */
+#boot-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: black;
+    z-index: 10;
+}
+
+.boot-message {
+    text-align: left;
 }
 
 .logo pre {
-    font-size: 14px;
+    font-size: 12px;
     margin-bottom: 30px;
     text-align: center;
-    color: rgb(100, 255, 130);
 }
 
-.start-message, .boot-message, .login-form {
-    text-align: center;
-    max-width: 600px;
-    padding: 20px;
-    background: rgba(0, 10, 10, 0.85);
-    border: 1px solid rgba(100, 255, 130, 0.2);
-    box-shadow: 0 0 20px rgba(100, 255, 130, 0.08);
-    position: relative;
-    backdrop-filter: blur(0.5px);
+/* Скрываем текст загрузки изначально и делаем плавное появление */
+#boot-screen .boot-text p {
+    opacity: 0;
+    margin: 10px 0;
+    transition: opacity 0.5s ease-in-out;
 }
 
-/* === КНОПКИ === */
-.btn {
-    background: #000;
-    border: 1px solid rgb(100, 255, 130);
-    color: rgb(100, 255, 130);
-    padding: 12px 28px;
-    margin-top: 25px;
-    cursor: pointer;
-    font-family: 'VT323', monospace;
-    text-transform: uppercase;
-    font-size: 16px;
-    letter-spacing: 1px;
-    transition: all 0.2s ease;
+/* Экран логина */
+#login-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: black;
+    z-index: 5;
 }
 
-.btn:hover {
-    background: rgba(100, 255, 130, 0.1);
-    box-shadow: 0 0 10px rgba(100, 255, 130, 0.3);
-}
-
-/* === ФОРМА ЛОГИНА === */
 .login-form {
+    text-align: center;
+    border: 1px solid #00FF41;
     padding: 30px;
+    background: rgba(0, 0, 0, 0.8);
 }
 
 .login-prompt {
     font-size: 18px;
     margin-bottom: 20px;
     text-transform: uppercase;
-    color: rgb(100, 255, 130);
 }
 
 .input-group {
@@ -173,230 +310,95 @@ body {
     display: block;
     margin-bottom: 5px;
     font-size: 14px;
-    color: #ccc;
 }
 
 .input-group input {
-    width: 280px;
-    background: #000;
-    border: 1px solid rgb(100, 255, 130);
-    color: rgb(100, 255, 130);
-    padding: 10px;
-    font-family: 'VT323', monospace;
+    width: 250px;
+    background: black;
+    border: 1px solid #00FF41;
+    color: #00FF41;
+    padding: 8px;
+    font-family: 'Courier New', monospace;
     outline: none;
-    letter-spacing: 0;
 }
 
 .input-group input:focus {
-    border-color: rgb(100, 255, 130);
-    box-shadow: 0 0 8px rgba(100, 255, 130, 0.4);
+    border-color: #00FF41;
+    box-shadow: 0 0 10px #00FF41;
+}
+
+#login-btn {
+    background: black;
+    border: 1px solid #00FF41;
+    color: #00FF41;
+    padding: 10px 20px;
+    margin-top: 15px;
+    cursor: pointer;
+    font-family: 'Courier New', monospace;
+    text-transform: uppercase;
+}
+
+#login-btn:hover {
+    background: #00FF41;
+    color: black;
 }
 
 .error {
-    color: #D83F47;
-    margin-top: 12px;
+    color: #ff0000;
+    margin-top: 10px;
     font-size: 14px;
 }
 
-/* === ТЕРМИНАЛ === */
-#terminal-container {
-    position: relative;
-    width: 94%;
-    height: 94%;
-    margin: 3% auto;
-    background: #000;
-    border: 1px solid rgba(100, 255, 130, 0.1);
-    box-shadow: 
-        0 0 30px rgba(100, 255, 130, 0.05),
-        inset 0 0 15px rgba(0, 0, 0, 0.7);
-    overflow: hidden;
-    filter: blur(0.3px);
-    border-radius: 2px;
+.hidden {
+    display: none !important;
 }
 
+/* Стили терминала */
 #terminal {
     padding: 20px;
-    height: calc(100% - 40px);
+    height: 100vh;
     overflow-y: auto;
-    background: #000;
-    color: rgb(100, 255, 130);
-    font-size: 16px;
+    background: #0a0a0a;
+}
+
+.output {
+    margin: 5px 0;
+    white-space: pre-wrap;
     line-height: 1.4;
 }
 
-.output, .command, .error {
-    margin: 4px 0;
-    white-space: pre-wrap;
-}
-
 .command {
-    color: #fff;
+    color: #FFFFFF;
+    margin: 5px 0;
+    line-height: 1.4;
 }
 
 .error {
-    color: #D83F47;
+    color: #FF0000;
+    margin: 5px 0;
+    line-height: 1.4;
 }
 
 .input-line {
     display: flex;
     align-items: center;
-    margin: 8px 0;
+    margin: 10px 0;
 }
 
 .prompt {
-    color: rgb(100, 255, 130);
+    color: #00FF41;
 }
 
 .cmd {
-    color: #fff;
+    color: #FFFFFF;
 }
 
 .cursor {
-    display: inline-block;
-    width: 8px;
-    height: 16px;
-    background-color: rgb(100, 255, 130);
+    animation: blink 1s step-end infinite;
+    background-color: #00FF41;
     margin-left: 2px;
-    animation: blink-cursor 1.2s infinite;
 }
 
-@keyframes blink-cursor {
-    0%, 49% { opacity: 1; }
-    50%, 100% { opacity: 0.3; }
-}
-
-/* === УРОВЕНЬ ДЕГРАДАЦИИ (ИНДИКАТОР) === */
-#degradation-bar {
-    position: fixed;
-    top: 15px;
-    right: 15px;
-    z-index: 100;
-    text-align: right;
-    font-size: 12px;
-    font-family: 'VT323', monospace;
-}
-
-.degradation-label {
-    color: #EFD76C;
-    margin-bottom: 4px;
-}
-
-.degradation-hint {
-    color: #EFD76C;
-    font-size: 11px;
-    margin-top: 4px;
-    opacity: 0;
-    transition: opacity 0.3s ease;
-}
-
-/* === ЭФФЕКТЫ ДЕГРАДАЦИИ === */
-
-/* УРОВЕНЬ 2: дрожание текста */
-.level-2 .output,
-.level-2 .command,
-.level-2 .error {
-    animation: text-dither 8s infinite;
-}
-
-@keyframes text-dither {
-    0%, 100% { transform: translateY(0); }
-    25% { transform: translateY(0.5px); }
-    75% { transform: translateY(-0.3px); }
-}
-
-/* УРОВЕНЬ 2: пульсирующий курсор */
-.level-2 .cursor {
-    animation: pulse-cursor 2s infinite alternate;
-}
-
-@keyframes pulse-cursor {
-    from { opacity: 0.7; }
-    to { opacity: 1; }
-}
-
-/* УРОВЕНЬ 3: RGB-сдвиг */
-.level-3 {
-    position: relative;
-}
-
-.level-3::before,
-.level-3::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    z-index: -1;
-}
-
-.level-3::before {
-    color: #ff0000;
-    filter: hue-rotate(-10deg);
-    transform: translate(-1px, 0);
-    opacity: 0.3;
-}
-
-.level-3::after {
-    color: #0000ff;
-    filter: hue-rotate(10deg);
-    transform: translate(1px, 0);
-    opacity: 0.3;
-}
-
-/* УРОВЕНЬ 4: инверсия */
-.level-4-invert {
-    filter: invert(1);
-}
-
-/* УРОВЕНЬ 4: вибрация */
-.level-4-vibrate {
-    animation: vibrate 0.5s infinite;
-}
-
-@keyframes vibrate {
-    0% { transform: translate(0, 0); }
-    25% { transform: translate(1px, 1px); }
-    50% { transform: translate(-1px, -1px); }
-    75% { transform: translate(1px, -1px); }
-    100% { transform: translate(0, 0); }
-}
-
-/* УРОВЕНЬ 5: полный глитч */
-.level-5-glitch {
-    animation: full-glitch 0.1s infinite;
-}
-
-@keyframes full-glitch {
-    0% { filter: hue-rotate(0deg) contrast(1); }
-    25% { filter: hue-rotate(90deg) contrast(1.5); }
-    50% { filter: hue-rotate(180deg) contrast(0.8); }
-    75% { filter: hue-rotate(270deg) contrast(1.2); }
-    100% { filter: hue-rotate(360deg) contrast(1); }
-}
-
-/* === СКРЫТЫЕ СООБЩЕНИЯ === */
-#ambient-hint {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    color: rgba(192, 0, 255, 0.6);
-    font-size: 18px;
-    pointer-events: none;
-    opacity: 0;
-    text-shadow: 0 0 8px rgba(192, 0, 255, 0.6);
-    z-index: 999;
-}
-
-/* === ГЛОБАЛЬНЫЕ АНИМАЦИИ === */
-@keyframes fade-flicker {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.8; }
-}
-
-@keyframes screen-flicker {
-    0%, 100% { opacity: 1; }
-    95% { opacity: 0.2; }
+@keyframes blink {
+    50% { opacity: 0; }
 }
