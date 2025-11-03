@@ -13,7 +13,7 @@
     // Grid params
     const CELL_COUNT = 6; // 6x6 клеток => 7x7 перекрестков
     const INTER_COUNT = CELL_COUNT + 1;
-    const NODE_COUNT = 24;
+    const NODE_COUNT = 10;
     const AUTONOMOUS_MOVE_COOLDOWN = 800; // ms before picking next target
 
     // ----- DOM: canvas + status + victory + controls -----
