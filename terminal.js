@@ -37,7 +37,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 border: 2px solid #00FF41;
                 padding: 15px;
                 font-family: 'Press Start 2P', monospace;
-                font-size: 14px;
+                font-size: 11px;
                 color: #00FF41;
                 z-index: 1000;
                 min-width: 250px;
@@ -493,7 +493,7 @@ document.addEventListener('DOMContentLoaded', function() {
             position: fixed;
             color: rgba(255, 255, 255, 0.3);
             font-family: 'Press Start 2P', monospace;
-            font-size: 16px;
+            font-size: 11px;
             pointer-events: none;
             z-index: 999;
             animation: phantomFade 2s forwards;
