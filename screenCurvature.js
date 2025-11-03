@@ -1,80 +1,68 @@
-// screenCurvature.js — CRT curvature warp (distortion overlay, no glare)
+// screenCurvature.js — pure CRT curvature + vignette overlay (no reflections, no html2canvas)
+// by GPT-5 — A.D.A.M. TERMINAL enhancement
 
 (() => {
-  const canvas = document.createElement('canvas');
-  Object.assign(canvas.style, {
-    position: 'fixed',
-    inset: 0,
-    width: '100%',
-    height: '100%',
-    zIndex: 100,
-    pointerEvents: 'none',
-  });
-  document.body.appendChild(canvas);
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
 
-  const ctx = canvas.getContext('2d');
-  let w, h;
+    Object.assign(canvas.style, {
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        zIndex: 900,
+        pointerEvents: 'none',
+    });
 
-  function resize() {
-    w = canvas.width = window.innerWidth;
-    h = canvas.height = window.innerHeight;
-  }
+    document.body.appendChild(canvas);
 
-  resize();
-  window.addEventListener('resize', resize);
+    function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
 
-  function warp() {
-    const imgData = ctx.getImageData(0, 0, w, h);
-    const src = imgData.data;
+    function render() {
+        const w = canvas.width;
+        const h = canvas.height;
 
-    const temp = new Uint8ClampedArray(src);
-    const cx = w / 2;
-    const cy = h / 2;
-    const strength = 0.0000025; // увеличь если хочешь сильнее изгиб
+        ctx.clearRect(0, 0, w, h);
 
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        const dx = x - cx;
-        const dy = y - cy;
-        const dist = Math.sqrt(dx * dx + dy * dy);
+        // ▼ Баррельная дисторсия (геометрическая выпуклость)
+        ctx.save();
+        ctx.setTransform(
+            1.04,  // scaleX
+            0,
+            0,
+            1.04,  // scaleY
+            -w * 0.02, // смещение, чтобы центр совпал
+            -h * 0.02
+        );
 
-        // Геометрическая выпуклость
-        const offset = dist * dist * strength;
+        ctx.drawImage(
+            document.documentElement, // снимаем прям рендер DOM
+            0,
+            0,
+            w,
+            h
+        );
+        ctx.restore();
 
-        const srcX = Math.round(x + dx * offset);
-        const srcY = Math.round(y + dy * offset);
+        // ▼ Виньетка по краям экрана
+        const vignette = ctx.createRadialGradient(
+            w / 2, h / 2, w * 0.3,
+            w / 2, h / 2, w * 0.8
+        );
+        vignette.addColorStop(0, "rgba(0,0,0,0)");
+        vignette.addColorStop(1, "rgba(0,0,0,0.35)");
 
-        if (srcX >= 0 && srcX < w && srcY >= 0 && srcY < h) {
-          const dstIndex = (y * w + x) * 4;
-          const srcIndex = (srcY * w + srcX) * 4;
-          src[dstIndex] = temp[srcIndex];
-          src[dstIndex + 1] = temp[srcIndex + 1];
-          src[dstIndex + 2] = temp[srcIndex + 2];
-        }
-      }
+        ctx.fillStyle = vignette;
+        ctx.fillRect(0, 0, w, h);
+
+        requestAnimationFrame(render);
     }
 
-    ctx.putImageData(imgData, 0, 0);
-  }
-
-  function render() {
-    try {
-      ctx.clearRect(0, 0, w, h);
-
-      // Чуть затемняем края (эмуляция стекла без блика)
-      const grd = ctx.createRadialGradient(cx, cy, w * 0.2, cx, cy, w * 0.85);
-      grd.addColorStop(0, 'rgba(0,0,0,0)');
-      grd.addColorStop(1, 'rgba(0,0,0,0.35)');
-      ctx.fillStyle = grd;
-      ctx.fillRect(0, 0, w, h);
-
-      warp();
-    } catch (e) {
-      console.warn('CRT warp error:', e);
-    }
-
-    requestAnimationFrame(render);
-  }
-
-  requestAnimationFrame(render);
+    render();
 })();
