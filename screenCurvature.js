@@ -1,241 +1,220 @@
-// screenCurvature.js — Draw terminal text to an offscreen canvas, apply barrel distortion
-// No html2canvas, no DOM snapshot, only text replication for distortion.
-// Place this file AFTER terminal.js so #terminal content exists.
+// screenCurvature.js — GPU-based pseudo-CRT curvature using wrapper + transforms
+// Fast, no html2canvas, no heavy pixel ops. Applies a convincing "выпуклый экран" look.
+// Put this AFTER terminal.js in terminal.html
 
 (() => {
-  const TERM_ID = 'terminal';
-  const target = document.getElementById(TERM_ID);
-  if (!target) {
-    console.warn('[curvature] #terminal not found — abort.');
+  // config (tянется через window.crt later)
+  const cfg = {
+    strength: 0.85,    // 0.4..1.2 — визуальная сила выпуклости (higher = stronger)
+    bulgeDepth: 24,    // px perceived depth (translateZ)
+    perspective: 900,  // px perspective distance
+    chroma: 0.9,       // 0..2 — chromatic aberration intensity
+    vignette: 0.32,    // 0..0.6
+    wrapZIndex: 1200,  // z-index for wrapper (above UI)
+  };
+
+  const term = document.getElementById('terminal');
+  if (!term) {
+    console.warn('[crt] #terminal not found — curvature not applied');
     return;
   }
 
-  // Config: tweak these to taste
-  const DPR = Math.min(window.devicePixelRatio || 1, 1.5);
-  const UPDATE_FPS = 18;         // how many updates per second (lower = less CPU)
-  const STRENGTH = 0.28;        // barrel distortion strength (0..0.6). Increase to stronger bulge.
-  const VIGNETTE = 0.36;        // vignette darkness 0..1
-  const FONT_SCALE = 1.0;       // multiplier for font-size when rendering to canvas (1 = keep)
+  // If already wrapped, don't double-wrap
+  if (term.parentElement && term.parentElement.classList.contains('crt-wrap')) {
+    console.info('[crt] terminal already wrapped — skipping wrapper creation');
+  } else {
+    // create wrapper
+    const wrap = document.createElement('div');
+    wrap.className = 'crt-wrap';
+    // copy computed position/size context by inserting wrapper where term was
+    term.parentNode.insertBefore(wrap, term);
+    wrap.appendChild(term);
+    // wrapper styles (absolute relative to viewport)
+    Object.assign(wrap.style, {
+      position: 'relative',
+      display: 'block',
+      width: term.style.width || (term.getBoundingClientRect().width ? term.getBoundingClientRect().width + 'px' : '100%'),
+      height: term.style.height || (term.getBoundingClientRect().height ? term.getBoundingClientRect().height + 'px' : '100%'),
+      transformStyle: 'preserve-3d',
+      zIndex: cfg.wrapZIndex.toString(),
+      pointerEvents: 'auto'
+    });
 
-  // overlay canvas (full window to handle cases where terminal moves)
-  const overlay = document.createElement('canvas');
-  overlay.id = 'crtCurvatureOverlay';
-  Object.assign(overlay.style, {
-    position: 'fixed',
-    top: '0',
-    left: '0',
-    width: '100%',
-    height: '100%',
-    zIndex: 999,
-    pointerEvents: 'none'
-  });
-  document.body.appendChild(overlay);
-  const octx = overlay.getContext('2d');
+    // ensure terminal takes full size of wrap
+    Object.assign(term.style, {
+      position: 'relative',
+      width: '100%',
+      height: '100%',
+      transformOrigin: '50% 50%',
+      backfaceVisibility: 'hidden'
+    });
 
-  // source canvas (sizes to terminal rect * DPR)
-  const src = document.createElement('canvas');
-  const sctx = src.getContext('2d');
+    // create overlay layers: chroma layers + vignette mask
+    // 1) chroma left (red), 2) chroma right (blue) — duplicated term clones visually only
+    const chromaR = document.createElement('div');
+    const chromaB = document.createElement('div');
+    chromaR.className = 'crt-chroma-r';
+    chromaB.className = 'crt-chroma-b';
+    [chromaR, chromaB].forEach(el => {
+      Object.assign(el.style, {
+        position: 'absolute',
+        left: '0', top: '0', right: '0', bottom: '0',
+        pointerEvents: 'none',
+        zIndex: cfg.wrapZIndex + 2,
+        mixBlendMode: 'screen',
+        opacity: '0.35',
+        overflow: 'hidden'
+      });
+      wrap.appendChild(el);
+    });
 
-  // helper: get terminal lines and computed style
-  function fetchTerminalTextAndStyle() {
-    // prefer visible lines, split by \n; fallback to innerText
-    const text = target.innerText || '';
-    const lines = text.split('\n');
-
-    const computed = getComputedStyle(target);
-    // pick a monospace fallback
-    const fontFamily = computed.fontFamily || "'Courier New', monospace";
-    // parse font-size, fallback 16px
-    const fontSize = parseFloat(computed.fontSize) || 16;
-    const color = computed.color || '#00FF41';
-
-    return { lines, fontSize: fontSize * FONT_SCALE, fontFamily, color };
-  }
-
-  function fitSizes() {
-    const rect = target.getBoundingClientRect();
-    const cssW = Math.max(8, Math.floor(rect.width));
-    const cssH = Math.max(8, Math.floor(rect.height));
-
-    // overlay is full window; ensure pixel buffer matches DPR
-    overlay.width = Math.max(2, Math.floor(window.innerWidth * DPR));
-    overlay.height = Math.max(2, Math.floor(window.innerHeight * DPR));
-    overlay.style.width = window.innerWidth + 'px';
-    overlay.style.height = window.innerHeight + 'px';
-
-    // src matches terminal area (we'll render text into src and map to overlay at terminal position)
-    src.width = Math.max(2, Math.floor(cssW * DPR));
-    src.height = Math.max(2, Math.floor(cssH * DPR));
-    src.style.width = cssW + 'px';
-    src.style.height = cssH + 'px';
-  }
-
-  // barrel distortion mapping from src -> overlay (draw only inside terminal rect on overlay)
-  function drawDistortedToOverlay() {
-    const rect = target.getBoundingClientRect();
-    const termX = Math.round(rect.left * DPR);
-    const termY = Math.round(rect.top * DPR);
-    const W = src.width;
-    const H = src.height;
-    if (W <= 0 || H <= 0) return;
-
-    // read source pixels once
-    let srcImg;
-    try {
-      srcImg = sctx.getImageData(0, 0, W, H);
-    } catch (e) {
-      // security/taint issues — bail
-      console.warn('[curvature] cannot read src canvas', e);
-      return;
-    }
-    const sdata = srcImg.data;
-
-    // create dest buffer equal to terminal area size in overlay pixel space
-    const dest = octx.createImageData(W, H);
-    const ddata = dest.data;
-
-    const cx = W / 2;
-    const cy = H / 2;
-    const invCx = 1 / cx;
-    const invCy = 1 / cy;
-    const strength = STRENGTH;
-
-    // inverse mapping: for each dest pixel compute src coords
-    for (let j = 0; j < H; j++) {
-      const ny = (j - cy) * invCy;
-      for (let i = 0; i < W; i++) {
-        const nx = (i - cx) * invCx;
-        const r2 = nx * nx + ny * ny;
-        const k = 1.0 + strength * r2;
-        const sx = (nx / k) * cx + cx;
-        const sy = (ny / k) * cy + cy;
-        const sxi = Math.floor(sx);
-        const syi = Math.floor(sy);
-        const di = (j * W + i) * 4;
-        if (sxi >= 0 && syi >= 0 && sxi < W && syi < H) {
-          const si = (syi * W + sxi) * 4;
-          ddata[di] = sdata[si];
-          ddata[di+1] = sdata[si+1];
-          ddata[di+2] = sdata[si+2];
-          ddata[di+3] = sdata[si+3];
-        } else {
-          // outside source -> transparent (keep 0)
-          ddata[di+3] = 0;
-        }
-      }
+    // Put clones of terminal content into chroma layers but invisible to events.
+    // We clone visually by cloning the node and removing interactive attributes.
+    function createVisualClone(sourceEl) {
+      // deep clone
+      const clone = sourceEl.cloneNode(true);
+      // remove ids to avoid dupes
+      clone.removeAttribute && clone.removeAttribute('id');
+      // disable pointer events on whole clone
+      clone.querySelectorAll && clone.querySelectorAll('*').forEach(n => {
+        n.style && (n.style.pointerEvents = 'none');
+      });
+      clone.style.pointerEvents = 'none';
+      // simplify heavy elements: remove video/canvas elements to avoid cost (if present)
+      clone.querySelectorAll && clone.querySelectorAll('video,canvas').forEach(n => n.remove());
+      return clone;
     }
 
-    // clear only the terminal area on overlay where we'll draw
-    octx.clearRect(termX, termY, W, H);
-    // putImageData at terminal position (in overlay pixel coords)
-    octx.putImageData(dest, termX, termY);
+    // Maintain clones for chroma effect
+    let cloneR = createVisualClone(term);
+    let cloneB = createVisualClone(term);
+    // colorize clones with CSS filters
+    cloneR.style.filter = 'sepia(1) saturate(1.6) hue-rotate(-20deg) contrast(1.05)';
+    cloneB.style.filter = 'sepia(1) saturate(0.4) hue-rotate(160deg) contrast(1.05)';
+    // set blend mode and slight blur for ghosting
+    cloneR.style.opacity = '0.85';
+    cloneB.style.opacity = '0.85';
+    cloneR.style.transform = 'translate3d(0,0,0)'; cloneB.style.transform = 'translate3d(0,0,0)';
+    // ensure clones fill area
+    Object.assign(cloneR.style, { width: '100%', height: '100%' });
+    Object.assign(cloneB.style, { width: '100%', height: '100%' });
 
-    // apply vignette on top of the terminal area
-    octx.save();
-    octx.globalCompositeOperation = 'multiply';
-    const gx = octx.createRadialGradient(termX + W/2, termY + H/2, Math.min(W,H)*0.25, termX + W/2, termY + H/2, Math.max(W,H)*0.7);
-    gx.addColorStop(0, `rgba(0,0,0,0)`);
-    gx.addColorStop(1, `rgba(0,0,0,${VIGNETTE})`);
-    octx.fillStyle = gx;
-    octx.fillRect(termX, termY, W, H);
-    octx.restore();
-  }
+    chromaR.appendChild(cloneR);
+    chromaB.appendChild(cloneB);
 
-  // render terminal text into src canvas (monospace)
-  function renderTerminalTextToSrc() {
-    // clear
-    sctx.clearRect(0, 0, src.width, src.height);
-    // background transparent (we want underlying page to show through around terminal)
-    // but to make text contrast we can paint slight dark overlay if desired:
-    // sctx.fillStyle = 'rgba(0,0,0,0.0)'; sctx.fillRect(0,0,src.width,src.height);
+    // create vignette overlay
+    const vig = document.createElement('div');
+    vig.className = 'crt-vignette';
+    Object.assign(vig.style, {
+      position: 'absolute',
+      left: '0', top: '0', right: '0', bottom: '0',
+      pointerEvents: 'none',
+      zIndex: cfg.wrapZIndex + 3,
+      background: `radial-gradient(ellipse at center, rgba(0,0,0,0) 40%, rgba(0,0,0,${cfg.vignette}) 100%)`
+    });
+    wrap.appendChild(vig);
 
-    const { lines, fontSize, fontFamily, color } = fetchTerminalTextAndStyle();
-    const scaledFontSize = Math.max(8, Math.floor(fontSize * DPR));
-    sctx.fillStyle = color || '#00FF41';
-    sctx.font = `${scaledFontSize}px ${fontFamily}`;
-    sctx.textBaseline = 'top';
-    // calculate line height: try to get from computed or approximate
-    const lineHeight = Math.ceil(scaledFontSize * 1.15);
+    // create a subtle mask to give "curved edge" effect — we use CSS clip-path ellipse
+    // also create an inner shadow via pseudo overlay
+    const edge = document.createElement('div');
+    Object.assign(edge.style, {
+      position: 'absolute',
+      left: '0', top: '0', right: '0', bottom: '0',
+      pointerEvents: 'none',
+      zIndex: cfg.wrapZIndex + 4,
+      borderRadius: '6px',
+      boxShadow: 'inset 0 18px 40px rgba(0,0,0,0.28)',
+      mixBlendMode: 'multiply'
+    });
+    wrap.appendChild(edge);
 
-    // left padding from terminal style (if any)
-    const padLeft = 4 * DPR;
-    const padTop = 4 * DPR;
-
-    // draw each line
-    for (let i = 0; i < lines.length; i++) {
-      const y = padTop + i * lineHeight;
-      // clip if beyond src height
-      if (y > src.height) break;
-      // optionally add slight chroma-offset duplicates to simulate CRT chromatic aberration
-      // main green
-      sctx.fillStyle = color || '#00FF41';
-      sctx.fillText(lines[i], padLeft, y);
-      // slight red ghost (very subtle)
-      sctx.fillStyle = 'rgba(180,30,30,0.06)';
-      sctx.fillText(lines[i], padLeft + 0.6 * DPR, y);
-      // slight blue ghost
-      sctx.fillStyle = 'rgba(30,80,200,0.04)';
-      sctx.fillText(lines[i], padLeft - 0.6 * DPR, y);
+    // create a subtle curvature transform applied to the inner terminal element
+    function applyTransforms(str) {
+      // str in 0..1 normalized for intensity; map to translateZ and scale
+      const s = Math.max(0, Math.min(2, str));
+      const depth = cfg.bulgeDepth * s; // px
+      const scale = 1 + 0.02 * s; // small scale to emphasize center
+      // perspective is on wrapper; we transform the terminal inner content
+      term.style.transform = `perspective(${cfg.perspective}px) translateZ(${depth}px) scale(${scale})`;
+      // chroma offsets: move clones slightly left/right as ghost
+      const chromaOff = Math.max(0, cfg.chroma * s * 1.8);
+      chromaR.style.transform = `translate3d(${-chromaOff}px, ${-chromaOff/3}px, 0) scale(${1 + 0.001*s})`;
+      chromaB.style.transform = `translate3d(${chromaOff}px, ${chromaOff/3}px, 0) scale(${1 + 0.001*s})`;
+      chromaR.style.opacity = `${0.28 + 0.18 * s}`;
+      chromaB.style.opacity = `${0.22 + 0.14 * s}`;
+      // subtle overall brightness decrease when stronger
+      term.style.filter = `brightness(${1 - 0.02 * s})`;
     }
+
+    // initial transforms
+    // ensure wrapper has perspective (on parent)
+    wrap.style.perspective = `${cfg.perspective}px`;
+    wrap.style.perspectiveOrigin = '50% 50%';
+    applyTransforms(cfg.strength);
+
+    // animate subtle breathing to feel alive
+    let t = 0;
+    let anim = true;
+    function tick() {
+      if (!anim) return;
+      t += 0.016;
+      // small periodic modulation
+      const mod = 0.02 * Math.sin(t * 0.9) + 0.01 * Math.sin(t * 0.2);
+      applyTransforms(cfg.strength + mod);
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+
+    // expose API to control
+    window.crt = window.crt || {};
+    window.crt.setStrength = function(v) {
+      cfg.strength = Number(v) || 0;
+      applyTransforms(cfg.strength);
+    };
+    window.crt.enable = function() { anim = true; requestAnimationFrame(tick); wrap.style.display = ''; };
+    window.crt.disable = function() { anim = false; term.style.transform = ''; chromaR.remove(); chromaB.remove(); vig.remove(); edge.remove(); wrap.style.boxShadow = ''; };
+    window.crt.getConfig = () => ({...cfg});
+    window.crt._internal = { wrap, term, chromaR, chromaB, vig, edge };
+
+    // After layout changes we must sync clones (to reflect new terminal content)
+    // We'll do a lightweight refresh: replace clone nodes with fresh clones
+    function refreshClones() {
+      // remove old clones
+      chromaR.innerHTML = '';
+      chromaB.innerHTML = '';
+      cloneR = createVisualClone(term);
+      cloneB = createVisualClone(term);
+      cloneR.style.filter = 'sepia(1) saturate(1.6) hue-rotate(-20deg) contrast(1.05)';
+      cloneB.style.filter = 'sepia(1) saturate(0.4) hue-rotate(160deg) contrast(1.05)';
+      Object.assign(cloneR.style, { width:'100%', height:'100%', pointerEvents:'none' });
+      Object.assign(cloneB.style, { width:'100%', height:'100%', pointerEvents:'none' });
+      chromaR.appendChild(cloneR);
+      chromaB.appendChild(cloneB);
+    }
+
+    // Monitor terminal content changes and refresh clones occasionally
+    const mo = new MutationObserver(() => {
+      // debounce brief changes
+      if (window._crtRefreshTimeout) clearTimeout(window._crtRefreshTimeout);
+      window._crtRefreshTimeout = setTimeout(()=> {
+        try { refreshClones(); } catch(e){/*ignore*/ }
+      }, 220);
+    });
+    mo.observe(term, { childList: true, subtree: true, characterData: true });
+
+    // keep wrapper sizing consistent with terminal (in case terminal is absolute positioned)
+    function syncWrapSize() {
+      const r = term.getBoundingClientRect();
+      // position wrap at same flow as term (wrap already contains term so usually okay)
+      // but if terminal was absolutely positioned, ensure wrap follows that
+      // We only set inline sizes if they are zero
+      if (!wrap.style.width || wrap.style.width === '0px') wrap.style.width = r.width + 'px';
+      if (!wrap.style.height || wrap.style.height === '0px') wrap.style.height = r.height + 'px';
+    }
+    window.addEventListener('resize', syncWrapSize);
+    syncWrapSize();
+
+    console.info('[crt] curvature wrapper applied — use window.crt.setStrength(value) to tweak (e.g. 0.6)');
   }
 
-  // full update: render text -> distort -> draw overlay
-  function fullUpdate() {
-    // ensure sizes match
-    fitSizes(); // define below
-    renderTerminalTextToSrc();
-    drawDistortedToOverlay();
-  }
-
-  // fitSizes function: sets src/overlay pixel sizes according to terminal rect and window
-  function fitSizes() {
-    const rect = target.getBoundingClientRect();
-    // overlay already set to full window - actual pixel buffer:
-    overlay.width = Math.max(2, Math.floor(window.innerWidth * DPR));
-    overlay.height = Math.max(2, Math.floor(window.innerHeight * DPR));
-    overlay.style.width = window.innerWidth + 'px';
-    overlay.style.height = window.innerHeight + 'px';
-
-    src.width = Math.max(2, Math.floor(rect.width * DPR));
-    src.height = Math.max(2, Math.floor(rect.height * DPR));
-    // no need to set css for src
-  }
-
-  // schedule loop
-  let last = 0;
-  function loop(now) {
-    requestAnimationFrame(loop);
-    if (!last) last = now;
-    const elapsed = now - last;
-    const period = 1000 / UPDATE_FPS;
-    if (elapsed < period) return;
-    last = now;
-    // update sizes, text and overlay
-    fullUpdate();
-  }
-
-  // initial
-  fitSizes();
-  fullUpdate();
-  requestAnimationFrame(loop);
-
-  // update when terminal layout changes: resize/scroll/visibility
-  let resizeTimer = null;
-  window.addEventListener('resize', () => {
-    if (resizeTimer) clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => { fitSizes(); fullUpdate(); }, 160);
-  });
-  window.addEventListener('scroll', () => {
-    if (resizeTimer) clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => { fitSizes(); fullUpdate(); }, 160);
-  });
-
-  // expose quick API
-  window.crtCurvature = {
-    refresh: () => fullUpdate(),
-    setStrength: (v) => { STRENGTH = Math.max(0, Math.min(0.6, +v)); },
-    setFPS: (f) => { /* can't change const; left as exercise */ }
-  };
-
-  console.info('screenCurvature.js initialized — text-based barrel distortion active');
 })();
