@@ -27,7 +27,7 @@ body {
     height: 100%;
     z-index: 0; /* фон */
     display: block;
-    pointer-events: none; /* не мешает кликам по интерфейсу */
+    pointer-events: auto; /* не мешает кликам по интерфейсу */
 }
 
 /* Слой контента должен быть выше фона */
