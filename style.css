@@ -233,3 +233,8 @@ body {
 @keyframes blink {
     50% { opacity: 0; }
 }
+
+/* FIX FOR NETGRID - allow canvas events */
+canvas:not(#shader-canvas) {
+    pointer-events: auto !important;
+}
