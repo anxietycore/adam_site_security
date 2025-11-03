@@ -1,5 +1,5 @@
 // netGrid_v3.js — VIGIL NET GRID v3 (WORKING)
-// Drop this file as netGrid_v3.js and refresh page (Ctrl+F5)
+// Fixed version - replaced broken roundRect function
 
 (() => {
   try {
@@ -71,9 +71,9 @@
       const bgctx = bgCanvas.getContext('2d');
       bgctx.clearRect(0, 0, w, h);
 
-      // panel background (stronger green tint)
+      // SIMPLE BACKGROUND - removed broken roundRect function
       bgctx.fillStyle = 'rgba(2,18,12,0.66)';
-      roundRect(bgctx, 0, 0, w, h, 10 * DPR, true, false);
+      bgctx.fillRect(0, 0, w, h);
 
       // soft inner vignette
       const vig = bgctx.createRadialGradient(w/2, h/2, Math.min(w,h)*0.06, w/2, h/2, Math.max(w,h)*0.9);
@@ -130,23 +130,6 @@
         bgctx.fillStyle = `rgba(${COLOR.r},${COLOR.g},${COLOR.b},${0.02 + Math.random()*0.05})`;
         bgctx.fillRect(x, y, 1*DPR, 1*DPR);
       }
-    }
-
-    function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
-      if (typeof radius === 'number') radius = {tl: radius, tr: radius, br: radius, bl: radius};
-      ctx.beginPath();
-      ctx.moveTo(x + radius.tl, y);
-      ctx.lineTo(x + width - radius.tr, y);
-      ctx.quadraticCurveTo(x + width, y, x + width, y + radius.tr);
-      ctx.lineTo(x + width, y + height - radius.br);
-      ctx.quadraticCurveTo(x + width, y + height, x + width - radius.br, y + height);
-      ctx.lineTo(x + radius.bl, y + height);
-      ctx.quadraticCurveTo(x, y + height, x, y + height - radius.bl);
-      ctx.lineTo(x, y + radius.tl);
-      ctx.quadraticCurveTo(x, y, x + radius.tl, y);
-      ctx.closePath();
-      if (fill) ctx.fill();
-      if (stroke) ctx.stroke();
     }
 
     // ---- animation ----
