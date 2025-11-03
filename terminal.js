@@ -1340,6 +1340,31 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 break;
 
+            case 'ping':
+                addColoredText('[PING -> NETWORK NODE]', '#00FF41');
+                if (window.netGrid) window.netGrid.trigger('ping');
+                break;
+
+            case 'trace':
+                addColoredText('[TRACE: NETWORK MAPPING ACTIVE]', '#00FF41');
+                if (window.netGrid) window.netGrid.trigger('trace');
+                break;
+
+            case 'alert':
+                addColoredText('[ALERT: NETWORK INTEGRITY FAILURE]', '#FF3333');
+                if (window.netGrid) window.netGrid.trigger('alert');
+                break;
+
+            case 'rebootnet':
+                addColoredText('[REBOOTING NETWORK GRID...]', '#FFFF00');
+                if (window.netGrid) window.netGrid.trigger('reboot');
+                break;
+
+            case 'status':
+                addColoredText('[NETWORK STATUS]', '#00FF41');
+                if (window.netGrid) window.netGrid.trigger('status');
+                break;
+                
             case 'notes':
                 await typeText('[ЗАПРЕЩЁННЫЕ ФАЙЛЫ / КАТЕГОРИЯ: NOTES]', 'output', 1);
                 addColoredText('------------------------------------', '#00FF41');
