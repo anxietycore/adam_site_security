@@ -56,7 +56,6 @@ let bgCanvas = document.createElement('canvas');
   resize();
 
   // -------- offscreen bg to reduce per-frame cost ----------
-  let bgCanvas = null;
   let nodePositions = [];
   let connections = [];
   const NODE_COUNT = 26;
