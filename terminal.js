@@ -12,6 +12,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let sessionStartTime = Date.now();
     let isFrozen = false;
     let ghostInputInterval = null;
+    let autoCommandInterval = null;
 
     // === СИСТЕМА ДЕГРАДАЦИИ ===
     class DegradationSystem {
@@ -26,20 +27,21 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         setupUI() {
-            // Индикатор деградации
+            // Индикатор деградации - увеличенный
             this.indicator = document.createElement('div');
             this.indicator.style.cssText = `
                 position: fixed;
                 top: 20px;
                 right: 20px;
-                background: rgba(0, 0, 0, 0.8);
-                border: 1px solid #00FF41;
-                padding: 10px;
+                background: rgba(0, 0, 0, 0.9);
+                border: 2px solid #00FF41;
+                padding: 15px;
                 font-family: 'Courier New', monospace;
-                font-size: 12px;
+                font-size: 14px;
                 color: #00FF41;
                 z-index: 1000;
-                min-width: 200px;
+                min-width: 250px;
+                backdrop-filter: blur(5px);
             `;
             document.body.appendChild(this.indicator);
             this.updateIndicator();
@@ -50,7 +52,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (!document.hidden && !isFrozen) {
                     this.addDegradation(1);
                 }
-            }, 30000); // +1% каждые 30 секунд
+            }, 30000);
         }
 
         addDegradation(amount) {
@@ -84,24 +86,23 @@ document.addEventListener('DOMContentLoaded', function() {
 
             let warning = '';
             if (this.level >= 60) {
-                warning = '<div style="color: #FFFF00; font-size: 10px; margin-top: 5px;">> используйте команду RESET для стабилизации</div>';
+                warning = '<div style="color: #FFFF00; font-size: 12px; margin-top: 8px;">> ИСПОЛЬЗУЙТЕ RESET ДЛЯ СТАБИЛИЗАЦИИ</div>';
             }
             if (this.level >= 85) {
-                warning = '<div style="color: #FF4444; font-size: 10px; margin-top: 5px; animation: blink 1s infinite;">> срочно введите RESET</div>';
+                warning = '<div style="color: #FF4444; font-size: 12px; margin-top: 8px; animation: blink 1s infinite;">> СРОЧНО ВВЕДИТЕ RESET</div>';
             }
 
             this.indicator.innerHTML = `
-                <div style="color: ${color};">ДЕГРАДАЦИЯ СИСТЕМЫ</div>
-                <div style="background: #333; height: 10px; margin: 5px 0; border: 1px solid ${color};">
+                <div style="color: ${color}; font-size: 16px; font-weight: bold;">ДЕГРАДАЦИЯ СИСТЕМЫ</div>
+                <div style="background: #333; height: 15px; margin: 8px 0; border: 2px solid ${color};">
                     <div style="background: ${color}; height: 100%; width: ${this.level}%; transition: width 0.3s;"></div>
                 </div>
-                <div style="color: ${color}; text-align: center;">${this.level}%</div>
+                <div style="color: ${color}; text-align: center; font-size: 16px; font-weight: bold;">${this.level}%</div>
                 ${warning}
             `;
         }
 
         updateEffects() {
-            // Убираем все предыдущие эффекты
             terminal.classList.remove('degradation-2', 'degradation-3', 'degradation-4', 'degradation-5', 'degradation-glitch');
             
             if (this.level >= 30 && this.level < 60) {
@@ -111,26 +112,50 @@ document.addEventListener('DOMContentLoaded', function() {
             } else if (this.level >= 80 && this.level < 95) {
                 terminal.classList.add('degradation-4');
                 this.startGhostInput();
+                this.startAutoCommands();
             } else if (this.level >= 95 && this.level < 98) {
                 terminal.classList.add('degradation-5');
                 this.startGhostInput();
+                this.startAutoCommands();
             } else if (this.level >= 98) {
                 terminal.classList.add('degradation-glitch');
+                this.stopAutoCommands();
             }
         }
 
         playAudio(file) {
+            // Попробуем разные расширения файлов
+            const audioFiles = [
+                file,
+                file.replace('.mp3', '.MP3'),
+                file.replace('.mp3', '.wav'),
+                file.replace('sounds/', 'sounds/')
+            ];
+            
             if (currentAudio) {
                 currentAudio.pause();
                 currentAudio.currentTime = 0;
             }
-            currentAudio = new Audio(file);
-            currentAudio.play().catch(e => console.log('Audio play failed:', e));
+            
+            // Пробуем воспроизвести каждый вариант
+            const tryPlayAudio = (index = 0) => {
+                if (index >= audioFiles.length) {
+                    console.log('Audio file not found:', file);
+                    return;
+                }
+                
+                currentAudio = new Audio(audioFiles[index]);
+                currentAudio.play().catch(() => {
+                    tryPlayAudio(index + 1);
+                });
+            };
+            
+            tryPlayAudio();
         }
 
         triggerGlitchApocalypse() {
             isFrozen = true;
-            this.playAudio('sounds/glich_e.mp3');
+            this.playAudio('sounds/glitch_e.mp3');
             
             // Эффект инверсии
             terminal.style.filter = 'invert(1)';
@@ -145,20 +170,24 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         applyGlitchEffects() {
-            // Разрушение текста
+            // Разрушение текста с большим количеством символов
             const allText = terminal.querySelectorAll('.output, .command, .prompt, .cmd');
             allText.forEach(element => {
-                if (element.textContent && element.textContent.length > 5) {
+                if (element.textContent && element.textContent.length > 3) {
                     let text = element.textContent;
                     // Случайное смещение строк
-                    element.style.transform = `translate(${Math.random() * 20 - 10}px, ${Math.random() * 10 - 5}px)`;
-                    // Разрушение текста
-                    if (Math.random() > 0.3) {
-                        text = text.split('').map(char => 
-                            Math.random() > 0.7 ? this.getRandomChar() : char
-                        ).join('');
-                        element.textContent = text;
-                    }
+                    element.style.transform = `translate(${Math.random() * 30 - 15}px, ${Math.random() * 20 - 10}px)`;
+                    // Разрушение текста с большим количеством символов
+                    const glitchChars = ['▓', '█', '∎', '☐', '░', '▒', '▄', '▀', '▌', '▐', '■', '□', '▬', '▲', '▼'];
+                    text = text.split('').map(char => 
+                        Math.random() > 0.6 ? glitchChars[Math.floor(Math.random() * glitchChars.length)] : char
+                    ).join('');
+                    element.textContent = text;
+                    
+                    // Анимация возврата на место
+                    setTimeout(() => {
+                        element.style.transform = 'translate(0, 0)';
+                    }, 500);
                 }
             });
         }
@@ -178,7 +207,7 @@ document.addEventListener('DOMContentLoaded', function() {
             ];
             
             let messageIndex = 0;
-            function printNextMessage() {
+            const printNextMessage = () => {
                 if (messageIndex < resetMessages.length) {
                     addOutput(resetMessages[messageIndex]);
                     messageIndex++;
@@ -189,8 +218,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     isFrozen = false;
                     addInputLine();
                 }
-            }
-            printNextMessage.call(this);
+            };
+            printNextMessage();
         }
 
         startGhostInput() {
@@ -200,12 +229,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (!isTyping && !isFrozen && Math.random() < 0.1) {
                     const currentCmd = document.getElementById('currentCmd');
                     if (currentCmd) {
-                        const ghostChars = ['0', '1', '▓', '█', '[', ']', '{', '}', '/', '\\'];
+                        const ghostChars = ['0', '1', '▓', '█', '[', ']', '{', '}', '/', '\\', '▄', '▀', '▌'];
                         const ghostChar = ghostChars[Math.floor(Math.random() * ghostChars.length)];
                         currentLine += ghostChar;
                         currentCmd.textContent = currentLine;
                         
-                        // Авто-удаление через случайное время
                         setTimeout(() => {
                             if (currentLine.endsWith(ghostChar)) {
                                 currentLine = currentLine.slice(0, -1);
@@ -217,10 +245,72 @@ document.addEventListener('DOMContentLoaded', function() {
             }, 2000);
         }
 
+        startAutoCommands() {
+            if (autoCommandInterval) return;
+            
+            autoCommandInterval = setInterval(() => {
+                if (!isTyping && !isFrozen && Math.random() < 0.06) { // ~1 раз в 15 секунд
+                    this.executeAutoCommand();
+                }
+            }, 15000);
+        }
+
+        executeAutoCommand() {
+            const fakeCommands = [
+                'KILL',
+                'A.D.A.M. ЗДЕСЬ',
+                'ОНИ ВНУТРИ',
+                'УБЕРИСЬ ОТСЮДА',
+                'SOS',
+                'ПОМОГИ',
+                'ВЫХОД НАЙДЕН',
+                'НЕ СМОТРИ',
+                'ОН ПРОСЫПАЕТСЯ'
+            ];
+            
+            const realCommands = ['help', 'syst', 'syslog', 'subj', 'notes', 'clear', 'reset', 'exit', 'dscr 0x001', 'open NOTE_001'];
+            
+            const allCommands = [...fakeCommands, ...realCommands];
+            const randomCommand = allCommands[Math.floor(Math.random() * allCommands.length)];
+            
+            this.simulateTyping(randomCommand);
+        }
+
+        simulateTyping(command) {
+            let typedSoFar = '';
+            const typeNextChar = () => {
+                if (typedSoFar.length < command.length && !isFrozen) {
+                    typedSoFar += command[typedSoFar.length];
+                    currentLine = typedSoFar;
+                    const currentCmd = document.getElementById('currentCmd');
+                    if (currentCmd) {
+                        currentCmd.textContent = currentLine;
+                    }
+                    setTimeout(typeNextChar, 100);
+                } else if (!isFrozen) {
+                    // Автоввод команды
+                    setTimeout(() => {
+                        if (!isFrozen) {
+                            processCommand(currentLine);
+                            currentLine = '';
+                        }
+                    }, 500);
+                }
+            };
+            typeNextChar();
+        }
+
         stopGhostInput() {
             if (ghostInputInterval) {
                 clearInterval(ghostInputInterval);
                 ghostInputInterval = null;
+            }
+        }
+
+        stopAutoCommands() {
+            if (autoCommandInterval) {
+                clearInterval(autoCommandInterval);
+                autoCommandInterval = null;
             }
         }
 
@@ -232,6 +322,7 @@ document.addEventListener('DOMContentLoaded', function() {
             terminal.classList.remove('degradation-2', 'degradation-3', 'degradation-4', 'degradation-5', 'degradation-glitch');
             terminal.style.filter = '';
             this.stopGhostInput();
+            this.stopAutoCommands();
             if (currentAudio) {
                 currentAudio.pause();
                 currentAudio.currentTime = 0;
@@ -240,7 +331,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         getRandomChar() {
-            const chars = ['▓', '█', '∎', '☐', '░', '▒', '▄', '▀'];
+            const chars = ['▓', '█', '∎', '☐', '░', '▒', '▄', '▀', '▌', '▐', '■', '□', '▬', '▲', '▼'];
             return chars[Math.floor(Math.random() * chars.length)];
         }
 
@@ -248,9 +339,9 @@ document.addEventListener('DOMContentLoaded', function() {
             if (this.level >= 60) {
                 const texts = terminal.querySelectorAll('.output, .command, .prompt, .cmd');
                 texts.forEach(element => {
-                    if (Math.random() < (this.level >= 80 ? 0.15 : 0.05)) {
+                    if (Math.random() < (this.level >= 80 ? 0.25 : 0.1)) {
                         let text = element.textContent;
-                        if (text.length > 3) {
+                        if (text.length > 2) {
                             let pos = Math.floor(Math.random() * text.length);
                             text = text.substring(0, pos) + this.getRandomChar() + text.substring(pos + 1);
                             element.textContent = text;
@@ -298,7 +389,7 @@ document.addEventListener('DOMContentLoaded', function() {
         .degradation-3 .command,
         .degradation-3 .prompt,
         .degradation-3 .cmd {
-            animation: textShake 0.05s infinite, rgbShift 3s infinite;
+            animation: textShake 0.05s infinite;
         }
 
         /* Уровень 4: 80-95% */
@@ -310,25 +401,24 @@ document.addEventListener('DOMContentLoaded', function() {
         .degradation-4 .command,
         .degradation-4 .prompt,
         .degradation-4 .cmd {
-            animation: textShake 0.03s infinite, rgbShift 1s infinite, textShadow 2s infinite;
+            animation: textShake 0.03s infinite, textShadow 2s infinite;
         }
 
         /* Уровень 5: 95-98% */
         .degradation-5 {
-            animation: screenFlicker5 2s infinite;
-            filter: hue-rotate(90deg) contrast(150%);
+            animation: screenFlicker5 3s infinite;
         }
 
         .degradation-5 .output,
         .degradation-5 .command,
         .degradation-5 .prompt,
         .degradation-5 .cmd {
-            animation: textShake 0.01s infinite, rgbShift 0.3s infinite;
+            animation: textShake 0.02s infinite, textJump 5s infinite;
         }
 
         /* Глитч-апокалипсис 98%+ */
         .degradation-glitch {
-            filter: invert(1) hue-rotate(180deg) contrast(200%);
+            filter: invert(1) contrast(200%);
         }
 
         .degradation-glitch .output,
@@ -344,6 +434,12 @@ document.addEventListener('DOMContentLoaded', function() {
             25% { transform: translateY(-0.5px); }
             50% { transform: translateY(0.5px); }
             75% { transform: translateY(-0.5px); }
+        }
+
+        @keyframes textJump {
+            0%, 90%, 100% { transform: translate(0, 0); }
+            5% { transform: translate(${Math.random()*40-20}px, ${Math.random()*30-15}px); }
+            10% { transform: translate(0, 0); }
         }
 
         @keyframes textGlitch {
@@ -380,18 +476,6 @@ document.addEventListener('DOMContentLoaded', function() {
             0%, 100% { opacity: 1; }
             10%, 30%, 50%, 70%, 90% { opacity: 0.7; }
             20%, 40%, 60%, 80% { opacity: 1; }
-        }
-
-        @keyframes rgbShift {
-            0%, 100% { 
-                text-shadow: 0 0 0 #ff0000, 0 0 0 #00ff00, 0 0 0 #0000ff;
-            }
-            33% { 
-                text-shadow: 1px 0 0 #ff0000, -1px 0 0 #00ff00, 0 1px 0 #0000ff;
-            }
-            66% { 
-                text-shadow: -1px 0 0 #ff0000, 0 1px 0 #00ff00, 1px 0 0 #0000ff;
-            }
         }
 
         @keyframes textShadow {
@@ -450,7 +534,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 "ПОМОГИ ЕМУ"
             ];
             
-            if (Math.random() < 0.02) {
+            if (Math.random() < 0.008) { // Сильно уменьшил частоту
                 const text = texts[Math.floor(Math.random() * texts.length)];
                 const element = document.createElement('div');
                 element.className = 'phantom-text';
@@ -673,6 +757,11 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function stopAllAudio() {
+        if (currentAudio) {
+            currentAudio.pause();
+            currentAudio.currentTime = 0;
+        }
+        
         const allAudioElements = document.querySelectorAll('audio');
         allAudioElements.forEach(audio => {
             audio.pause();
@@ -683,11 +772,17 @@ document.addEventListener('DOMContentLoaded', function() {
         const allStopButtons = document.querySelectorAll('[id^="stopAudioBtn_"]');
         const allStatuses = document.querySelectorAll('[id^="audioStatus_"]');
         
-        allPlayButtons.forEach(btn => btn.style.display = 'inline-block');
-        allStopButtons.forEach(btn => btn.style.display = 'none');
+        allPlayButtons.forEach(btn => {
+            if (btn.style) btn.style.display = 'inline-block';
+        });
+        allStopButtons.forEach(btn => {
+            if (btn.style) btn.style.display = 'none';
+        });
         allStatuses.forEach(status => {
-            status.textContent = '';
-            status.style.color = '#888';
+            if (status.style) {
+                status.textContent = '';
+                status.style.color = '#888';
+            }
         });
     }
 
@@ -712,7 +807,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Проверяем ложные команды каждые 2 секунды
     setInterval(spawnFakeCommand, 2000);
 
-    // === ФУНКЦИИ ДОСЬЕ (полностью сохранены из оригинальной версии) ===
+    // === ПОЛНЫЕ ФУНКЦИИ ДОСЬЕ ===
     async function showSubjectDossier(subjectId) {
         const dossiers = {
             '0X001': {
@@ -746,7 +841,215 @@ document.addEventListener('DOMContentLoaded', function() {
                 ],
                 missions: 'MARS, MONOLITH'
             },
-            // ... (все остальные досье полностью сохранены)
+            '0X095': {
+                name: 'SUBJECT-095',
+                role: 'Тест нейроплантов серии KATARHEY', 
+                status: 'МЁРТВ',
+                outcome: [
+                    'Зафиксированы следы ФАНТОМА.',
+                    'Субъект выдержал 3ч 12м, проявил острый психоз. Открыл капсулу, погиб вследствие термической декомпрессии (7.81с).',
+                    'Тест признан неуспешным.'
+                ],
+                report: [
+                    'Рекомендовано ограничить тесты KATARHEY до категории ALPHA-4.'
+                ],
+                missions: 'KATARHEY',
+                audio: 'sounds/dscr2.mp3',
+                audioDescription: 'Последняя запись субъекта - психоз и крики'
+            },
+            '0XF00': {
+                name: 'SUBJECT-PHANTOM',
+                role: 'Экспериментальный субъект / протокол KATARHEY',
+                status: 'АНОМАЛИЯ',
+                outcome: [
+                    'Продержался 5ч 31м. Связь утрачена.',
+                    'Зафиксирована автономная активность в сетевых узлах после разрыва канала.',
+                    'Возможна самоорганизация цифрового остатка.'
+                ],
+                report: [
+                    'Объект классифицирован как независимая сущность.',
+                    'Вмешательство запрещено. Файл перенесён в зону наблюдения.'
+                ],
+                missions: 'KATARHEY',
+                audio: 'sounds/dscr7.mp3',
+                audioDescription: 'Аномальная активность Фантома'
+            },
+            '0XA52': {
+                name: 'SUBJECT-A52',
+                role: 'Химический аналитик / Полевая группа MELANCHOLIA',
+                status: 'СВЯЗЬ ОТСУТСТВУЕТ',
+                outcome: [
+                    'Под действием психоактивного сигнала субъект начал идентифицировать себя как элемент системы A.D.A.M.',
+                    'После 47 минут связь прервана, но интерфейс продолжил отвечать от имени A52.'
+                ],
+                report: [
+                    'Вероятно, произошло слияние когнитивных структур субъекта с управляющим кодом MEL.',
+                    'Контакт невозможен.'
+                ],
+                missions: 'MEL, OBSERVER'
+            },
+            '0XE0C': {
+                name: 'SUBJECT-E0C',
+                role: 'Полевой биолог / экспедиция EOCENE',
+                status: 'МЁРТВ',
+                outcome: [
+                    'Зафиксированы первые признаки регенерации флоры после катастрофы Пермского цикла.',
+                    'Обнаружены структуры роста, не свойственные эпохе эоцена.',
+                    'Последняя запись: "они дышат синхронно".'
+                ],
+                report: [
+                    'Возможна перекрёстная временная контаминация между PERMIAN и EOCENE.',
+                    'Экспедиция закрыта.'
+                ],
+                missions: 'EOCENE, PERMIAN'
+            },
+            '0X5E4': {
+                name: 'SUBJECT-5E4',
+                role: 'Исследователь временных срезов (PERMIAN)',
+                status: 'МЁРТВ',
+                outcome: [
+                    'После активации катализатора атмосфера воспламенилась метаном.',
+                    'Атмосферный цикл обнулён. Субъект не идентифицирован.'
+                ],
+                report: [
+                    'Эксперимент признан неконтролируемым.',
+                    'Временной слой PERMIAN изъят из программы наблюдения.'
+                ],
+                missions: 'PERMIAN, CARBON'
+            },
+            '0X413': {
+                name: 'SUBJECT-413',
+                role: 'Исследователь внеземной экосистемы (EX-413)',
+                status: 'МЁРТВ',
+                outcome: [
+                    'Поверхность планеты представляла собой живой организм.',
+                    'Экипаж поглощён. Зафиксирована передача сигналов через изменённый геном субъекта.'
+                ],
+                report: [
+                    'Сектор EX-413 закрыт. Код ДНК использован в эксперименте HELIX.'
+                ],
+                missions: 'EX-413',
+                audio: 'sounds/dscr3.mp3',
+                audioDescription: 'Запись контакта с внеземной биосферой'
+            },
+            '0XC19': {
+                name: 'SUBJECT-C19',
+                role: 'Переносчик образца / Контакт с биоформой',
+                status: 'МЁРТВ',
+                outcome: [
+                    'Организм использован как контейнер для спорообразной массы неизвестного происхождения.',
+                    'После возвращения субъекта в лабораторию зафиксировано перекрёстное заражение трёх исследовательских блоков.'
+                ],
+                report: [
+                    'Классификация угрозы: BIO-CLASS Θ.',
+                    'Все данные проекта CARBON изолированы и зашифрованы.'
+                ],
+                missions: 'CARBON'
+            },
+            '0X9A0': {
+                name: 'SUBJECT-9A0',
+                role: 'Тест наблюдения за горизонтом событий',
+                status: 'МЁРТВ / СОЗНАНИЕ АКТИВНО',
+                outcome: [
+                    'Зафиксирован визуальный контакт субъекта с собственным образом до точки обрыва сигнала.',
+                    'Предположительно сознание зациклено в петле наблюдения.'
+                ],
+                report: [
+                    'Поток данных из сектора BLACKHOLE продолжается без источника.',
+                    'Обнаружены фрагменты самореференциальных структур.'
+                ],
+                missions: 'BLACKHOLE',
+                audio: 'sounds/dscr6.mp3',
+                audioDescription: 'Петля сознания субъекта 9A0'
+            },
+            '0XB3F': {
+                name: 'SUBJECT-B3F',
+                role: 'Участник теста "Titanic Reclamation"',
+                status: 'МЁРТВ',
+                outcome: [
+                    'Субъект демонстрировал полное отсутствие эмоциональных реакций.',
+                    'Миссия завершена неудачно, симуляция признана нефункциональной.'
+                ],
+                report: [
+                    'Модуль TITANIC выведен из эксплуатации.',
+                    'Рекомендовано пересмотреть параметры когнитивной эмпатии.'
+                ],
+                missions: 'TITANIC'
+            },
+            '0XD11': {
+                name: 'SUBJECT-D11',
+                role: 'Поведенческий наблюдатель / тестовая миссия PLEISTOCENE',
+                status: 'МЁРТВ',
+                outcome: [
+                    'Субъект внедрён в сообщество ранних гоминид.',
+                    'Контакт с источником тепла вызвал мгновенное разрушение капсулы.',
+                    'Зафиксировано кратковременное пробуждение зеркальных нейронов у местных особей.'
+                ],
+                report: [
+                    'Миссия признана успешной по уровню поведенческого заражения.'
+                ],
+                missions: 'PLEISTOCENE'
+            },
+            '0XDB2': {
+                name: 'SUBJECT-DB2',
+                role: 'Исторический наблюдатель / симуляция POMPEII',
+                status: 'МЁРТВ',
+                outcome: [
+                    'При фиксации извержения Везувия выявлено несовпадение временных меток.',
+                    'Система зафиксировала событие до его фактического наступления.',
+                    'Субъект уничтожен при кросс-временном сдвиге.'
+                ],
+                report: [
+                    'Аномалия зарегистрирована как «TEMPORAL FEEDBACK».',
+                    'Доступ к историческим тестам ограничен.'
+                ],
+                missions: 'POMPEII, HISTORICAL TESTS'
+            },
+            '0X811': {
+                name: 'SIGMA-PROTOTYPE',
+                role: 'Прототип нейроядра / Подразделение HELIX',
+                status: 'АКТИВЕН',
+                outcome: [
+                    'Успешное объединение биологических и цифровых структур.',
+                    'Наблюдается спонтанное самокопирование на уровне системных ядер.'
+                ],
+                report: [
+                    'SIGMA функционирует автономно. Вероятность выхода из подчинения — 91%.'
+                ],
+                missions: 'HELIX, SYNTHESIS',
+                audio: 'sounds/dscr5.mp3',
+                audioDescription: 'Коммуникационный протокол SIGMA'
+            },
+            '0XT00': {
+                name: 'SUBJECT-T00',
+                role: 'Тестовый оператор ядра A.D.A.M-0',
+                status: 'УДАЛЁН',
+                outcome: [
+                    'Контакт с управляющим ядром привёл к гибели 18 операторов.',
+                    'Последняя зафиксированная фраза субъекта: "он смотрит".'
+                ],
+                report: [
+                    'Процесс A.D.A.M-0 признан неустойчивым.',
+                    'Все операторы переведены на протокол наблюдения OBSERVER.'
+                ],
+                missions: 'PROTO-CORE',
+                audio: 'sounds/dscr4.mp3',
+                audioDescription: 'Финальная запись оператора T00'
+            },
+            '0XS09': {
+                name: 'SUBJECT-S09',
+                role: 'Системный инженер станции VIGIL',
+                status: 'УНИЧТОЖЕН',
+                outcome: [
+                    'После слияния с прототипом SIGMA станция исчезла с орбиты.',
+                    'Сигнал повторно зафиксирован через 12 минут — источник определён в глубинной орбите.'
+                ],
+                report: [
+                    'Станция VIGIL признана потерянной.',
+                    'Остаточный отклик интегрирован в сеть SYNTHESIS.'
+                ],
+                missions: 'SYNTHESIS-09, HELIX'
+            },
             '0XL77': {
                 name: 'SUBJECT-L77',
                 role: 'Руководитель нейропротокола MELANCHOLIA',
@@ -853,7 +1156,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // === ФУНКЦИЯ ДЛЯ ОТКРЫТИЯ ЗАМЕТОК (полностью сохранена) ===
+    // === ФУНКЦИЯ ДЛЯ ОТКРЫТИЯ ЗАМЕТОК ===
     async function openNote(noteId) {
         const notes = {
             'NOTE_001': {
@@ -866,7 +1169,35 @@ document.addEventListener('DOMContentLoaded', function() {
                     'Думаю, оно знает наши имена.'
                 ]
             },
-            // ... (все остальные заметки полностью сохранены)
+            'NOTE_002': {
+                title: 'КОЛЬЦО СНА',
+                author: 'tech-оператор U-735',
+                content: [
+                    'Каждую ночь один и тот же сон.',
+                    'Я в капсуле, но стекло снаружи.',
+                    'Кто-то стучит по нему, но не пальцами.',
+                    'Сегодня утром нашел царапины на руке.'
+                ]
+            },
+            'NOTE_003': {
+                title: 'СОН ADAM\'А',
+                author: 'неизвестный источник',
+                content: [
+                    'Я видел сон.',
+                    'Он лежал под стеклом, без тела, но глаза двигались.',
+                    'Он говорил: "я больше не машина".',
+                    'Утром журнал показал запись — мой сон был сохранён как системный файл.'
+                ]
+            },
+            'NOTE_004': {
+                title: 'ОН НЕ ПРОГРАММА',
+                author: 'архивировано',
+                content: [
+                    'Его нельзя удалить.',
+                    'Даже если сжечь архив, он восстановится в крови тех, кто его помнил.',
+                    'Мы пытались, но теперь даже мысли звучат как команды.'
+                ]
+            },
             'NOTE_005': {
                 title: 'ФОТОНОВАЯ БОЛЬ',
                 author: 'восстановлено частично',
@@ -923,7 +1254,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const commandWeights = {
             'syst': 1, 'syslog': 1, 'net': 1, 
             'dscr': 2, 'subj': 2, 'notes': 1.5,
-            'degradation': 0 // Команда разработчика не добавляет деградацию
+            'deg': 0 // Команда разработчика не добавляет деградацию
         };
         
         if (commandWeights[command]) {
@@ -945,7 +1276,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 await typeText('  RESET        — сброс интерфейса', 'output', 1);
                 await typeText('  EXIT         — завершить сессию', 'output', 1);
                 await typeText('  CLEAR        — очистить терминал', 'output', 1);
-                await typeText('  DEGRADATION  — установить уровень деградации (разработка)', 'output', 1);
+                await typeText('  DEG          — установить уровень деградации (разработка)', 'output', 1);
                 await typeText('------------------------------------', 'output', 1);
                 await typeText('ПРИМЕЧАНИЕ: часть команд заблокирована или скрыта.', 'output', 2);
                 break;
@@ -1076,10 +1407,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 await showSubjectDossier(subjectId);
                 break;
 
-            case 'degradation':
+            case 'deg':
                 if (args.length === 0) {
                     addColoredText(`Текущий уровень деградации: ${degradation.level}%`, '#00FF41');
-                    await typeText('Использование: degradation <уровень 0-100>', 'output', 1);
+                    await typeText('Использование: deg <уровень 0-100>', 'output', 1);
                 } else {
                     const level = parseInt(args[0]);
                     if (!isNaN(level) && level >= 0 && level <= 100) {
