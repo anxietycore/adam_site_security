@@ -36,7 +36,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 background: rgba(0, 0, 0, 0.9);
                 border: 2px solid #00FF41;
                 padding: 15px;
-                font-family: 'Courier New', monospace;
+                font-family: 'Press Start 2P', monospace;
                 font-size: 14px;
                 color: #00FF41;
                 z-index: 1000;
@@ -492,7 +492,7 @@ document.addEventListener('DOMContentLoaded', function() {
         .phantom-text {
             position: fixed;
             color: rgba(255, 255, 255, 0.3);
-            font-family: 'Courier New', monospace;
+            font-family: 'Press Start 2P', monospace;
             font-size: 16px;
             pointer-events: none;
             z-index: 999;
@@ -1103,7 +1103,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     border: 1px solid #00FF41; 
                     padding: 8px 15px; 
                     cursor: pointer;
-                    font-family: 'Courier New';
+                    font-family: 'Press Start 2P';
                     margin-right: 10px;">
                     ▶ ВОСПРОИЗВЕСТИ
                 </button>
@@ -1113,7 +1113,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     border: 1px solid #FF4444; 
                     padding: 8px 15px; 
                     cursor: pointer;
-                    font-family: 'Courier New';
+                    font-family: 'Press Start 2P';
                     display: none;">
                     ■ ОСТАНОВИТЬ
                 </button>
