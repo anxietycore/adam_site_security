@@ -155,7 +155,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         triggerGlitchApocalypse() {
             isFrozen = true;
-            this.playAudio('sounds/glitch_e.mp3');
+            this.playAudio('sounds/glitch_e.MP3');
             
             // Эффект инверсии
             terminal.style.filter = 'invert(1)';
