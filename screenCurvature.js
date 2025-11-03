@@ -1,220 +1,189 @@
-// screenCurvature.js — GPU-based pseudo-CRT curvature using wrapper + transforms
-// Fast, no html2canvas, no heavy pixel ops. Applies a convincing "выпуклый экран" look.
-// Put this AFTER terminal.js in terminal.html
-
+// screenCurvature.js — safe pseudo-CRT curvature (overlay, no DOM clones, no heavy ops)
 (() => {
-  // config (tянется через window.crt later)
   const cfg = {
-    strength: 0.85,    // 0.4..1.2 — визуальная сила выпуклости (higher = stronger)
-    bulgeDepth: 24,    // px perceived depth (translateZ)
-    perspective: 900,  // px perspective distance
-    chroma: 0.9,       // 0..2 — chromatic aberration intensity
-    vignette: 0.32,    // 0..0.6
-    wrapZIndex: 1200,  // z-index for wrapper (above UI)
+    strength: 0.9,    // perceptual strength 0.3..1.3
+    chromaOffset: 6,  // px color ghost offset
+    vignette: 0.36,   // 0..0.6 darkness
+    wrapZ: 1100,      // z-index for overlay
+    breathSpeed: 0.8, // breathing animation speed
+    breatheAmount: 0.02 // tiny periodic modulation
   };
 
   const term = document.getElementById('terminal');
-  if (!term) {
-    console.warn('[crt] #terminal not found — curvature not applied');
-    return;
-  }
+  if (!term) { console.warn('[crt] #terminal missing — curvature not applied'); return; }
 
-  // If already wrapped, don't double-wrap
-  if (term.parentElement && term.parentElement.classList.contains('crt-wrap')) {
-    console.info('[crt] terminal already wrapped — skipping wrapper creation');
-  } else {
-    // create wrapper
-    const wrap = document.createElement('div');
-    wrap.className = 'crt-wrap';
-    // copy computed position/size context by inserting wrapper where term was
-    term.parentNode.insertBefore(wrap, term);
-    wrap.appendChild(term);
-    // wrapper styles (absolute relative to viewport)
-    Object.assign(wrap.style, {
-      position: 'relative',
-      display: 'block',
-      width: term.style.width || (term.getBoundingClientRect().width ? term.getBoundingClientRect().width + 'px' : '100%'),
-      height: term.style.height || (term.getBoundingClientRect().height ? term.getBoundingClientRect().height + 'px' : '100%'),
-      transformStyle: 'preserve-3d',
-      zIndex: cfg.wrapZIndex.toString(),
-      pointerEvents: 'auto'
-    });
+  // create overlay container that sits exactly over terminal (pointer-events:none)
+  function createOverlay() {
+    const rect = term.getBoundingClientRect();
 
-    // ensure terminal takes full size of wrap
-    Object.assign(term.style, {
-      position: 'relative',
-      width: '100%',
-      height: '100%',
-      transformOrigin: '50% 50%',
-      backfaceVisibility: 'hidden'
-    });
-
-    // create overlay layers: chroma layers + vignette mask
-    // 1) chroma left (red), 2) chroma right (blue) — duplicated term clones visually only
-    const chromaR = document.createElement('div');
-    const chromaB = document.createElement('div');
-    chromaR.className = 'crt-chroma-r';
-    chromaB.className = 'crt-chroma-b';
-    [chromaR, chromaB].forEach(el => {
-      Object.assign(el.style, {
-        position: 'absolute',
-        left: '0', top: '0', right: '0', bottom: '0',
-        pointerEvents: 'none',
-        zIndex: cfg.wrapZIndex + 2,
-        mixBlendMode: 'screen',
-        opacity: '0.35',
-        overflow: 'hidden'
-      });
-      wrap.appendChild(el);
-    });
-
-    // Put clones of terminal content into chroma layers but invisible to events.
-    // We clone visually by cloning the node and removing interactive attributes.
-    function createVisualClone(sourceEl) {
-      // deep clone
-      const clone = sourceEl.cloneNode(true);
-      // remove ids to avoid dupes
-      clone.removeAttribute && clone.removeAttribute('id');
-      // disable pointer events on whole clone
-      clone.querySelectorAll && clone.querySelectorAll('*').forEach(n => {
-        n.style && (n.style.pointerEvents = 'none');
-      });
-      clone.style.pointerEvents = 'none';
-      // simplify heavy elements: remove video/canvas elements to avoid cost (if present)
-      clone.querySelectorAll && clone.querySelectorAll('video,canvas').forEach(n => n.remove());
-      return clone;
-    }
-
-    // Maintain clones for chroma effect
-    let cloneR = createVisualClone(term);
-    let cloneB = createVisualClone(term);
-    // colorize clones with CSS filters
-    cloneR.style.filter = 'sepia(1) saturate(1.6) hue-rotate(-20deg) contrast(1.05)';
-    cloneB.style.filter = 'sepia(1) saturate(0.4) hue-rotate(160deg) contrast(1.05)';
-    // set blend mode and slight blur for ghosting
-    cloneR.style.opacity = '0.85';
-    cloneB.style.opacity = '0.85';
-    cloneR.style.transform = 'translate3d(0,0,0)'; cloneB.style.transform = 'translate3d(0,0,0)';
-    // ensure clones fill area
-    Object.assign(cloneR.style, { width: '100%', height: '100%' });
-    Object.assign(cloneB.style, { width: '100%', height: '100%' });
-
-    chromaR.appendChild(cloneR);
-    chromaB.appendChild(cloneB);
-
-    // create vignette overlay
-    const vig = document.createElement('div');
-    vig.className = 'crt-vignette';
-    Object.assign(vig.style, {
+    const ov = document.createElement('div');
+    ov.id = 'crt-overlay';
+    Object.assign(ov.style, {
       position: 'absolute',
-      left: '0', top: '0', right: '0', bottom: '0',
+      left: rect.left + 'px',
+      top: rect.top + 'px',
+      width: rect.width + 'px',
+      height: rect.height + 'px',
       pointerEvents: 'none',
-      zIndex: cfg.wrapZIndex + 3,
-      background: `radial-gradient(ellipse at center, rgba(0,0,0,0) 40%, rgba(0,0,0,${cfg.vignette}) 100%)`
+      zIndex: String(cfg.wrapZ),
+      overflow: 'visible'
     });
-    wrap.appendChild(vig);
+    document.body.appendChild(ov);
 
-    // create a subtle mask to give "curved edge" effect — we use CSS clip-path ellipse
-    // also create an inner shadow via pseudo overlay
-    const edge = document.createElement('div');
-    Object.assign(edge.style, {
-      position: 'absolute',
-      left: '0', top: '0', right: '0', bottom: '0',
+    // base inner area (transparent)
+    const inner = document.createElement('div');
+    inner.style.position = 'absolute';
+    inner.style.left = '0'; inner.style.top = '0';
+    inner.style.right = '0'; inner.style.bottom = '0';
+    inner.style.overflow = 'hidden';
+    inner.style.borderRadius = '4px';
+    ov.appendChild(inner);
+
+    // subtle left/red chroma
+    const leftChroma = document.createElement('div');
+    Object.assign(leftChroma.style, {
+      position: 'absolute', left: '-30px', top: '0',
+      width: 'calc(100% + 60px)', height: '100%',
       pointerEvents: 'none',
-      zIndex: cfg.wrapZIndex + 4,
-      borderRadius: '6px',
+      mixBlendMode: 'screen',
+      opacity: '0.18',
+      background: `linear-gradient(90deg, rgba(180,40,40,0.55), rgba(0,0,0,0) 35%)`,
+      transform: `translate3d(-${cfg.chromaOffset}px, -${Math.round(cfg.chromaOffset/4)}px, 0)`,
+      filter: 'blur(2px)'
+    });
+    inner.appendChild(leftChroma);
+
+    // subtle right/blue chroma
+    const rightChroma = document.createElement('div');
+    Object.assign(rightChroma.style, {
+      position: 'absolute', left: '-30px', top: '0',
+      width: 'calc(100% + 60px)', height: '100%',
+      pointerEvents: 'none',
+      mixBlendMode: 'screen',
+      opacity: '0.12',
+      background: `linear-gradient(90deg, rgba(0,0,0,0) 65%, rgba(40,120,220,0.5))`,
+      transform: `translate3d(${cfg.chromaOffset}px, ${Math.round(cfg.chromaOffset/4)}px, 0)`,
+      filter: 'blur(2px)'
+    });
+    inner.appendChild(rightChroma);
+
+    // central subtle dark elliptical mask to imitate bulge shadow (lighter center, darker edges)
+    const mask = document.createElement('div');
+    Object.assign(mask.style, {
+      position: 'absolute', left: '0', top: '0', width: '100%', height: '100%',
+      pointerEvents: 'none',
+      background: `radial-gradient(ellipse at center, rgba(0,0,0,0) ${30 + Math.round(cfg.strength*2)}%, rgba(0,0,0,${cfg.vignette}) 100%)`,
+      mixBlendMode: 'multiply',
+      opacity: '1'
+    });
+    inner.appendChild(mask);
+
+    // micro-noise texture (to read as "screen")
+    const noise = document.createElement('div');
+    Object.assign(noise.style, {
+      position: 'absolute', left: '0', top: '0', width: '100%', height: '100%',
+      pointerEvents: 'none',
+      backgroundImage: 'url("data:image/svg+xml;utf8, \
+        <svg xmlns=\'http://www.w3.org/2000/svg\' width=\'40\' height=\'40\'><filter id=\'n\'><feTurbulence baseFrequency=\'0.9\' numOctaves=\'1\' stitchTiles=\'stitch\'/></filter><rect width=\'100%\' height=\'100%\' filter=\'url(%23n)\' opacity=\'0.02\'/></svg>")',
+      opacity: '0.9',
+      mixBlendMode: 'overlay'
+    });
+    inner.appendChild(noise);
+
+    // inner inset border to simulate bezel depth
+    const innerEdge = document.createElement('div');
+    Object.assign(innerEdge.style, {
+      position: 'absolute', left: '0', top: '0', width: '100%', height: '100%',
+      pointerEvents: 'none',
       boxShadow: 'inset 0 18px 40px rgba(0,0,0,0.28)',
-      mixBlendMode: 'multiply'
+      borderRadius: '4px'
     });
-    wrap.appendChild(edge);
+    inner.appendChild(innerEdge);
 
-    // create a subtle curvature transform applied to the inner terminal element
-    function applyTransforms(str) {
-      // str in 0..1 normalized for intensity; map to translateZ and scale
-      const s = Math.max(0, Math.min(2, str));
-      const depth = cfg.bulgeDepth * s; // px
-      const scale = 1 + 0.02 * s; // small scale to emphasize center
-      // perspective is on wrapper; we transform the terminal inner content
-      term.style.transform = `perspective(${cfg.perspective}px) translateZ(${depth}px) scale(${scale})`;
-      // chroma offsets: move clones slightly left/right as ghost
-      const chromaOff = Math.max(0, cfg.chroma * s * 1.8);
-      chromaR.style.transform = `translate3d(${-chromaOff}px, ${-chromaOff/3}px, 0) scale(${1 + 0.001*s})`;
-      chromaB.style.transform = `translate3d(${chromaOff}px, ${chromaOff/3}px, 0) scale(${1 + 0.001*s})`;
-      chromaR.style.opacity = `${0.28 + 0.18 * s}`;
-      chromaB.style.opacity = `${0.22 + 0.14 * s}`;
-      // subtle overall brightness decrease when stronger
-      term.style.filter = `brightness(${1 - 0.02 * s})`;
-    }
-
-    // initial transforms
-    // ensure wrapper has perspective (on parent)
-    wrap.style.perspective = `${cfg.perspective}px`;
-    wrap.style.perspectiveOrigin = '50% 50%';
-    applyTransforms(cfg.strength);
-
-    // animate subtle breathing to feel alive
-    let t = 0;
-    let anim = true;
-    function tick() {
-      if (!anim) return;
-      t += 0.016;
-      // small periodic modulation
-      const mod = 0.02 * Math.sin(t * 0.9) + 0.01 * Math.sin(t * 0.2);
-      applyTransforms(cfg.strength + mod);
-      requestAnimationFrame(tick);
-    }
-    requestAnimationFrame(tick);
-
-    // expose API to control
-    window.crt = window.crt || {};
-    window.crt.setStrength = function(v) {
-      cfg.strength = Number(v) || 0;
-      applyTransforms(cfg.strength);
-    };
-    window.crt.enable = function() { anim = true; requestAnimationFrame(tick); wrap.style.display = ''; };
-    window.crt.disable = function() { anim = false; term.style.transform = ''; chromaR.remove(); chromaB.remove(); vig.remove(); edge.remove(); wrap.style.boxShadow = ''; };
-    window.crt.getConfig = () => ({...cfg});
-    window.crt._internal = { wrap, term, chromaR, chromaB, vig, edge };
-
-    // After layout changes we must sync clones (to reflect new terminal content)
-    // We'll do a lightweight refresh: replace clone nodes with fresh clones
-    function refreshClones() {
-      // remove old clones
-      chromaR.innerHTML = '';
-      chromaB.innerHTML = '';
-      cloneR = createVisualClone(term);
-      cloneB = createVisualClone(term);
-      cloneR.style.filter = 'sepia(1) saturate(1.6) hue-rotate(-20deg) contrast(1.05)';
-      cloneB.style.filter = 'sepia(1) saturate(0.4) hue-rotate(160deg) contrast(1.05)';
-      Object.assign(cloneR.style, { width:'100%', height:'100%', pointerEvents:'none' });
-      Object.assign(cloneB.style, { width:'100%', height:'100%', pointerEvents:'none' });
-      chromaR.appendChild(cloneR);
-      chromaB.appendChild(cloneB);
-    }
-
-    // Monitor terminal content changes and refresh clones occasionally
-    const mo = new MutationObserver(() => {
-      // debounce brief changes
-      if (window._crtRefreshTimeout) clearTimeout(window._crtRefreshTimeout);
-      window._crtRefreshTimeout = setTimeout(()=> {
-        try { refreshClones(); } catch(e){/*ignore*/ }
-      }, 220);
-    });
-    mo.observe(term, { childList: true, subtree: true, characterData: true });
-
-    // keep wrapper sizing consistent with terminal (in case terminal is absolute positioned)
-    function syncWrapSize() {
-      const r = term.getBoundingClientRect();
-      // position wrap at same flow as term (wrap already contains term so usually okay)
-      // but if terminal was absolutely positioned, ensure wrap follows that
-      // We only set inline sizes if they are zero
-      if (!wrap.style.width || wrap.style.width === '0px') wrap.style.width = r.width + 'px';
-      if (!wrap.style.height || wrap.style.height === '0px') wrap.style.height = r.height + 'px';
-    }
-    window.addEventListener('resize', syncWrapSize);
-    syncWrapSize();
-
-    console.info('[crt] curvature wrapper applied — use window.crt.setStrength(value) to tweak (e.g. 0.6)');
+    return { ov, leftChroma, rightChroma, mask, noise, innerEdge };
   }
 
+  // create overlay and elements
+  let overlayParts = null;
+  function mountOverlay() {
+    // remove old overlay if exists
+    const old = document.getElementById('crt-overlay');
+    if (old && old.parentNode) old.parentNode.removeChild(old);
+    overlayParts = createOverlay();
+  }
+  mountOverlay();
+
+  // animate tiny breathing + parallax on mouse to enhance bulge sensation
+  let t = 0;
+  let mouse = {x:0,y:0};
+  function onMouse(e) { mouse.x = e.clientX; mouse.y = e.clientY; }
+  window.addEventListener('mousemove', onMouse);
+
+  function tick() {
+    t += 0.016 * cfg.breathSpeed;
+    // subtle breathing scale factor
+    const breathe = 1 + Math.sin(t) * cfg.breatheAmount;
+
+    // compute normalized mouse offset relative to overlay center
+    const ov = overlayParts && overlayParts.ov;
+    if (ov) {
+      const r = ov.getBoundingClientRect();
+      const cx = r.left + r.width/2;
+      const cy = r.top + r.height/2;
+      const dx = (mouse.x - cx) / Math.max(1, r.width) ;
+      const dy = (mouse.y - cy) / Math.max(1, r.height) ;
+
+      // apply transforms to chroma layers (tiny parallax)
+      const ox = dx * cfg.chromaOffset * cfg.strength * 0.8;
+      const oy = dy * cfg.chromaOffset * cfg.strength * 0.5;
+
+      overlayParts.leftChroma.style.transform = `translate3d(${-cfg.chromaOffset + ox}px, ${-cfg.chromaOffset/4 + oy}px, 0) scale(${1 * breathe})`;
+      overlayParts.rightChroma.style.transform = `translate3d(${cfg.chromaOffset + ox}px, ${cfg.chromaOffset/4 + oy}px, 0) scale(${1 * breathe})`;
+
+      // tweak mask opacity/shape slightly with mouse distance for perceived curvature
+      const dist = Math.min(1, Math.hypot(dx, dy) * 1.6);
+      const maskPct = 30 + Math.round(cfg.strength * 2) + dist * 12;
+      overlayParts.mask.style.background = `radial-gradient(ellipse at ${50 + dx*16}% ${50 + dy*12}%, rgba(0,0,0,0) ${maskPct}%, rgba(0,0,0,${cfg.vignette}) 100%)`;
+    }
+
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+
+  // on resize or terminal move, reposition overlay
+  let resizeTimer = null;
+  function reposition() {
+    const old = document.getElementById('crt-overlay');
+    if (!old) return;
+    const rect = term.getBoundingClientRect();
+    old.style.left = rect.left + 'px';
+    old.style.top = rect.top + 'px';
+    old.style.width = rect.width + 'px';
+    old.style.height = rect.height + 'px';
+  }
+  window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(reposition, 120); });
+  // also monitor scroll/layout changes
+  window.addEventListener('scroll', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(reposition, 120); });
+
+  // expose API to tweak quickly
+  window.crt = window.crt || {};
+  window.crt.set = function(opts = {}) {
+    Object.assign(cfg, opts);
+    // refresh overlay immediately
+    if (overlayParts) {
+      overlayParts.leftChroma.style.opacity = `${0.18 * Math.max(0.2, cfg.strength)}`;
+      overlayParts.rightChroma.style.opacity = `${0.12 * Math.max(0.2, cfg.strength)}`;
+      overlayParts.mask.style.background = `radial-gradient(ellipse at center, rgba(0,0,0,0) ${30 + Math.round(cfg.strength*2)}%, rgba(0,0,0,${cfg.vignette}) 100%)`;
+    }
+  };
+  window.crt.remove = function() {
+    const el = document.getElementById('crt-overlay');
+    if (el && el.parentNode) el.parentNode.removeChild(el);
+    window.removeEventListener('mousemove', onMouse);
+    window.removeEventListener('resize', reposition);
+    window.removeEventListener('scroll', reposition);
+    console.info('[crt] overlay removed');
+  };
+
+  console.info('[crt] safe overlay curvature applied — use window.crt.set({strength:0.8}) or window.crt.remove()');
 })();
