@@ -27,7 +27,7 @@ body {
     height: 100%;
     z-index: 0; /* фон */
     display: block;
-    pointer-events: auto; /* не мешает кликам по интерфейсу */
+    pointer-events: none; /* не мешает кликам по интерфейсу */
 }
 
 /* Слой контента должен быть выше фона */
@@ -232,9 +232,4 @@ body {
 
 @keyframes blink {
     50% { opacity: 0; }
-}
-
-/* FIX FOR NETGRID - allow canvas events */
-canvas:not(#shader-canvas) {
-    pointer-events: auto !important;
 }
