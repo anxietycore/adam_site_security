@@ -39,6 +39,7 @@
     letterSpacing: '0.6px',
   });
   document.body.appendChild(statusEl);
+let bgCanvas = document.createElement('canvas');
 
   // -------- sizing ----------
   let w = 0, h = 0;
@@ -61,7 +62,6 @@
   const NODE_COUNT = 26;
 
   function buildOffscreen() {
-    bgCanvas = document.createElement('canvas');
     bgCanvas.width = w; bgCanvas.height = h;
     const bgctx = bgCanvas.getContext('2d');
 
