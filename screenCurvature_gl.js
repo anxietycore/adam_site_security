@@ -1,100 +1,55 @@
-// screenCurvature.js - Простой и рабочий эффект изогнутого CRT экрана
+// screenCurvature.js - ЛЕГКИЙ CRT ЭФФЕКТ БЕЗ ЛАГОВ
 (() => {
-    // Создаем canvas поверх контента
-    const canvas = document.createElement('canvas');
-    canvas.id = 'curvature-canvas';
-    Object.assign(canvas.style, {
+    // Создаем просто DIV с градиентами для имитации изогнутости
+    const curvature = document.createElement('div');
+    curvature.id = 'crt-curvature';
+    Object.assign(curvature.style, {
         position: 'fixed',
         top: 0,
         left: 0,
         width: '100%',
         height: '100%',
         pointerEvents: 'none',
-        zIndex: '1000',
-        opacity: '0.98'
+        zIndex: '10',
+        background: `
+            radial-gradient(
+                ellipse at center,
+                transparent 0%,
+                rgba(0, 0, 0, 0.15) 70%,
+                rgba(0, 20, 0, 0.35) 100%
+            ),
+            radial-gradient(
+                circle at 10% 20%,
+                rgba(0, 50, 0, 0.1) 0%,
+                transparent 20%
+            ),
+            radial-gradient(
+                circle at 90% 80%,
+                rgba(0, 50, 0, 0.1) 0%,
+                transparent 20%
+            )
+        `,
+        mixBlendMode: 'multiply',
+        opacity: '0.7'
     });
     
-    // Вставляем canvas как первый элемент в body (чтобы он был под всем контентом)
-    document.body.insertBefore(canvas, document.body.firstChild);
+    // Добавляем тонкую зеленую рамку по краям (CRT glow)
+    const glow = document.createElement('div');
+    Object.assign(glow.style, {
+        position: 'fixed',
+        top: '1px',
+        left: '1px',
+        right: '1px',
+        bottom: '1px',
+        pointerEvents: 'none',
+        border: '1px solid rgba(0, 255, 65, 0.1)',
+        borderRadius: '3px',
+        zIndex: '11',
+        boxShadow: '0 0 15px rgba(0, 255, 65, 0.2)'
+    });
     
-    const ctx = canvas.getContext('2d');
-    let width, height;
+    document.body.appendChild(curvature);
+    document.body.appendChild(glow);
     
-    function resize() {
-        width = canvas.width = window.innerWidth;
-        height = canvas.height = window.innerHeight;
-    }
-    
-    window.addEventListener('resize', resize);
-    resize();
-    
-    // Основная функция рендера эффекта кривизны
-    function render() {
-        // Очищаем canvas
-        ctx.clearRect(0, 0, width, height);
-        
-        // Создаем градиент для эффекта изогнутости
-        const centerX = width / 2;
-        const centerY = height / 2;
-        
-        // Эффект бочкообразного искажения (barrel distortion)
-        const imageData = ctx.createImageData(width, height);
-        const data = imageData.data;
-        
-        // Коэффициент искривления (чем больше, тем сильнее изгиб)
-        const curvature = 0.08;
-        
-        // Для оптимизации - рисуем только каждый N пиксель
-        const skip = 2;
-        
-        for (let y = 0; y < height; y += skip) {
-            for (let x = 0; x < width; x += skip) {
-                // Нормализуем координаты
-                const nx = (x - centerX) / centerX;
-                const ny = (y - centerY) / centerY;
-                
-                // Применяем бочкообразное искажение
-                const r2 = nx * nx + ny * ny;
-                const distortion = 1 - curvature * r2;
-                
-                // Исходные координаты с искажением
-                const sx = Math.floor(centerX + nx * centerX * distortion);
-                const sy = Math.floor(centerY + ny * centerY * distortion);
-                
-                // Проверяем границы
-                if (sx >= 0 && sx < width && sy >= 0 && sy < height) {
-                    // Применяем эффект виньетки (темные углы)
-                    const vignette = Math.pow(1 - (Math.min(1, r2) * 0.8), 3);
-                    
-                    // Рисуем пиксель с эффектом изогнутости и виньетки
-                    const index = (y * width + x) * 4;
-                    data[index] = 0;     // R
-                    data[index + 1] = 0; // G
-                    data[index + 2] = 0; // B
-                    data[index + 3] = Math.floor(15 * vignette); // Прозрачность для эффекта
-                        
-                    // Добавляем едва заметный зеленый оттенок по краям для CRT-эффекта
-                    if (r2 > 0.7) {
-                        data[index] = 0;
-                        data[index + 1] = Math.floor(4 * vignette);
-                        data[index + 2] = 0;
-                    }
-                }
-            }
-        }
-        
-        ctx.putImageData(imageData, 0, 0);
-        
-        // Добавляем очень тонкий контур по краям для эффекта CRT
-        ctx.strokeStyle = 'rgba(0, 255, 65, 0.05)';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(1, 1, width - 2, height - 2);
-        
-        requestAnimationFrame(render);
-    }
-    
-    // Запускаем рендеринг
-    render();
-    
-    console.log('CRT curvature effect loaded successfully');
+    console.log('CRT curvature effect loaded - LITE VERSION');
 })();
