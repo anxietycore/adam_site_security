@@ -1,131 +1,100 @@
-// screenCurvature_gl.js — CRT curvature with edge noise
+// screenCurvature.js - Простой и рабочий эффект изогнутого CRT экрана
 (() => {
-  const canvas = document.createElement("canvas");
-  Object.assign(canvas.style, {
-    position: "fixed",
-    top: 0,
-    left: 0,
-    width: "100%",
-    height: "100%",
-    zIndex: 100,
-    pointerEvents: "none",
-  });
-  document.body.appendChild(canvas);
-
-  const gl = canvas.getContext("webgl");
-  if (!gl) return console.error("WebGL not supported");
-
-  const vertexShaderSrc = `
-    attribute vec2 position;
-    varying vec2 vUv;
-    void main() {
-      vUv = (position + 1.0) * 0.5;
-      gl_Position = vec4(position, 0.0, 1.0);
+    // Создаем canvas поверх контента
+    const canvas = document.createElement('canvas');
+    canvas.id = 'curvature-canvas';
+    Object.assign(canvas.style, {
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        pointerEvents: 'none',
+        zIndex: '1000',
+        opacity: '0.98'
+    });
+    
+    // Вставляем canvas как первый элемент в body (чтобы он был под всем контентом)
+    document.body.insertBefore(canvas, document.body.firstChild);
+    
+    const ctx = canvas.getContext('2d');
+    let width, height;
+    
+    function resize() {
+        width = canvas.width = window.innerWidth;
+        height = canvas.height = window.innerHeight;
     }
-  `;
-
-  const fragmentShaderSrc = `
-    precision highp float;
-    varying vec2 vUv;
-    uniform sampler2D uScene;
-    uniform vec2 uResolution;
-    uniform float uTime;
-
-    float rand(vec2 co){
-      return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);
+    
+    window.addEventListener('resize', resize);
+    resize();
+    
+    // Основная функция рендера эффекта кривизны
+    function render() {
+        // Очищаем canvas
+        ctx.clearRect(0, 0, width, height);
+        
+        // Создаем градиент для эффекта изогнутости
+        const centerX = width / 2;
+        const centerY = height / 2;
+        
+        // Эффект бочкообразного искажения (barrel distortion)
+        const imageData = ctx.createImageData(width, height);
+        const data = imageData.data;
+        
+        // Коэффициент искривления (чем больше, тем сильнее изгиб)
+        const curvature = 0.08;
+        
+        // Для оптимизации - рисуем только каждый N пиксель
+        const skip = 2;
+        
+        for (let y = 0; y < height; y += skip) {
+            for (let x = 0; x < width; x += skip) {
+                // Нормализуем координаты
+                const nx = (x - centerX) / centerX;
+                const ny = (y - centerY) / centerY;
+                
+                // Применяем бочкообразное искажение
+                const r2 = nx * nx + ny * ny;
+                const distortion = 1 - curvature * r2;
+                
+                // Исходные координаты с искажением
+                const sx = Math.floor(centerX + nx * centerX * distortion);
+                const sy = Math.floor(centerY + ny * centerY * distortion);
+                
+                // Проверяем границы
+                if (sx >= 0 && sx < width && sy >= 0 && sy < height) {
+                    // Применяем эффект виньетки (темные углы)
+                    const vignette = Math.pow(1 - (Math.min(1, r2) * 0.8), 3);
+                    
+                    // Рисуем пиксель с эффектом изогнутости и виньетки
+                    const index = (y * width + x) * 4;
+                    data[index] = 0;     // R
+                    data[index + 1] = 0; // G
+                    data[index + 2] = 0; // B
+                    data[index + 3] = Math.floor(15 * vignette); // Прозрачность для эффекта
+                        
+                    // Добавляем едва заметный зеленый оттенок по краям для CRT-эффекта
+                    if (r2 > 0.7) {
+                        data[index] = 0;
+                        data[index + 1] = Math.floor(4 * vignette);
+                        data[index + 2] = 0;
+                    }
+                }
+            }
+        }
+        
+        ctx.putImageData(imageData, 0, 0);
+        
+        // Добавляем очень тонкий контур по краям для эффекта CRT
+        ctx.strokeStyle = 'rgba(0, 255, 65, 0.05)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(1, 1, width - 2, height - 2);
+        
+        requestAnimationFrame(render);
     }
-
-    void main(){
-      vec2 uv = vUv;
-
-      // CRT curvature
-      vec2 center = uv - 0.5;
-      float dist = dot(center, center) * 1.2;
-      uv = uv + center * dist * 0.25;
-
-      // barrel distortion fix
-      uv = clamp(uv, 0.0, 1.0);
-
-      vec3 col = texture2D(uScene, uv).rgb;
-
-      // subtle vignette
-      float vignette = smoothstep(0.9, 0.4, length(center)*1.4);
-      col *= vignette;
-
-      // edge noise (grain)
-      float noise = rand(uv * uResolution.xy + uTime * 60.0);
-      col += noise * 0.03;
-
-      gl_FragColor = vec4(col, 1.0);
-    }
-  `;
-
-  function compileShader(type, src) {
-    const shader = gl.createShader(type);
-    gl.shaderSource(shader, src);
-    gl.compileShader(shader);
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-      console.error(gl.getShaderInfoLog(shader));
-    }
-    return shader;
-  }
-
-  const vs = compileShader(gl.VERTEX_SHADER, vertexShaderSrc);
-  const fs = compileShader(gl.FRAGMENT_SHADER, fragmentShaderSrc);
-  const program = gl.createProgram();
-  gl.attachShader(program, vs);
-  gl.attachShader(program, fs);
-  gl.linkProgram(program);
-  gl.useProgram(program);
-
-  const quad = new Float32Array([-1,-1, 1,-1, -1,1, 1,1]);
-  const buf = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-  gl.bufferData(gl.ARRAY_BUFFER, quad, gl.STATIC_DRAW);
-
-  const posLoc = gl.getAttribLocation(program, "position");
-  gl.enableVertexAttribArray(posLoc);
-  gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
-
-  const tex = gl.createTexture();
-  const fb = gl.createFramebuffer();
-
-  const sceneCanvas = document.createElement("canvas");
-  const sctx = sceneCanvas.getContext("2d");
-
-  function resize() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    sceneCanvas.width = window.innerWidth;
-    sceneCanvas.height = window.innerHeight;
-    gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
-  }
-
-  window.addEventListener("resize", resize);
-  resize();
-
-  const uScene = gl.getUniformLocation(program, "uScene");
-  const uResolution = gl.getUniformLocation(program, "uResolution");
-  const uTime = gl.getUniformLocation(program, "uTime");
-
-  function render(t) {
-    // рендерим содержимое страницы
-    sctx.clearRect(0,0,sceneCanvas.width,sceneCanvas.height);
-    sctx.drawImage(document.documentElement, 0, 0); // <— основа
-    gl.bindTexture(gl.TEXTURE_2D, tex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, sceneCanvas);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    gl.useProgram(program);
-    gl.uniform1i(uScene, 0);
-    gl.uniform2f(uResolution, canvas.width, canvas.height);
-    gl.uniform1f(uTime, t * 0.001);
-    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-    requestAnimationFrame(render);
-  }
-
-  requestAnimationFrame(render);
+    
+    // Запускаем рендеринг
+    render();
+    
+    console.log('CRT curvature effect loaded successfully');
 })();
