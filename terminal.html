@@ -6,6 +6,32 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <!-- вставить сразу внутри <body> -->
+<svg aria-hidden="true" style="position:absolute;width:0;height:0;pointer-events:none;">
+  <defs>
+    <!-- Баррель-фильтр: используется радиальная карта (feImage) + feDisplacementMap -->
+    <filter id="barrelFilter" x="-60%" y="-60%" width="220%" height="220%" color-interpolation-filters="sRGB">
+      <!-- взять SourceGraphic (исходный рендер) и искажать его по карте -->
+      <!-- feImage: встроенное SVG с радиальным градиентом (градация серого => векторы смещения) -->
+      <feImage xlink:href="data:image/svg+xml;utf8,
+        <svg xmlns='http://www.w3.org/2000/svg' width='512' height='512'>
+          <defs>
+            <radialGradient id='g' cx='50%' cy='50%' r='50%'>
+              <stop offset='0%' stop-color='%23808080' />
+              <stop offset='100%' stop-color='%23ffffff' />
+            </radialGradient>
+          </defs>
+          <rect width='100%' height='100%' fill='url(%23g)'/>
+        </svg>"
+        preserveAspectRatio="xMidYMid slice" result="map"/>
+      <!-- немного сгладим карту -->
+      <feGaussianBlur in="map" stdDeviation="1" result="mapBlur"/>
+      <!-- масштаб смещения будем менять из JS (атрибут scale) -->
+      <feDisplacementMap in="SourceGraphic" in2="mapBlur" scale="30" xChannelSelector="R" yChannelSelector="G" />
+    </filter>
+  </defs>
+</svg>
+
     <!-- ШЕЙДЕРНЫЙ ФОН -->
     <canvas id="shader-canvas" aria-hidden="true"></canvas>
     
