@@ -1,19 +1,32 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <title>A.D.A.M. TERMINAL // VIGIL-9</title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <title>A.D.A.M. TERMINAL // VIGIL-9</title>
+  <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
-    <!-- ШЕЙДЕРНЫЙ ФОН -->
-    <canvas id="shader-canvas" aria-hidden="true"></canvas>
-    
-    <div class="scanline"></div>
-    <div id="terminal"></div>
-    <!-- <script src="background.js"></script> - временно убран-->
-    <script src="screenGlass.js"></script>
-    <script src="netGrid_v3.js"></script>
-    <script src="terminal.js"></script>
+  <!-- ШЕЙДЕРНЫЙ ФОН -->
+  <canvas id="shader-canvas" aria-hidden="true"></canvas>
+  <div class="scanline"></div>
+  <div id="terminal"></div>
+
+  <!-- Подключаем скрипты -->
+  <script src="screenGlass.js"></script>
+  <script src="netGrid_v3.js"></script>
+  <script src="terminal.js"></script>
+
+  <!-- === CRT CURVATURE FILTER === -->
+  <svg id="crt-distortion" xmlns="http://www.w3.org/2000/svg" version="1.1" style="position:absolute;width:0;height:0;overflow:hidden;">
+    <filter id="crt-curvature">
+      <feImage result="distort" xlink:href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAADICAYAAAASZ1YQAAAAVklEQVR4nGNgYGBgYGBg+A8DAwMDw3DhJwMDw4cDA8ObAwPDuwMDA3PgYGBwcH5hwPzD0A/D/98QMH6RwMCB8vD4Y+HgYGBoY+BgsFBvyoPBgQAhAQz+GybqSwAAAAASUVORK5CYII="/>
+      <feDisplacementMap in="SourceGraphic" in2="distort" scale="25" xChannelSelector="R" yChannelSelector="G"/>
+      <feGaussianBlur stdDeviation="0.4"/>
+    </filter>
+  </svg>
+  <link rel="stylesheet" href="screenCurvature.css">
+  <!-- === /CRT CURVATURE FILTER === -->
+
 </body>
 </html>
