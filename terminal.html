@@ -6,13 +6,11 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <!-- вставить сразу внутри <body> -->
+
+<!-- ============== SVG BARREL FILTER ============== -->
 <svg aria-hidden="true" style="position:absolute;width:0;height:0;pointer-events:none;">
   <defs>
-    <!-- Баррель-фильтр: используется радиальная карта (feImage) + feDisplacementMap -->
     <filter id="barrelFilter" x="-60%" y="-60%" width="220%" height="220%" color-interpolation-filters="sRGB">
-      <!-- взять SourceGraphic (исходный рендер) и искажать его по карте -->
-      <!-- feImage: встроенное SVG с радиальным градиентом (градация серого => векторы смещения) -->
       <feImage xlink:href="data:image/svg+xml;utf8,
         <svg xmlns='http://www.w3.org/2000/svg' width='512' height='512'>
           <defs>
@@ -24,23 +22,27 @@
           <rect width='100%' height='100%' fill='url(%23g)'/>
         </svg>"
         preserveAspectRatio="xMidYMid slice" result="map"/>
-      <!-- немного сгладим карту -->
       <feGaussianBlur in="map" stdDeviation="1" result="mapBlur"/>
-      <!-- масштаб смещения будем менять из JS (атрибут scale) -->
       <feDisplacementMap in="SourceGraphic" in2="mapBlur" scale="30" xChannelSelector="R" yChannelSelector="G" />
     </filter>
   </defs>
 </svg>
 
-    <!-- ШЕЙДЕРНЫЙ ФОН -->
-    <canvas id="shader-canvas" aria-hidden="true"></canvas>
-    
-    <div class="scanline"></div>
-    <div id="terminal"></div>
-    <!-- <script src="background.js"></script> - временно убран-->
-    <script src="screenGlass.js"></script>
-    <script src="netGrid_v3.js"></script>
-    <script src="terminal.js"></script>
-    <script src="screenCurvature_dom.js"></script>
+<!-- ============== ВЕСЬ КОНТЕНТ ВНУТРИ WRAPPER ============== -->
+<div id="crt-wrapper">
+
+  <!-- ШЕЙДЕРНЫЙ ФОН -->
+  <canvas id="shader-canvas" aria-hidden="true"></canvas>
+  <div class="scanline"></div>
+  <div id="terminal"></div>
+
+</div><!-- /crt-wrapper -->
+
+<!-- твои скрипты -->
+<script src="screenGlass.js"></script>
+<script src="netGrid_v3.js"></script>
+<script src="terminal.js"></script>
+<script src="screenCurvature_dom.js"></script>
+
 </body>
 </html>
