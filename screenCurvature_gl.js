@@ -1,39 +1,48 @@
 // screenCurvature_gl.js
-// Curvature overlay: mirror terminal + map + degradation indicator into offscreen canvas,
-// feed to WebGL shader that applies barrel distortion only (no scanlines, no noise).
-(() => {
-  const FPS = 15;            // <--- можно менять: 8..30 (производительность)
-  const DPR = Math.min(window.devicePixelRatio || 1, 2);
-  const DISTORTION = 0.30;  // сила искривления; 0 = нет, ~0.25..0.4 — CRT-like
-  const SMOOTH = true;      // для плавной интерполяции текстуры
+// CRT-style curvature overlay (no noise, no flicker, no scanlines)
+// Mirrors terminal, map, and degradation indicator into WebGL canvas
+// Applies only barrel distortion, with scroll + resize support
 
-  // overlay canvas visible to user
+(() => {
+  const FPS = 15;                  // кадров в секунду
+  const DPR = Math.min(window.devicePixelRatio || 1, 2);
+  const DISTORTION = 0.30;         // сила изгиба
+  const SMOOTH = true;             // сглаживание текстуры
+
+  // === создаём overlay-канвас ===
   const outCanvas = document.createElement('canvas');
   outCanvas.id = 'curvatureOverlay';
-Object.assign(outCanvas.style, {
+  Object.assign(outCanvas.style, {
     position: 'absolute',
     left: '0',
     top: '0',
     width: '100%',
     height: '100%',
-    zIndex: 999,          // ниже screenGlass.js, выше терминала
-    pointerEvents: 'none'
-});
-
+    zIndex: 999,                   // ниже screenGlass.js, выше терминала
+    pointerEvents: 'none',
+    willChange: 'transform'
+  });
   document.body.appendChild(outCanvas);
 
-  // офскрин — сюда мы рендерим terminal+map+indicator
+  // === вернуть screenGlass, если он пропал ===
+  const glassEl = document.querySelector('[id*="glass"], [class*="glass"], canvas[id*="glass"], canvas[class*="glass"]');
+  if (glassEl) {
+    glassEl.style.zIndex = (parseInt(outCanvas.style.zIndex || '999',10) + 2).toString();
+    glassEl.style.pointerEvents = 'none';
+  }
+
+  // офскрин для отрисовки содержимого
   const off = document.createElement('canvas');
   const offCtx = off.getContext('2d', { alpha: false });
 
-  // WebGL setup
+  // WebGL init
   const gl = outCanvas.getContext('webgl', { antialias: false, preserveDrawingBuffer: false });
   if (!gl) {
     console.error('WebGL not available for curvature overlay.');
     return;
   }
 
-  // простая вершинка (покрывает экран)
+  // === шейдеры ===
   const vs = `
     attribute vec2 aPos;
     attribute vec2 aUV;
@@ -41,30 +50,22 @@ Object.assign(outCanvas.style, {
     void main(){ vUV = aUV; gl_Position = vec4(aPos,0.0,1.0); }
   `;
 
-  // фрагмент: берем текстуру и применяем barrel distortion (без прочих эффектов)
- const fs = `
-  precision mediump float;
-  varying vec2 vUV;
-  uniform sampler2D uTex;
-  uniform float uDist;
-  uniform vec2 uRes;
-
-  void main(){
-      // нормализация координат
+  const fs = `
+    precision mediump float;
+    varying vec2 vUV;
+    uniform sampler2D uTex;
+    uniform float uDist;
+    uniform vec2 uRes;
+    void main(){
       vec2 uv = vUV * 2.0 - 1.0;
       float r = length(uv);
-      // создаём искажение
       vec2 distorted = mix(uv, uv * r, uDist);
-      // возвращаем в [0..1]
       vec2 finalUV = (distorted + 1.0) * 0.5;
-      // инвертируем по Y — это устраняет переворот
-      finalUV.y = 1.0 - finalUV.y;
-      // читаем цвет
+      finalUV.y = 1.0 - finalUV.y; // flip Y
       vec4 col = texture2D(uTex, clamp(finalUV, 0.0, 1.0));
       gl_FragColor = col;
-  }
-`;
-
+    }
+  `;
 
   function compile(shaderSource, type){
     const s = gl.createShader(type);
@@ -85,7 +86,6 @@ Object.assign(outCanvas.style, {
   }
   gl.useProgram(prog);
 
-  // fullscreen quad
   const quad = new Float32Array([
     -1,-1, 0,0,
      1,-1, 1,0,
@@ -103,7 +103,6 @@ Object.assign(outCanvas.style, {
   gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 16, 0);
   gl.vertexAttribPointer(aUV,  2, gl.FLOAT, false, 16, 8);
 
-  // texture
   const tex = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, tex);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -111,17 +110,13 @@ Object.assign(outCanvas.style, {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, SMOOTH ? gl.LINEAR : gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, SMOOTH ? gl.LINEAR : gl.NEAREST);
 
-  // uniforms
   const uDist = gl.getUniformLocation(prog, 'uDist');
   const uRes  = gl.getUniformLocation(prog, 'uRes');
   gl.uniform1f(uDist, DISTORTION);
 
-  // util: find elements
+  // === элементы интерфейса ===
   const terminal = document.getElementById('terminal');
-  // mapCanvas: ищем canvas рядом по селектору (netGrid создаёт canvas в body)
   const mapCanvas = document.querySelector('canvas[style*="right:"]') || document.querySelector('canvas');
-  // degradation indicator — создаётся в runtime как div (у terminal.js в DegradationSystem.setupUI)
-  // мы попытаемся найти элемент с текстом "ДЕГРАДАЦИЯ" или просто последний fixed div с границами #00FF41
   let degIndicator = null;
   Array.from(document.body.querySelectorAll('div')).forEach(d => {
     const s = getComputedStyle(d);
@@ -129,28 +124,24 @@ Object.assign(outCanvas.style, {
       degIndicator = d;
     }
   });
-  // fallback: ищем самый верхний fixed div (скорее всего индикатор)
   if (!degIndicator) {
     degIndicator = Array.from(document.body.querySelectorAll('div')).find(d => getComputedStyle(d).position === 'fixed' && getComputedStyle(d).zIndex >= '1000');
   }
 
-  // helper: render terminal DOM text into offCtx (fast because monospace)
+  // === рендеринг текста терминала ===
   function renderTerminalTextInto(ctx, w, h, scale){
     ctx.fillStyle = '#000';
     ctx.fillRect(0,0,w,h);
 
     if (!terminal) return;
     const lines = [];
-    // берем только текстовые строки (output/command/input-line)
     terminal.querySelectorAll('.output, .command, .input-line, .prompt, .cmd').forEach(el => {
-      // preserve color and text content
       let txt = el.textContent || '';
       const col = getComputedStyle(el).color || '#00ff41';
-      lines.push({ text: txt, color: col, el });
+      lines.push({ text: txt, color: col });
     });
 
-    // font sizing
-    const fontSize = Math.max(10, Math.floor(14 * scale)); // базовый
+    const fontSize = Math.max(10, Math.floor(14 * scale));
     ctx.font = `${fontSize}px "Press Start 2P", monospace`;
     ctx.textBaseline = 'top';
     let y = 8 * scale;
@@ -158,14 +149,11 @@ Object.assign(outCanvas.style, {
 
     lines.forEach(l => {
       ctx.fillStyle = l.color;
-      // draw text; use fillText (no extra effects)
       const maxW = w - 16*scale;
-      // wrap manually if needed (simple)
       if (ctx.measureText(l.text).width <= maxW) {
         ctx.fillText(l.text, 8*scale, y);
         y += lineHeight;
       } else {
-        // naive cut
         let t = l.text;
         while (t.length) {
           let i = t.length;
@@ -179,15 +167,13 @@ Object.assign(outCanvas.style, {
     });
   }
 
-  // helper: draw degradation indicator
+  // === индикатор деградации ===
   function renderIndicatorInto(ctx, offsetX, offsetY, scale){
     if (!degIndicator) return;
-    // попробуем извлечь процент из innerText
     const raw = degIndicator.innerText || '';
     const m = raw.match(/(\d{1,3})\s*%/);
     const perc = m ? Math.max(0, Math.min(100, parseInt(m[1],10))) : parseInt(localStorage.getItem('adam_degradation')) || 0;
 
-    // draw box:
     const w = 260 * scale;
     const h = 60 * scale;
     ctx.strokeStyle = '#00FF41';
@@ -195,19 +181,20 @@ Object.assign(outCanvas.style, {
     ctx.fillStyle = 'rgba(0,0,0,0.9)';
     ctx.fillRect(offsetX, offsetY, w, h);
     ctx.strokeRect(offsetX, offsetY, w, h);
-    // progress bar
     ctx.fillStyle = '#00FF41';
     const innerW = (w - 12*scale) * (perc/100);
     ctx.fillRect(offsetX + 6*scale, offsetY + 12*scale, innerW, 12*scale);
-    // percent text
     ctx.font = `${12 * scale}px "Press Start 2P", monospace`;
     ctx.fillStyle = '#00FF41';
     ctx.fillText(`${perc}%`, offsetX + 6*scale, offsetY + 30*scale);
   }
 
-  // main render loop: update offscreen, upload texture, draw shader quad
-  let lastTick = 0;
-  let frameTime = 1000 / FPS;
+  // === resize + scroll support ===
+  function updateCanvasPosition() {
+    const scrollX = window.scrollX || 0;
+    const scrollY = window.scrollY || 0;
+    outCanvas.style.transform = `translate(${scrollX}px, ${scrollY}px)`;
+  }
 
   function resizeAll(){
     const cssW = Math.max(1, Math.floor(window.innerWidth));
@@ -218,65 +205,56 @@ Object.assign(outCanvas.style, {
     outCanvas.style.height = cssH + 'px';
     gl.viewport(0,0,outCanvas.width, outCanvas.height);
     gl.uniform2f(uRes, outCanvas.width, outCanvas.height);
-    // offscreen mirrors viewport for simplicity
     off.width  = Math.floor(cssW * DPR);
     off.height = Math.floor(cssH * DPR);
+    updateCanvasPosition();
   }
-  function updateCanvasPosition() {
-  const scrollX = window.scrollX || 0;
-  const scrollY = window.scrollY || 0;
-  outCanvas.style.transform = `translate(${scrollX}px, ${scrollY}px)`;
-}
+
   window.addEventListener('scroll', updateCanvasPosition);
   window.addEventListener('resize', resizeAll);
   resizeAll();
+  updateCanvasPosition();
+
+  // === основной цикл ===
+  let lastTick = 0;
+  const frameTime = 1000 / FPS;
 
   function step(ts){
     if (!lastTick) lastTick = ts;
     if (ts - lastTick >= frameTime){
       lastTick = ts;
-      // 1) render terminal text into off
       const w = off.width, h = off.height;
       const scale = DPR;
-      // clear
       offCtx.clearRect(0,0,w,h);
-      // render terminal area (left area) — for simplicity we render whole viewport:
       renderTerminalTextInto(offCtx, w, h, scale);
 
-      // 2) draw mapCanvas on the bottom-right if exists
       if (mapCanvas && mapCanvas.width > 0 && mapCanvas.height > 0){
-        // get DOM rect and draw scaled into off
         const r = mapCanvas.getBoundingClientRect();
-        const sx = Math.round(r.left * DPR), sy = Math.round(r.top * DPR);
-        const sw = Math.round(r.width * DPR), sh = Math.round(r.height * DPR);
+        const sx = Math.round((r.left + window.scrollX) * DPR);
+        const sy = Math.round((r.top + window.scrollY) * DPR);
+        const sw = Math.round(r.width * DPR);
+        const sh = Math.round(r.height * DPR);
         try {
           offCtx.drawImage(mapCanvas, sx, sy, sw, sh);
-        } catch(e){
-          // sometimes cross-origin or not ready — ignore
-        }
+        } catch(e){}
       }
 
-      // 3) draw degradation indicator into off at its fixed position (top-right)
       if (degIndicator){
-        // try to detect its bounding rect; if absent, draw top-right
         const r = degIndicator.getBoundingClientRect ? degIndicator.getBoundingClientRect() : { left: window.innerWidth - 300, top: 20 };
         const x = Math.round((r.left + window.scrollX) * DPR);
         const y = Math.round((r.top + window.scrollY) * DPR);
         renderIndicatorInto(offCtx, x, y, DPR);
       }
 
-      // 4) upload off to texture
       gl.bindTexture(gl.TEXTURE_2D, tex);
       gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
       try {
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, off);
       } catch(err) {
-        // fallback: use ImageData
         const imgdata = offCtx.getImageData(0,0,off.width,off.height);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, off.width, off.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, imgdata.data);
       }
 
-      // 5) draw full quad (shader)
       gl.clearColor(0,0,0,0);
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -286,19 +264,16 @@ Object.assign(outCanvas.style, {
 
   requestAnimationFrame(step);
 
-  // IMPORTANT: hide the original terminal visually but keep it interactive.
-  // This prevents double-drawing and keeps keyboard / mouse events working.
+  // скрываем исходный терминал визуально
   if (terminal) {
     terminal.style.transition = 'opacity 0.15s linear';
-    terminal.style.opacity = '0'; // remains in DOM, still interactive
-    // ensure pointer events still reach terminal
+    terminal.style.opacity = '0';
     terminal.style.pointerEvents = 'auto';
   }
 
-  // expose simple API to adjust distortion at runtime
+  // API для отладки
   window.__CRTOverlay = {
     setDistortion(v){ gl.uniform1f(uDist, v); },
-    setFPS(f){ /* not implemented dynamic here, could be added */ },
     destroy(){ outCanvas.remove(); if (terminal) terminal.style.opacity = ''; }
   };
 
