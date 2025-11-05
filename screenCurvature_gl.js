@@ -41,24 +41,29 @@
   `;
 
   // фрагмент: берем текстуру и применяем barrel distortion (без прочих эффектов)
-  const fs = `
-    precision mediump float;
-    varying vec2 vUV;
-    uniform sampler2D uTex;
-    uniform float uDist;
-    uniform vec2 uRes;
-    // barrel distortion:
-    void main(){
-      vec2 uv = vUV * 2.0 - 1.0; // -1..1
+ const fs = `
+  precision mediump float;
+  varying vec2 vUV;
+  uniform sampler2D uTex;
+  uniform float uDist;
+  uniform vec2 uRes;
+
+  void main(){
+      // нормализация координат
+      vec2 uv = vUV * 2.0 - 1.0;
       float r = length(uv);
-      // mix original uv with uv scaled by r (похожий приём как в shadertoy-куске)
+      // создаём искажение
       vec2 distorted = mix(uv, uv * r, uDist);
+      // возвращаем в [0..1]
       vec2 finalUV = (distorted + 1.0) * 0.5;
-      // off-screen texture lookup:
+      // инвертируем по Y — это устраняет переворот
+      finalUV.y = 1.0 - finalUV.y;
+      // читаем цвет
       vec4 col = texture2D(uTex, clamp(finalUV, 0.0, 1.0));
       gl_FragColor = col;
-    }
-  `;
+  }
+`;
+
 
   function compile(shaderSource, type){
     const s = gl.createShader(type);
