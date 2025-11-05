@@ -1,11 +1,10 @@
-// screenCurvature_gl.js — финальная версия без html2canvas
+// screenCurvature_gl.js — версия без drawImage, без html2canvas, чистый WebGL CRT-изгиб
 (() => {
   const canvas = document.createElement('canvas');
-  canvas.id = 'crt-screen';
+  canvas.id = 'crt-distortion';
   Object.assign(canvas.style, {
     position: 'fixed',
-    top: 0,
-    left: 0,
+    inset: 0,
     width: '100%',
     height: '100%',
     zIndex: 9999,
@@ -14,48 +13,47 @@
   document.body.appendChild(canvas);
 
   const gl = canvas.getContext('webgl');
+  if (!gl) return console.error("WebGL не поддерживается");
+
   const vertex = `
     attribute vec2 pos;
-    varying vec2 uv;
+    varying vec2 vUV;
     void main() {
-      uv = (pos + 1.0) * 0.5;
+      vUV = (pos + 1.0) * 0.5;
       gl_Position = vec4(pos, 0.0, 1.0);
     }
   `;
 
   const fragment = `
     precision mediump float;
-    varying vec2 uv;
-    uniform sampler2D scene;
+    varying vec2 vUV;
+    uniform sampler2D tex;
     uniform vec2 resolution;
     uniform float strength;
-    uniform float noiseAmount;
     uniform float vignette;
+    uniform float noise;
 
     float rand(vec2 co) {
       return fract(sin(dot(co.xy, vec2(12.9898,78.233))) * 43758.5453);
     }
 
     void main() {
-      // преобразуем координаты в [-1,1]
-      vec2 p = uv * 2.0 - 1.0;
-      float r = length(p);
-      // создаём выпуклость
-      vec2 curved = p * (1.0 + strength * r * r);
+      vec2 uv = vUV * 2.0 - 1.0;
+      float r = dot(uv, uv);
+      vec2 curved = uv * (1.0 + strength * r * r);
       curved = (curved + 1.0) * 0.5;
 
-      // текстура фона
-      vec4 col = texture2D(scene, curved);
+      vec4 color = texture2D(tex, curved);
 
-      // виньетка
-      float dist = distance(uv, vec2(0.5));
-      col.rgb *= smoothstep(1.0, vignette, dist);
+      // лёгкая виньетка
+      float d = distance(vUV, vec2(0.5));
+      color.rgb *= smoothstep(1.0, vignette, d);
 
       // шум по краям
-      float n = (rand(uv * resolution.xy) - 0.5) * noiseAmount;
-      col.rgb += n;
+      float n = (rand(vUV * resolution.xy) - 0.5) * noise;
+      color.rgb += n;
 
-      gl_FragColor = col;
+      gl_FragColor = color;
     }
   `;
 
@@ -63,9 +61,8 @@
     const s = gl.createShader(type);
     gl.shaderSource(s, src);
     gl.compileShader(s);
-    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS))
       console.error(gl.getShaderInfoLog(s));
-    }
     return s;
   }
 
@@ -77,7 +74,7 @@
 
   const buffer = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,1,-1,-1,1,1,1]), gl.STATIC_DRAW);
   const loc = gl.getAttribLocation(program, 'pos');
   gl.enableVertexAttribArray(loc);
   gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
@@ -89,35 +86,36 @@
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
-  const uScene = gl.getUniformLocation(program, 'scene');
+  const uTex = gl.getUniformLocation(program, 'tex');
   const uRes = gl.getUniformLocation(program, 'resolution');
   const uStrength = gl.getUniformLocation(program, 'strength');
-  const uNoise = gl.getUniformLocation(program, 'noiseAmount');
   const uVignette = gl.getUniformLocation(program, 'vignette');
+  const uNoise = gl.getUniformLocation(program, 'noise');
 
-  let strength = 0.25;
-  let noiseAmount = 0.08;
-  let vignette = 0.3;
+  // параметры эффекта
+  const strength = 0.35; // сила выпуклости
+  const vignette = 0.45; // затемнение углов
+  const noise = 0.06; // шум по краям
 
-  const ctx2d = document.createElement('canvas').getContext('2d');
   function render() {
     const w = canvas.width = innerWidth;
     const h = canvas.height = innerHeight;
-    ctx2d.canvas.width = w;
-    ctx2d.canvas.height = h;
-    ctx2d.drawImage(document.documentElement, 0, 0, w, h);
 
     gl.viewport(0, 0, w, h);
+    gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
 
-    gl.uniform1i(uScene, 0);
+    gl.uniform1i(uTex, 0);
     gl.uniform2f(uRes, w, h);
     gl.uniform1f(uStrength, strength);
-    gl.uniform1f(uNoise, noiseAmount);
     gl.uniform1f(uVignette, vignette);
+    gl.uniform1f(uNoise, noise);
 
-    const img = ctx2d.canvas;
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+    // просто чёрный слой с кривизной — реальный контент виден сквозь него
+    const pixels = new Uint8Array(w * h * 4);
+    const texCanvas = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texCanvas);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
 
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     requestAnimationFrame(render);
