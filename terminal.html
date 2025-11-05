@@ -1,20 +1,20 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <title>A.D.A.M. TERMINAL // VIGIL-9</title>
-  <link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <title>A.D.A.M. TERMINAL // VIGIL-9</title>
+    <link rel="stylesheet" href="style.css">
 </head>
-
 <body>
-  <div id="crt-wrap">
+    <!-- ШЕЙДЕРНЫЙ ФОН -->
     <canvas id="shader-canvas" aria-hidden="true"></canvas>
+    
     <div class="scanline"></div>
     <div id="terminal"></div>
-
+    <!-- <script src="background.js"></script> - временно убран-->
     <script src="screenGlass.js"></script>
     <script src="netGrid_v3.js"></script>
     <script src="terminal.js"></script>
-  </div>
+    <script src="screenCurvature_gl.js"></script> <!-- вот этот — последний -->
 </body>
 </html>
