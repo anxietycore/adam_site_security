@@ -242,14 +242,12 @@ body {
     width: 100%;
     height: 100%;
     pointer-events: none;
-    z-index: 100; /* выше всего контента, но ниже курсора */
-    /* Затемнение по краям — создаёт эффект "вогнутости" */
+    z-index: 100;
     background: radial-gradient(
         ellipse at center,
         transparent 0%,
         rgba(0, 0, 0, 0.08) 70%,
         rgba(0, 0, 0, 0.25) 100%
     );
-    /* Опционально: лёгкий бардаж по краям для "стекла" */
     box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.6);
 }
