@@ -10,15 +10,16 @@
   // overlay canvas visible to user
   const outCanvas = document.createElement('canvas');
   outCanvas.id = 'curvatureOverlay';
-  Object.assign(outCanvas.style, {
-    position: 'fixed',
+Object.assign(outCanvas.style, {
+    position: 'absolute',
     left: '0',
     top: '0',
-    width: '100vw',
-    height: '100vh',
-    zIndex: 1001,          // выше интерфейса визуально
-    pointerEvents: 'none'  // пропускать клики на underlying DOM
-  });
+    width: '100%',
+    height: '100%',
+    zIndex: 999,          // ниже screenGlass.js, выше терминала
+    pointerEvents: 'none'
+});
+
   document.body.appendChild(outCanvas);
 
   // офскрин — сюда мы рендерим terminal+map+indicator
@@ -221,6 +222,12 @@
     off.width  = Math.floor(cssW * DPR);
     off.height = Math.floor(cssH * DPR);
   }
+  function updateCanvasPosition() {
+  const scrollX = window.scrollX || 0;
+  const scrollY = window.scrollY || 0;
+  outCanvas.style.transform = `translate(${scrollX}px, ${scrollY}px)`;
+}
+  window.addEventListener('scroll', updateCanvasPosition);
   window.addEventListener('resize', resizeAll);
   resizeAll();
 
@@ -253,7 +260,8 @@
       if (degIndicator){
         // try to detect its bounding rect; if absent, draw top-right
         const r = degIndicator.getBoundingClientRect ? degIndicator.getBoundingClientRect() : { left: window.innerWidth - 300, top: 20 };
-        const x = Math.round(r.left * DPR), y = Math.round(r.top * DPR);
+        const x = Math.round((r.left + window.scrollX) * DPR);
+        const y = Math.round((r.top + window.scrollY) * DPR);
         renderIndicatorInto(offCtx, x, y, DPR);
       }
 
