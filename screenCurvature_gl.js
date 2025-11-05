@@ -1,4 +1,4 @@
-// screenCurvature_gl.js — версия без drawImage, без html2canvas, чистый WebGL CRT-изгиб
+// screenCurvature_gl.js — CRT curvature overlay (финальная версия)
 (() => {
   const canvas = document.createElement('canvas');
   canvas.id = 'crt-distortion';
@@ -8,12 +8,13 @@
     width: '100%',
     height: '100%',
     zIndex: 9999,
-    pointerEvents: 'none'
+    pointerEvents: 'none',
+    background: 'transparent'
   });
   document.body.appendChild(canvas);
 
-  const gl = canvas.getContext('webgl');
-  if (!gl) return console.error("WebGL не поддерживается");
+  const gl = canvas.getContext('webgl', { alpha: true });
+  if (!gl) return console.error('WebGL не поддерживается');
 
   const vertex = `
     attribute vec2 pos;
@@ -27,12 +28,11 @@
   const fragment = `
     precision mediump float;
     varying vec2 vUV;
-    uniform sampler2D tex;
-    uniform vec2 resolution;
     uniform float strength;
     uniform float vignette;
     uniform float noise;
 
+    // генератор шума
     float rand(vec2 co) {
       return fract(sin(dot(co.xy, vec2(12.9898,78.233))) * 43758.5453);
     }
@@ -43,17 +43,12 @@
       vec2 curved = uv * (1.0 + strength * r * r);
       curved = (curved + 1.0) * 0.5;
 
-      vec4 color = texture2D(tex, curved);
+      // прозрачность + виньетка
+      float edge = smoothstep(0.9, vignette, length(uv));
+      float n = (rand(vUV * 800.0) - 0.5) * noise;
 
-      // лёгкая виньетка
-      float d = distance(vUV, vec2(0.5));
-      color.rgb *= smoothstep(1.0, vignette, d);
-
-      // шум по краям
-      float n = (rand(vUV * resolution.xy) - 0.5) * noise;
-      color.rgb += n;
-
-      gl_FragColor = color;
+      vec3 tint = vec3(0.0, 1.0, 0.5); // зелёный оттенок по краям
+      gl_FragColor = vec4(tint * (1.0 - edge + n * 0.4), 0.22); // альфа-прозрачный слой
     }
   `;
 
@@ -79,43 +74,20 @@
   gl.enableVertexAttribArray(loc);
   gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
 
-  const tex = gl.createTexture();
-  gl.bindTexture(gl.TEXTURE_2D, tex);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-
-  const uTex = gl.getUniformLocation(program, 'tex');
-  const uRes = gl.getUniformLocation(program, 'resolution');
   const uStrength = gl.getUniformLocation(program, 'strength');
   const uVignette = gl.getUniformLocation(program, 'vignette');
   const uNoise = gl.getUniformLocation(program, 'noise');
-
-  // параметры эффекта
-  const strength = 0.35; // сила выпуклости
-  const vignette = 0.45; // затемнение углов
-  const noise = 0.06; // шум по краям
 
   function render() {
     const w = canvas.width = innerWidth;
     const h = canvas.height = innerHeight;
 
     gl.viewport(0, 0, w, h);
-    gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
 
-    gl.uniform1i(uTex, 0);
-    gl.uniform2f(uRes, w, h);
-    gl.uniform1f(uStrength, strength);
-    gl.uniform1f(uVignette, vignette);
-    gl.uniform1f(uNoise, noise);
-
-    // просто чёрный слой с кривизной — реальный контент виден сквозь него
-    const pixels = new Uint8Array(w * h * 4);
-    const texCanvas = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, texCanvas);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    gl.uniform1f(uStrength, 0.35);  // сила выпуклости
+    gl.uniform1f(uVignette, 1.4);   // плавное затемнение по краям
+    gl.uniform1f(uNoise, 0.18);     // шум по краям
 
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     requestAnimationFrame(render);
