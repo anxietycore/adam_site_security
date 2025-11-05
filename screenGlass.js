@@ -1,6 +1,8 @@
 // screenGlass.js — чистый белый шум + плавный "сбой сигнала"
 (() => {
   const DPR = Math.min(window.devicePixelRatio || 1, 1.25);
+
+  // создаём canvas и добавляем внутрь #crt-wrap
   const canvas = document.createElement("canvas");
   canvas.id = "glassFX";
   Object.assign(canvas.style, {
@@ -12,18 +14,23 @@
     pointerEvents: "none",
     zIndex: "1" // под интерфейсом, над WebGL
   });
-  document.body.appendChild(canvas);
+
+  // добавляем canvas внутрь обёртки, если она есть
+  const container = document.getElementById("crt-wrap") || document.body;
+  container.appendChild(canvas);
 
   const ctx = canvas.getContext("2d");
   let w = 0, h = 0;
+
   function resize() {
     w = canvas.width = window.innerWidth * DPR;
     h = canvas.height = window.innerHeight * DPR;
   }
+
   window.addEventListener("resize", resize);
   resize();
 
-  // === создаём 4 кадра настоящего белого шума ===
+  // === создаём 15 кадров настоящего белого шума ===
   const frames = [];
   const fw = Math.floor(w * 0.8);
   const fh = Math.floor(h * 0.8);
@@ -77,8 +84,8 @@
     const cycle = 720; // ~12 сек
     const phase = t % cycle;
     let spike = 1.0;
-    if (phase < 180) spike = 1 + phase / 180;        // плавное усиление
-    else if (phase < 360) spike = 2 - (phase - 180) / 180; // плавное затухание
+    if (phase < 180) spike = 1 + phase / 180;
+    else if (phase < 360) spike = 2 - (phase - 180) / 180;
     else spike = 1;
 
     // шум
