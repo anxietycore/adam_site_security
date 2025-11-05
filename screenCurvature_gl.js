@@ -189,7 +189,6 @@
   function capturePage() {
     const now = Date.now();
     if (now - lastCaptureAt < CONF.captureDebounce) {
-      // schedule later
       if (!captureScheduled) {
         captureScheduled = true;
         setTimeout(() => { captureScheduled = false; capturePage(); }, CONF.captureDebounce - (now - lastCaptureAt));
@@ -197,27 +196,29 @@
       return;
     }
     lastCaptureAt = now;
-    // options: use DPR * scale
+
+    // Временно скрываем сам WebGL canvas, чтобы он не попал в снимок
+    const wasHidden = glCanvas.style.display === 'none';
+    if (!wasHidden) glCanvas.style.display = 'none';
+
     const scale = DPR * CONF.maxScaleForCapture;
-    try {
-      window.html2canvas(document.documentElement, {
-        backgroundColor: null,
-        scale: scale,
-        logging: false,
-        useCORS: true,
-        allowTaint: true,
-        removeContainer: false
-      }).then(canvas => {
-        // replace captureCanvas
-        captureCanvas = canvas;
-        dirty = true;
-      }).catch(err => {
-        console.warn('crtGL: capture error', err);
-      });
-    } catch (e) {
-      console.warn('crtGL: html2canvas thrown', e);
-    }
+    window.html2canvas(document.documentElement, {
+      backgroundColor: null,
+      scale,
+      logging: false,
+      useCORS: true,
+      allowTaint: true,
+      removeContainer: false
+    }).then(canvas => {
+      captureCanvas = canvas;
+      dirty = true;
+      if (!wasHidden) glCanvas.style.display = '';
+    }).catch(err => {
+      console.warn('crtGL: capture error', err);
+      if (!wasHidden) glCanvas.style.display = '';
+    });
   }
+
 
   // initial ensure html2canvas -> then initial capture -> start render loop
   ensureHtml2Canvas(err => {
