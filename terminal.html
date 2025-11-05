@@ -6,15 +6,15 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <!-- ШЕЙДЕРНЫЙ ФОН -->
     <canvas id="shader-canvas" aria-hidden="true"></canvas>
+    
     <div class="scanline"></div>
     <div id="terminal"></div>
-
+    <!-- <script src="background.js"></script> - временно убран-->
     <script src="screenGlass.js"></script>
     <script src="netGrid_v3.js"></script>
     <script src="terminal.js"></script>
-
-    <!-- CRT ИЗГИБ (CSS) -->
-    <div class="crt-curve-overlay"></div>
+    <script src="screenCurvature_gl.js"></script> <!-- вот этот — последний -->
 </body>
 </html>
