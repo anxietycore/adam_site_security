@@ -2,83 +2,91 @@
 <html lang="ru">
 <!-- Google Analytics -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-M30NK9KWVH"></script>
-
 <script>
   window.dataLayer = window.dataLayer || [];
   function gtag(){dataLayer.push(arguments);}
   gtag('js', new Date());
   gtag('config', 'G-M30NK9KWVH');
 </script>
+
 <head>
-    <meta charset="UTF-8">
-    <title>A.D.A.M. // ТЕРМИНАЛ</title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <title>A.D.A.M. // ТЕРМИНАЛ</title>
+  <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
-    <!-- Fullscreen WebGL canvas (фон) -->
-    <canvas id="shader-canvas" aria-hidden="true"></canvas>
-    
-    <div class="scanline"></div>
+  <!-- Fullscreen WebGL canvas (фон) -->
+  <canvas id="shader-canvas" aria-hidden="true"></canvas>
+  <div class="scanline"></div>
 
-    <!-- Содержимое сайта (оставлено как у тебя) -->
-    <!-- ЭПИЧНЫЙ КОСМИЧЕСКИЙ ПОРТАЛ — теперь удалённые декоративные div'ы, фон рисует шейдер -->
-    
-    <!-- Экран запуска -->
-    <div id="start-screen">
-        <div class="start-message">
-            <div class="logo">
-                <pre>
+  <!-- Экран запуска -->
+  <div id="start-screen">
+    <div class="start-message">
+      <div class="logo">
+        <pre>
     \    _ \    \     \  | 
    _ \   |  |  _ \   |\/ | 
  _/  _\ ___/ _/  _\ _|  _| 
-                </pre>
-            </div>
-            <p>> СИСТЕМА A.D.A.M. ГОТОВА К ЗАПУСКУ</p>
-            <button id="start-btn">ЗАПУСТИТЬ СИСТЕМУ</button>
-        </div>
+        </pre>
+      </div>
+      <p>> СИСТЕМА A.D.A.M. ГОТОВА К ЗАПУСКУ</p>
+      <button id="start-btn">ЗАПУСТИТЬ СИСТЕМУ</button>
     </div>
-    
-    <!-- Экран загрузки -->
-    <div id="boot-screen" class="hidden">
-        <div class="boot-message">
-            <div class="logo">
-                <pre>
+  </div>
+
+  <!-- Экран загрузки -->
+  <div id="boot-screen" class="hidden">
+    <div class="boot-message">
+      <div class="logo">
+        <pre>
     \    _ \    \     \  | 
    _ \   |  |  _ \   |\/ | 
  _/  _\ ___/ _/  _\ _|  _| 
-                </pre>
-            </div>
-            <div class="boot-text">
-                <p>> ИНИЦИАЛИЗАЦИЯ ПРОТОКОЛА БЕЗОПАСНОСТИ A.D.A.M...</p>
-                <p>> ЗАГРУЗКА ПОДСИСТЕМЫ VIGIL-9...</p>
-                <p>> ТЕСТ ПАМЯТИ: УСПЕШНО</p>
-                <p>> КРИПТОМОДУЛЬ: АКТИВИРОВАН</p>
-                <p>> ПРЕДУПРЕЖДЕНИЕ: НЕСАНКЦИОНИРОВАННЫЙ ДОСТУП ЗАПРЕЩЁН</p>
-                <p>> СИСТЕМА ГОТОВА</p>
-            </div>
-        </div>
+        </pre>
+      </div>
+      <div class="boot-text">
+        <p>> ИНИЦИАЛИЗАЦИЯ ПРОТОКОЛА БЕЗОПАСНОСТИ A.D.A.M...</p>
+        <p>> ЗАГРУЗКА ПОДСИСТЕМЫ VIGIL-9...</p>
+        <p>> ТЕСТ ПАМЯТИ: УСПЕШНО</p>
+        <p>> КРИПТОМОДУЛЬ: АКТИВИРОВАН</p>
+        <p>> ПРЕДУПРЕЖДЕНИЕ: НЕСАНКЦИОНИРОВАННЫЙ ДОСТУП ЗАПРЕЩЁН</p>
+        <p>> СИСТЕМА ГОТОВА</p>
+      </div>
     </div>
+  </div>
 
-    <!-- Экран логина -->
-    <div id="login-screen" class="hidden">
-        <div class="login-form">
-            <p class="login-prompt">ДОСТУП К ТЕРМИНАЛУ</p>
-            <div class="input-group">
-                <label for="username">ИМЯ ПОЛЬЗОВАТЕЛЯ:</label>
-                <input type="text" id="username" autocomplete="off">
-            </div>
-            <div class="input-group">
-                <label for="password">ПАРОЛЬ:</label>
-                <input type="password" id="password" autocomplete="off">
-            </div>
-            <button id="login-btn">АУТЕНТИФИКАЦИЯ</button>
-            <p id="login-error" class="error hidden">ДОСТУП ЗАПРЕЩЁН</p>
-        </div>
+  <!-- Экран логина -->
+  <div id="login-screen" class="hidden">
+    <div class="login-form">
+      <p class="login-prompt">ДОСТУП К ТЕРМИНАЛУ</p>
+      <div class="input-group">
+        <label for="username">ИМЯ ПОЛЬЗОВАТЕЛЯ:</label>
+        <input type="text" id="username" autocomplete="off">
+      </div>
+      <div class="input-group">
+        <label for="password">ПАРОЛЬ:</label>
+        <input type="password" id="password" autocomplete="off">
+      </div>
+      <button id="login-btn">АУТЕНТИФИКАЦИЯ</button>
+      <p id="login-error" class="error hidden">ДОСТУП ЗАПРЕЩЁН</p>
     </div>
+  </div>
 
-    <!-- Подключаем основной скрипт (включает WebGL + логику интерфейса) -->
-     <!-- <script src="background.js"></script> - временно убран-->
-      <script src="screenGlass.js"></script>
-      <script src="script.js"></script>
+  <!-- Подключаем основной скрипт -->
+  <script src="screenGlass.js"></script>
+  <script src="script.js"></script>
+
+  <!-- === CRT CURVATURE FILTER === -->
+  <svg id="crt-distortion" xmlns="http://www.w3.org/2000/svg" version="1.1" style="position:absolute;width:0;height:0;overflow:hidden;">
+    <filter id="crt-curvature">
+      <feImage result="distort" xlink:href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAADICAYAAAASZ1YQAAAAVklEQVR4nGNgYGBgYGBg+A8DAwMDw3DhJwMDw4cDA8ObAwPDuwMDA3PgYGBwcH5hwPzD0A/D/98QMH6RwMCB8vD4Y+HgYGBoY+BgsFBvyoPBgQAhAQz+GybqSwAAAAASUVORK5CYII="/>
+      <feDisplacementMap in="SourceGraphic" in2="distort" scale="25" xChannelSelector="R" yChannelSelector="G"/>
+      <feGaussianBlur stdDeviation="0.4"/>
+    </filter>
+  </svg>
+  <link rel="stylesheet" href="screenCurvature.css">
+  <!-- === /CRT CURVATURE FILTER === -->
+
 </body>
 </html>
