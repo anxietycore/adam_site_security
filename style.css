@@ -233,3 +233,21 @@ body {
 @keyframes blink {
     50% { opacity: 0; }
 }
+
+/* --- curvature (barrel) класс --- */
+.curved {
+  /* применяем SVG-фильтр; Chrome поддерживает filter: url(#barrelFilter) */
+  filter: url(#barrelFilter);
+  will-change: filter, transform;
+  /* чуть повысить контекст слоя для производительности */
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+}
+
+/* Небольшая защита — если браузер не поддерживает SVG фильтр, можно снизить opacity */
+@supports not (filter: url(#barrelFilter)) {
+  .curved {
+    /* fallback: лёгкое затемнение, чтобы не было резкого визуального эффекта отсутствия фильтра */
+    opacity: 0.98;
+  }
+}
