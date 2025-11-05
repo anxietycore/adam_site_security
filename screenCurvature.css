@@ -1,0 +1,12 @@
+/* screenCurvature.css — CRT barrel curvature */
+html {
+  /* Применяем SVG-фильтр ко всему документу */
+  filter: url(#crt-curvature);
+  -webkit-filter: url(#crt-curvature); /* на случай webkit-браузеров */
+}
+
+/* Небольшая тонкая настройка — можно убрать, но оставлю для безопасности */
+body {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
