@@ -81,7 +81,6 @@
   // lines buffer
   const lines = []; // { text, color }
   let scrollOffset = 0; // 0 = bottom
-  let pendingRedraw = false;
   function requestFullRedraw() {
     if (!pendingRedraw) {
       pendingRedraw = true;
