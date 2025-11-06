@@ -10,7 +10,7 @@
     width: "100vw",
     height: "100vh",
     pointerEvents: "none",
-    zIndex: "0" // <- Поменял: теперь под интерфейсом
+    zIndex: "1" // под интерфейсом, над WebGL
   });
   document.body.appendChild(canvas);
 
@@ -23,7 +23,7 @@
   window.addEventListener("resize", resize);
   resize();
 
-  // === создаём 15 кадров настоящего белого шума ===
+  // === создаём 4 кадра настоящего белого шума ===
   const frames = [];
   const fw = Math.floor(w * 0.8);
   const fh = Math.floor(h * 0.8);
