@@ -1,30 +1,6 @@
 // Логика терминала A.D.A.M. - VIGIL-9 PROTOCOL + СИСТЕМА ДЕГРАДАЦИИ
 document.addEventListener('DOMContentLoaded', function() {
     const terminal = document.getElementById('terminal');
-      // --- CRT per-element curve support: inject SVG filter once and mark main terminal ---
-  (function injectCrtFilter() {
-    if (document.getElementById('crtBulgeSVG')) return;
-    const svg = `
-      <svg id="crtBulgeSVG" width="0" height="0" style="position:absolute">
-        <defs>
-          <filter id="crtBulge" x="-50%" y="-50%" width="200%" height="200%">
-            <!-- create subtle radial displacement using feImage not used here for compatibility;
-                 feTurbulence with low baseFrequency + feGaussianBlur used to produce smooth displacement -->
-            <feTurbulence type="fractalNoise" baseFrequency="0.001 0.001" numOctaves="1" stitchTiles="stitch" result="noise" />
-            <feGaussianBlur in="noise" stdDeviation="40" result="blur" />
-            <feDisplacementMap in="SourceGraphic" in2="blur" scale="20" xChannelSelector="R" yChannelSelector="G" />
-          </filter>
-        </defs>
-      </svg>
-    `;
-    document.body.insertAdjacentHTML('beforeend', svg);
-  })();
-
-  if (terminal) {
-    // mark main terminal to be curved as soon as DOM ready
-    terminal.classList.add('crt-curve');
-  }
-
     let currentLine = '';
     let commandHistory = [];
     let historyIndex = -1;
@@ -68,10 +44,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 backdrop-filter: blur(5px);
             `;
             document.body.appendChild(this.indicator);
-// make indicator curved too (no duplication)
-this.indicator.classList.add('crt-curve');
-this.updateIndicator();
-
+            this.updateIndicator();
         }
 
         startTimer() {
