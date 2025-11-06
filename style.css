@@ -233,36 +233,3 @@ body {
 @keyframes blink {
     50% { opacity: 0; }
 }
-
-/* === CRT CURVATURE SIMULATION === */
-#terminal {
-    transform-origin: center center;
-    transform: perspective(1200px) rotateX(6deg) scale(1.02);
-    border-radius: 22px;
-    box-shadow:
-      inset 0 0 20px rgba(0,255,65,0.08),
-      0 0 50px rgba(0,255,65,0.04);
-    position: relative;
-    overflow: hidden;
-}
-
-#terminal::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: radial-gradient(circle at center, rgba(0,255,65,0.06), rgba(0,0,0,0.6) 85%);
-    pointer-events: none;
-    mix-blend-mode: overlay;
-    border-radius: inherit;
-}
-
-/* делаем лёгкий “баррель” эффект (выпуклость) */
-#terminal::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: radial-gradient(circle at center, rgba(0,255,65,0.05) 0%, rgba(0,0,0,0.9) 100%);
-    transform: scale(1.03);
-    border-radius: 30px;
-    pointer-events: none;
-}
