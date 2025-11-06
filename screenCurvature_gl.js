@@ -1,127 +1,112 @@
-// screenCurvature_gl.js
-// Minimal CRT curvature without observers or heavy loops.
-// Safe: no duplication, no lag, scroll works.
-
+// screenCurvature_gl.js — CRT изгиб для терминала A.D.A.M.
+// работает как пост-эффект поверх страницы, без захвата DOM
 (() => {
-  const FPS = 10;
-  const DPR = Math.min(window.devicePixelRatio || 1, 2);
-  const DISTORTION = 0.3;
-  const SMOOTH = true;
-
-  const term = document.querySelector('#terminal');
-  if (!term) return console.warn('No #terminal found.');
-
-  const glass = document.querySelector('#glassFX');
-  if (glass) glass.style.zIndex = '1';
-
-  const out = document.createElement('canvas');
-  Object.assign(out.style, {
+  const canvas = document.createElement('canvas');
+  canvas.id = 'crt-curvature';
+  Object.assign(canvas.style, {
     position: 'fixed',
-    left: 0,
     top: 0,
+    left: 0,
     width: '100%',
     height: '100%',
-    zIndex: 999,
-    pointerEvents: 'none'
+    zIndex: 99,
+    pointerEvents: 'none',
+    mixBlendMode: 'screen'
   });
-  document.body.appendChild(out);
+  document.body.appendChild(canvas);
 
-  const off = document.createElement('canvas');
-  const offCtx = off.getContext('2d', { alpha: true });
+  const gl = canvas.getContext('webgl');
+  if (!gl) return console.error('WebGL not supported (CRT curvature)');
 
-  const gl = out.getContext('webgl', { antialias: false });
-  if (!gl) return console.error('WebGL not supported');
-
-  const vs = `
-    attribute vec2 aPos;
-    attribute vec2 aUV;
-    varying vec2 vUV;
-    void main(){vUV=aUV;gl_Position=vec4(aPos,0.,1.);}
-  `;
-  const fs = `
-    precision mediump float;
-    varying vec2 vUV;
-    uniform sampler2D uTex;
-    uniform float uDist;
-    void main(){
-      vec2 uv=vUV*2.-1.;
-      float r=length(uv);
-      vec2 d=mix(uv,uv*r,uDist);
-      vec2 f=(d+1.)*0.5;
-      f.y=1.-f.y;
-      gl_FragColor=texture2D(uTex,clamp(f,0.,1.));
+  // vertex shader — просто прямоугольник
+  const vsSource = `
+    attribute vec2 a_position;
+    varying vec2 v_uv;
+    void main() {
+      v_uv = (a_position + 1.0) * 0.5;
+      gl_Position = vec4(a_position, 0.0, 1.0);
     }
   `;
-  function shader(src, type) {
+
+  // fragment shader — делает бочкообразное искажение и затемнение по краям
+  const fsSource = `
+    precision mediump float;
+    varying vec2 v_uv;
+    uniform float u_time;
+    void main() {
+      // переводим uv в диапазон [-1,1]
+      vec2 uv = v_uv * 2.0 - 1.0;
+      float r = length(uv);
+      // коэффициенты изгиба
+      float distortion = 0.15;
+      uv *= 1.0 + distortion * r * r;
+      vec2 warped = (uv + 1.0) * 0.5;
+
+      // радиальная виньетка (затемнение по краям)
+      float vignette = smoothstep(1.0, 0.4, r);
+      // лёгкое пульсирующее свечение
+      float glow = 0.02 * sin(u_time * 0.5) + 0.05;
+
+      // CRT-сетка и шум
+      float line = sin((warped.y + u_time * 0.2) * 600.0) * 0.04;
+      float grain = fract(sin(dot(warped.xy * u_time, vec2(12.9898,78.233))) * 43758.5453);
+
+      // цвет: зелёный с варьирующей прозрачностью
+      vec3 color = vec3(0.0, 1.0, 0.25);
+      float alpha = (1.0 - vignette) * 0.25 + line * 0.2 + grain * 0.05 + glow;
+
+      gl_FragColor = vec4(color, alpha);
+    }
+  `;
+
+  // компиляция шейдеров
+  function createShader(type, src) {
     const s = gl.createShader(type);
     gl.shaderSource(s, src);
     gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+      console.error(gl.getShaderInfoLog(s));
+      return null;
+    }
     return s;
   }
-  const prog = gl.createProgram();
-  gl.attachShader(prog, shader(vs, gl.VERTEX_SHADER));
-  gl.attachShader(prog, shader(fs, gl.FRAGMENT_SHADER));
-  gl.linkProgram(prog);
-  gl.useProgram(prog);
+  const vs = createShader(gl.VERTEX_SHADER, vsSource);
+  const fs = createShader(gl.FRAGMENT_SHADER, fsSource);
+  const program = gl.createProgram();
+  gl.attachShader(program, vs);
+  gl.attachShader(program, fs);
+  gl.linkProgram(program);
+  gl.useProgram(program);
 
-  const quad = new Float32Array([
-    -1, -1, 0, 0,
-     1, -1, 1, 0,
-    -1,  1, 0, 1,
-     1,  1, 1, 1
+  const vertices = new Float32Array([
+    -1, -1,
+     1, -1,
+    -1,  1,
+     1,  1,
   ]);
-  const buf = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-  gl.bufferData(gl.ARRAY_BUFFER, quad, gl.STATIC_DRAW);
-  const aPos = gl.getAttribLocation(prog, 'aPos');
-  const aUV = gl.getAttribLocation(prog, 'aUV');
+  const buffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+  gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+  const aPos = gl.getAttribLocation(program, 'a_position');
   gl.enableVertexAttribArray(aPos);
-  gl.enableVertexAttribArray(aUV);
-  gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 16, 0);
-  gl.vertexAttribPointer(aUV, 2, gl.FLOAT, false, 16, 8);
-  const tex = gl.createTexture();
-  gl.bindTexture(gl.TEXTURE_2D, tex);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, SMOOTH ? gl.LINEAR : gl.NEAREST);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, SMOOTH ? gl.LINEAR : gl.NEAREST);
-  const uDist = gl.getUniformLocation(prog, 'uDist');
-  gl.uniform1f(uDist, DISTORTION);
+  gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+  const uTime = gl.getUniformLocation(program, 'u_time');
 
   function resize() {
-    out.width = window.innerWidth * DPR;
-    out.height = window.innerHeight * DPR;
-    off.width = out.width;
-    off.height = out.height;
-    gl.viewport(0, 0, out.width, out.height);
+    canvas.width = window.innerWidth * window.devicePixelRatio;
+    canvas.height = window.innerHeight * window.devicePixelRatio;
+    gl.viewport(0, 0, canvas.width, canvas.height);
   }
   window.addEventListener('resize', resize);
   resize();
 
-  // hide visual terminal (still interactive)
-  term.style.opacity = '0';
-  term.style.pointerEvents = 'auto';
-
-  function drawFrame() {
-    offCtx.clearRect(0, 0, off.width, off.height);
-    offCtx.fillStyle = '#000';
-    offCtx.fillRect(0, 0, off.width, off.height);
-    offCtx.scale(DPR, DPR);
-    offCtx.fillStyle = '#00FF41';
-    offCtx.font = '14px monospace';
-    offCtx.textBaseline = 'top';
-
-    let y = 10;
-    term.querySelectorAll('.output, .command, .input-line, .prompt').forEach(el => {
-      const text = el.textContent || '';
-      offCtx.fillText(text, 10, y);
-      y += 18;
-    });
-    offCtx.setTransform(1, 0, 0, 1, 0, 0);
-
-    gl.bindTexture(gl.TEXTURE_2D, tex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, off);
+  function render(t) {
+    gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.uniform1f(uTime, t * 0.001);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    requestAnimationFrame(render);
   }
-
-  setInterval(drawFrame, 1000 / FPS);
+  requestAnimationFrame(render);
 })();
