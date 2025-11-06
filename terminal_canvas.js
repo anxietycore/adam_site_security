@@ -31,7 +31,18 @@
   });
   document.body.appendChild(canvas);
   const ctx = canvas.getContext('2d', { alpha: false });
+  // ---------- drawing scheduling (MOVED UP FIX) ----------
+  let pendingRedraw = false;
+  function requestFullRedraw(){
+    if (!pendingRedraw) {
+      pendingRedraw = true;
+      requestAnimationFrame(() => {
         pendingRedraw = false;
+        draw();
+      });
+    }
+  }
+
   // Keep originals interactive but visually hidden to preserve other modules
   const origTerminal = document.getElementById('terminal');
   if (origTerminal) {
@@ -88,16 +99,7 @@
   window.addEventListener('resize', resize);
   resize();
 
-  // ---------- drawing scheduling ----------
-  let pendingRedraw = false;
-  function requestFullRedraw(){
-    if (!pendingRedraw) {
-      pendingRedraw = true;
-      requestAnimationFrame(() => {
-        draw();
-      });
-    }
-  }
+ 
 
   // ---------- terminal state ----------
   const lines = []; // {text, color, _ephemeral}
