@@ -32,6 +32,7 @@
   });
   document.body.appendChild(canvas);
   const ctx = canvas.getContext('2d', { alpha: false });
+  let pendingRedraw = false;
 
   // ---------- find original elements (keep interactive but visually hidden) ----------
   const origTerminal = document.getElementById('terminal');
@@ -92,7 +93,6 @@
   resize();
 
   // ---------- draw scheduling ----------
-  let pendingRedraw = false;
   function requestFullRedraw(){ if(!pendingRedraw){ pendingRedraw = true; requestAnimationFrame(draw); } }
 
   // ---------- terminal state ----------
