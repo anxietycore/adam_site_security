@@ -31,7 +31,7 @@
   });
   document.body.appendChild(canvas);
   const ctx = canvas.getContext('2d', { alpha: false });
-
+        pendingRedraw = false;
   // Keep originals interactive but visually hidden to preserve other modules
   const origTerminal = document.getElementById('terminal');
   if (origTerminal) {
@@ -94,7 +94,6 @@
     if (!pendingRedraw) {
       pendingRedraw = true;
       requestAnimationFrame(() => {
-        pendingRedraw = false;
         draw();
       });
     }
