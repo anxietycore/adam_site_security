@@ -1,74 +1,53 @@
 // screenCurvature_gl.js
-// Safe CRT overlay: cleans previous injected hacks, uses transparent offscreen canvas,
-// draws only visible text (no black fill) so terminal never gets fully covered.
+// CRT curvature overlay with full debug logs and no visual duplication.
+// Original terminal remains interactive but invisible.
 
 (() => {
+  console.group("CRTOverlay init");
+
   const FPS = 18;
   const DPR = Math.min(window.devicePixelRatio || 1, 2);
   const DISTORTION = 0.30;
   const SMOOTH = true;
 
-  // ---------- cleanup any previous injected styles / classes left by older attempts ----------
-  try {
-    // remove known injected style elements
-    ['crt-overlay-inject','crt-overlay-style','crt-overlay-styles','crt-overlay-styles-old','crt-overlay-inject-old'].forEach(id=>{
-      const el = document.getElementById(id);
-      if (el) el.remove();
-    });
-    // remove any helper classes that older patches may have added
-    document.querySelectorAll('.crt-hide, .crt-hidden-target, .crt-overlay-hide, .crt-hidden, .crt-hide-original').forEach(el=>{
-      try { el.classList.remove('crt-hide','crt-hidden-target','crt-overlay-hide','crt-hidden','crt-hide-original'); } catch(e){}
-      // also restore inline visibility if present
-      try { el.style.visibility = ''; el.style.opacity = ''; el.style.pointerEvents = ''; } catch(e){}
-    });
-  } catch (e) {
-    // ignore
+  // === locate elements ===
+  const terminal = document.querySelector('#terminal') || document.querySelector('.terminal');
+  const glass = document.querySelector('#glassFX');
+  const mapCanvas = document.querySelector('canvas[style*="right:"]') || null;
+  console.log("Found elements:", { terminal, glass, mapCanvas });
+
+  if (!terminal) {
+    console.error("❌ Terminal not found!");
+    console.groupEnd();
+    return;
   }
 
-  // ensure scrolling is possible
-  try {
-    if (getComputedStyle(document.body).overflow === 'hidden') document.body.style.overflow = 'auto';
-    if (getComputedStyle(document.documentElement).overflow === 'hidden') document.documentElement.style.overflow = 'auto';
-  } catch(e) {}
-
-  // find page elements
-  const terminal = document.querySelector('#terminal') || document.querySelector('.terminal');
-  const glass = document.querySelector('#glassFX') || document.querySelector('[id*="glass"], [class*="glass"], [id*="screen"], [class*="screen"]');
-  const mapCanvas = document.querySelector('canvas[style*="right:"]') || Array.from(document.querySelectorAll('canvas')).find(c=>c.id !== 'glassFX' && c.clientWidth>30 && c.clientHeight>30);
-
-  // create overlay canvas (fixed), but transparent where not drawing
+  // === overlay canvas ===
   const out = document.createElement('canvas');
   out.id = 'curvatureOverlay';
   Object.assign(out.style, {
     position: 'fixed',
-    left: '0px',
-    top: '0px',
+    top: 0,
+    left: 0,
     width: '100%',
     height: '100%',
+    zIndex: 9999,
     pointerEvents: 'none',
-    zIndex: '9998',
-    willChange: 'transform',
     background: 'transparent'
   });
   document.body.appendChild(out);
+  console.log("Overlay canvas created.");
 
-  // nudge glass opacity down a bit to avoid over-brightness (you can change later via API)
-  if (glass) {
-    try {
-      if (!glass.style.opacity) glass.style.opacity = '0.25';
-      // keep glass above overlay so noise is visible
-      glass.style.zIndex = String(Math.max(100, parseInt(out.style.zIndex||'9998',10) + 1));
-    } catch(e){}
-  }
-
-  // offscreen canvas WITH alpha (so transparent areas remain see-through)
+  // === offscreen ===
   const off = document.createElement('canvas');
   const offCtx = off.getContext('2d', { alpha: true });
+  console.log("Offscreen canvas created:", off);
 
-  // WebGL setup
+  // === webgl init ===
   const gl = out.getContext('webgl', { antialias: false, preserveDrawingBuffer: false });
   if (!gl) {
-    console.error('WebGL not available for curvature overlay.');
+    console.error("WebGL not supported!");
+    console.groupEnd();
     return;
   }
 
@@ -92,13 +71,13 @@
       gl_FragColor = texture2D(uTex, clamp(finalUV, 0.0, 1.0));
     }
   `;
-  function compile(src, type){
+
+  function compile(src, type) {
     const s = gl.createShader(type);
     gl.shaderSource(s, src);
     gl.compileShader(s);
-    if(!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS))
       console.error(gl.getShaderInfoLog(s));
-    }
     return s;
   }
 
@@ -106,7 +85,10 @@
   gl.attachShader(prog, compile(vs, gl.VERTEX_SHADER));
   gl.attachShader(prog, compile(fs, gl.FRAGMENT_SHADER));
   gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS))
+    console.error(gl.getProgramInfoLog(prog));
   gl.useProgram(prog);
+  console.log("WebGL program linked.");
 
   const quad = new Float32Array([
     -1,-1, 0,0,
@@ -135,150 +117,85 @@
   const uDist = gl.getUniformLocation(prog, 'uDist');
   gl.uniform1f(uDist, DISTORTION);
 
-  // resize handling
-  function resizeAll(){
-    const cssW = Math.max(1, Math.floor(window.innerWidth));
-    const cssH = Math.max(1, Math.floor(window.innerHeight));
-    out.width  = Math.floor(cssW * DPR);
-    out.height = Math.floor(cssH * DPR);
-    out.style.width  = cssW + 'px';
-    out.style.height = cssH + 'px';
-    off.width  = out.width;
+  // === resize ===
+  function resize() {
+    out.width = Math.floor(window.innerWidth * DPR);
+    out.height = Math.floor(window.innerHeight * DPR);
+    off.width = out.width;
     off.height = out.height;
-    gl.viewport(0,0,out.width, out.height);
+    gl.viewport(0, 0, out.width, out.height);
+    console.log("Resize:", out.width, out.height);
   }
-  window.addEventListener('resize', resizeAll);
-  resizeAll();
+  window.addEventListener('resize', resize);
+  resize();
 
-  // safe helpers
-  function safeColor(el){ try { return getComputedStyle(el).color || '#00ff41'; } catch(e) { return '#00ff41'; } }
+  // === hide original visually, but keep interaction ===
+  terminal.style.opacity = "0";
+  terminal.style.pointerEvents = "auto";
+  terminal.style.position = "relative";
+  console.log("Terminal made invisible but active.");
 
-  // render terminal into offCtx WITHOUT filling black background (transparent by default)
-  function renderTerminalInto(ctx){
-    // clear pixel content but keep alpha transparent
-    ctx.clearRect(0,0,off.width, off.height);
-    if (!terminal) return;
+  // === render ===
+  const ctx = offCtx;
+  const frameTime = 1000 / FPS;
+  let last = 0;
+
+  function drawTerminal() {
+    ctx.clearRect(0, 0, off.width, off.height);
     const scale = DPR;
-    const lineSelectors = ['.output', '.command', '.note', '.line', '.terminal-line', '.cmd'];
     ctx.font = `${14 * scale}px "Press Start 2P", monospace`;
     ctx.textBaseline = 'top';
-    let y = 8 * scale;
-    const lh = Math.round(14 * scale * 1.2);
-    // draw available lines (if any)
-    let drawnAny = false;
-    lineSelectors.forEach(sel => {
-      terminal.querySelectorAll(sel).forEach(el => {
-        const t = (el.textContent || '').replace(/\s+/g,' ').trim();
-        if (!t) return;
-        ctx.fillStyle = safeColor(el);
-        ctx.fillText(t, 8 * scale, y);
-        y += lh;
-        drawnAny = true;
-      });
+    let y = 10 * scale;
+
+    terminal.querySelectorAll('*').forEach(el => {
+      const txt = el.textContent?.trim();
+      if (!txt) return;
+      ctx.fillStyle = getComputedStyle(el).color || '#00FF41';
+      ctx.fillText(txt, 10 * scale, y);
+      y += 16 * scale;
     });
 
-    // Always draw prompt + input on one line (so input always visible)
-    const promptEl = terminal.querySelector('.prompt');
-    const inputEl = terminal.querySelector('.input-line, input, textarea, [contenteditable="true"]');
-    const promptText = promptEl ? (promptEl.textContent || '').trim() : '';
-    let inputText = '';
-    if (inputEl) {
-      if (inputEl.tagName === 'INPUT' || inputEl.tagName === 'TEXTAREA') inputText = inputEl.value || '';
-      else inputText = inputEl.textContent || '';
-    }
-    const combined = (promptText + (promptText && inputText ? ' ' : '') + inputText).trim();
-    if (combined) {
-      ctx.fillStyle = safeColor(promptEl || inputEl || terminal) || '#00ff41';
-      ctx.fillText(combined, 8 * scale, y);
-      drawnAny = true;
+    // degradation box
+    const deg = Array.from(document.querySelectorAll('div'))
+      .find(d => /(дегра|degra|degrad)/i.test(d.innerText || ''));
+    if (deg) {
+      const r = deg.getBoundingClientRect();
+      ctx.strokeStyle = '#00FF41';
+      ctx.lineWidth = 2 * scale;
+      ctx.strokeRect(r.left * DPR, r.top * DPR, r.width * DPR, r.height * DPR);
     }
 
-    return drawnAny;
-  }
-
-  // draw map and deformation indicator into offCtx
-  function drawMapAndIndicator(ctx){
+    // minimap
     if (mapCanvas) {
-      try {
-        const r = mapCanvas.getBoundingClientRect();
-        ctx.drawImage(mapCanvas, Math.round(r.left * DPR), Math.round(r.top * DPR), Math.round(r.width * DPR), Math.round(r.height * DPR));
-      } catch (e) {}
+      const r = mapCanvas.getBoundingClientRect();
+      ctx.drawImage(mapCanvas, r.left * DPR, r.top * DPR, r.width * DPR, r.height * DPR);
     }
-    // draw degr indicator
-    const degElem = Array.from(document.querySelectorAll('div')).find(d => /(дегра|degra|degrad)/i.test(d.innerText || '')) || null;
-    let perc = parseInt(localStorage.getItem('adam_degradation')) || 0;
-    if (degElem) {
-      const m = (degElem.innerText || '').match(/(\d{1,3})\s*%/);
-      if (m) perc = parseInt(m[1], 10);
-    }
-    let x = Math.max(8, window.innerWidth - 280);
-    let y = 20;
-    if (degElem) {
-      try {
-        const r = degElem.getBoundingClientRect();
-        if (r.width > 8 && r.height > 8) { x = r.left; y = r.top; }
-      } catch(e){}
-    }
-    const sx = Math.round(x * DPR), sy = Math.round(y * DPR);
-    const w = Math.round(260 * DPR), h = Math.round(60 * DPR);
-    ctx.fillStyle = 'rgba(0,0,0,0.9)';
-    ctx.fillRect(sx, sy, w, h);
-    ctx.strokeStyle = '#00FF41';
-    ctx.lineWidth = Math.max(1, 2 * DPR);
-    ctx.strokeRect(sx, sy, w, h);
-    ctx.fillStyle = '#00FF41';
-    ctx.font = `${12 * DPR}px "Press Start 2P", monospace`;
-    ctx.fillText('ДЕГРАДАЦИЯ СИСТЕМЫ', sx + 6 * DPR, sy + 6 * DPR);
-    const inner = Math.round((w - 12 * DPR) * (Math.max(0, Math.min(100, perc)) / 100));
-    ctx.fillRect(sx + 6 * DPR, sy + 24 * DPR, inner, 10 * DPR);
-    ctx.fillText(`${perc}%`, sx + 6 * DPR, sy + 38 * DPR);
   }
 
-  // main loop: draw terminal (transparent background) and other elements,
-  // only if there's something to draw; otherwise leave texture transparent.
-  let lastTick = 0;
-  const frameTime = 1000 / FPS;
+  function loop(ts) {
+    if (ts - last >= frameTime) {
+      drawTerminal();
 
-  function step(ts){
-    if (!lastTick) lastTick = ts;
-    if (ts - lastTick >= frameTime){
-      lastTick = ts;
-
-      // render terminal into offCtx (transparent)
-      const drew = renderTerminalInto(offCtx);
-
-      // draw map & indicator on top of terminal rendering
-      drawMapAndIndicator(offCtx);
-
-      // upload to GL texture and draw shader quad
       gl.bindTexture(gl.TEXTURE_2D, tex);
       gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-      try {
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, off);
-      } catch(err) {
-        // fallback: use ImageData
-        try {
-          const imgdata = offCtx.getImageData(0,0,off.width,off.height);
-          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, off.width, off.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, imgdata.data);
-        } catch(e){}
-      }
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, off);
 
       gl.clearColor(0,0,0,0);
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      last = ts;
     }
-    // ensure overlay follows scrolling (keeps viewport-alignment)
-    out.style.transform = `translate(${window.scrollX}px, ${window.scrollY}px)`;
-    requestAnimationFrame(step);
+    requestAnimationFrame(loop);
   }
 
-  requestAnimationFrame(step);
+  requestAnimationFrame(loop);
 
-  // small API for runtime tweaks
+  // === API ===
   window.__CRTOverlay = {
     setDistortion(v){ gl.uniform1f(uDist, v); },
-    setGlassOpacity(o){ if (glass) glass.style.opacity = String(o); },
-    destroy(){ try{ out.remove(); off.remove(); }catch(e){} }
+    log(){ console.group("CRTOverlay state"); console.log({ out, off, gl, terminal, mapCanvas }); console.groupEnd(); }
   };
 
+  console.groupEnd();
 })();
