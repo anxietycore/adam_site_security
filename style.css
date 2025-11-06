@@ -1,107 +1,235 @@
 @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
-* { margin:0; padding:0; box-sizing:border-box; }
-html, body { height:100%; }
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html, body {
+    height: 100%;
+}
+
 body {
-  background-color: #0a0a0a;
-  color: #00FF41;
-  font-family: 'Press Start 2P', monospace;
-  overflow-y: auto;        /* <-- Важно: включаем скролл */
-  overflow-x: hidden;
-  cursor: default;
-  position: relative;
+    background-color: #0a0a0a;
+    color: #00FF41;
+    font-family: 'Press Start 2P', monospace;
+    overflow: hidden;
+    cursor: default;
+    position: relative;
 }
 
 /* Canvas background */
 #shader-canvas {
-  position: fixed; top:0; left:0; width:100%; height:100%;
-  z-index: 0; display:block; pointer-events:none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0; /* фон */
+    display: block;
+    pointer-events: none; /* не мешает кликам по интерфейсу */
 }
 
-/* ensure content layer above background */
-.scanline, #start-screen, #boot-screen, #login-screen, #terminal {
-  position: relative; z-index: 10;
-}
-
-/* Start / Boot / Login screens (unchanged) */
-#start-screen { position: fixed; inset:0; display:flex; align-items:center; justify-content:center; background: rgba(0,0,0,0.9); z-index: 20; }
-.start-message { text-align:center; }
-#start-btn { background:black; border:1px solid #00FF41; color:#00FF41; padding:15px 30px; margin-top:30px; cursor:pointer; font-family:'Press Start 2P'; text-transform:uppercase; font-size:11px; }
-#start-btn:hover { background:#00FF41; color:black; }
-
-#boot-screen { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background: rgba(0,0,0,0.9); z-index:10; }
-.boot-message { text-align:left; }
-.logo pre { font-size:12px; margin-bottom:30px; text-align:center; }
-#boot-screen .boot-text p { opacity:0; margin:10px 0; transition: opacity 0.5s ease-in-out; }
-
-#login-screen { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background: rgba(0,0,0,0.9); z-index:5; }
-.login-form { text-align:center; border:1px solid #00FF41; padding:30px; background: rgba(0,0,0,0.9); }
-.login-prompt { font-size:18px; margin-bottom:20px; text-transform:uppercase; }
-.input-group { margin:15px 0; text-align:left; }
-.input-group label { display:block; margin-bottom:5px; font-size:14px; }
-.input-group input { width:250px; background:black; border:1px solid #00FF41; color:#00FF41; padding:8px; font-family:'Press Start 2P'; outline:none; }
-.input-group input:focus { border-color:#00FF41; box-shadow:0 0 10px #00FF41; }
-#login-btn { background:black; border:1px solid #00FF41; color:#00FF41; padding:10px 20px; margin-top:15px; cursor:pointer; font-family:'Press Start 2P'; text-transform:uppercase; }
-#login-btn:hover { background:#00FF41; color:black; }
-.error { color:#ff0000; margin-top:10px; font-size:14px; }
-.hidden { display:none !important; }
-
-/* TERMINAL - allow page scroll and internal scroll */
+/* Слой контента должен быть выше фона */
+.scanline,
+#start-screen,
+#boot-screen,
+#login-screen,
 #terminal {
-  padding: 20px;
-  /* removed fixed height 100vh -> allow page to scroll normally */
-  min-height: 100vh;
-  box-sizing: border-box;
-  overflow-y: auto;           /* terminal itself can scroll if content large */
-  background: rgba(0,0,0,0.9);
-  position: relative;
-  z-index: 10;
+    position: relative;
+    z-index: 10;
 }
 
-/* outputs */
-.output { margin:5px 0; white-space: pre-wrap; line-height:1.4; }
-.command { color:#FFFFFF; margin:5px 0; line-height:1.4; }
-.input-line { display:flex; align-items:center; margin:10px 0; }
-.prompt { color:#00FF41; }
-.cmd { color:#FFFFFF; }
-.cursor { animation: blink 1s step-end infinite; background-color:#00FF41; margin-left:2px; }
 
-/* keep previous flicker / degradation styles (unchanged) ... */
-@keyframes blink { 50% { opacity:0; } }
-
-/* ====================== CRT curve system (applied per-element) ====================== */
-
-/* inject and use the SVG filter #crtBulge (see script injection) */
-/* class applied to DOM elements which should visually curve */
-.crt-curve {
-  transform-origin: center center;
-  transform: perspective(1200px) rotateX(4deg) rotateY(-1deg) scale(1.02);
-  border-radius: 16px;
-  overflow: hidden;
-  will-change: transform, filter;
-  -webkit-backface-visibility: hidden;
-  backface-visibility: hidden;
-  /* apply SVG filter for mild barrel displacement — filter id is injected by JS */
-  filter: url('#crtBulge');
-  -webkit-filter: url('#crtBulge');
-  box-shadow:
-    inset 0 12px 30px rgba(0,0,0,0.5),
-    0 6px 40px rgba(0,255,65,0.02);
+.scanline {
+    /* если нужны scanline эффекты — можно добавить */
 }
 
-/* slight different transform for canvas map (makes it feel more 'mini curved') */
-.crt-curve-canvas {
-  transform-origin: center center;
-  transform: perspective(1000px) rotateX(5deg) rotateY(-2deg) scale(1.03);
-  border-radius: 10px;
-  filter: url('#crtBulge');
-  -webkit-filter: url('#crtBulge');
-  will-change: transform, filter;
+/* Экран запуска */
+#start-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.9); /* чуть прозрачный, чтобы фон видно было */
+    z-index: 20;
 }
 
-/* small helper to temporarily disable curve for debugging */
-.no-curve { transform: none !important; filter: none !important; -webkit-filter:none !important; }
+.start-message {
+    text-align: center;
+}
 
-/* reduce glassFX brightness if needed */
-#glassFX { opacity: 0.20 !important; pointer-events: none !important; z-index: 0 !important; }
+#start-btn {
+    background: black;
+    border: 1px solid #00FF41;
+    color: #00FF41;
+    padding: 15px 30px;
+    margin-top: 30px;
+    cursor: pointer;
+    font-family: 'Press Start 2P', monospace;
+    text-transform: uppercase;
+    font-size: 11px;
+}
 
-/* keep other degradation / animation rules intact (we left them in terminal.js style injection) */
+#start-btn:hover {
+    background: #00FF41;
+    color: black;
+}
+
+/* Экран загрузки */
+#boot-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.9);
+    z-index: 10;
+}
+
+.boot-message {
+    text-align: left;
+}
+
+.logo pre {
+    font-size: 12px;
+    margin-bottom: 30px;
+    text-align: center;
+}
+
+/* Скрываем текст загрузки изначально и делаем плавное появление */
+#boot-screen .boot-text p {
+    opacity: 0;
+    margin: 10px 0;
+    transition: opacity 0.5s ease-in-out;
+}
+
+/* Экран логина */
+#login-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.9);
+    z-index: 5;
+}
+
+.login-form {
+    text-align: center;
+    border: 1px solid #00FF41;
+    padding: 30px;
+    background: rgba(0, 0, 0, 0.9);
+}
+
+.login-prompt {
+    font-size: 18px;
+    margin-bottom: 20px;
+    text-transform: uppercase;
+}
+
+.input-group {
+    margin: 15px 0;
+    text-align: left;
+}
+
+.input-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-size: 14px;
+}
+
+.input-group input {
+    width: 250px;
+    background: black;
+    border: 1px solid #00FF41;
+    color: #00FF41;
+    padding: 8px;
+    font-family: 'Press Start 2P', monospace;
+    outline: none;
+}
+
+.input-group input:focus {
+    border-color: #00FF41;
+    box-shadow: 0 0 10px #00FF41;
+}
+
+#login-btn {
+    background: black;
+    border: 1px solid #00FF41;
+    color: #00FF41;
+    padding: 10px 20px;
+    margin-top: 15px;
+    cursor: pointer;
+    font-family: 'Press Start 2P', monospace;
+    text-transform: uppercase;
+}
+
+#login-btn:hover {
+    background: #00FF41;
+    color: black;
+}
+
+.error {
+    color: #ff0000;
+    margin-top: 10px;
+    font-size: 14px;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* Стили терминала (взяты из оригинала) */
+#terminal {
+    padding: 20px;
+    height: 100vh;
+    overflow-y: auto;
+    background: rgba(0, 0, 0, 0.9); /* фон обеспечивает шейдер */
+}
+
+.output {
+    margin: 5px 0;
+    white-space: pre-wrap;
+    line-height: 1.4;
+}
+
+.command {
+    color: #FFFFFF;
+    margin: 5px 0;
+    line-height: 1.4;
+}
+
+.input-line {
+    display: flex;
+    align-items: center;
+    margin: 10px 0;
+}
+
+.prompt {
+    color: #00FF41;
+}
+
+.cmd {
+    color: #FFFFFF;
+}
+
+.cursor {
+    animation: blink 1s step-end infinite;
+    background-color: #00FF41;
+    margin-left: 2px;
+}
+
+@keyframes blink {
+    50% { opacity: 0; }
+}
