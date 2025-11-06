@@ -3,6 +3,7 @@
 // Replace old terminal_canvas.js with this file. Keep crt_overlay.js after it.
 
 (() => {
+  let pendingRedraw = false; 
   const FONT_FAMILY = "'Press Start 2P', monospace";
   const FONT_SIZE_PX = 13;
   const LINE_HEIGHT = Math.round(FONT_SIZE_PX * 1.45);
