@@ -32,9 +32,7 @@
       cursor: 'default'
     });
     document.body.appendChild(mapCanvas);
-    mapCanvas.classList.add('crt-curve-canvas'); // <-- применим кривизну к мини-карте
     const mctx = mapCanvas.getContext('2d');
-
 
     // status element (bottom-left style in original, but we place near map)
     const statusEl = document.createElement('div');
