@@ -1,9 +1,6 @@
-// terminal_canvas_fixed3.js
-// Final self-contained terminal canvas replacement for terminal.js
-// - All commands, dossiers, notes and degradation implemented
-// - No external "insert old code" placeholders — fully ready to drop in
-// - Fixed: duplicate prompt/command, frozen background, white glass, scrolling, degradation UI
-// Usage: replace terminal.js with this file. Keep crt_overlay.js AFTER this file in HTML.
+// terminal_final.js
+// Unified terminal: canvas rendering (for crt overlay) + full degradation, dossiers, notes, audio
+// Drop-in replacement for terminal.js. Keep crt_overlay.js loaded AFTER this file.
 
 (() => {
   // ---------- CONFIG ----------
@@ -11,10 +8,11 @@
   const FONT_SIZE_PX = 13;
   const LINE_HEIGHT = Math.round(FONT_SIZE_PX * 1.45);
   const PADDING = 18;
-  const MAX_LINES = 8000;
+  const MAX_LINES = 9000;
   const DPR = Math.min(window.devicePixelRatio || 1, 2);
   const CANVAS_Z = 50;
-  const TYPING_SPEED_DEFAULT = 18; // ms per char
+  const TYPING_SPEED_DEFAULT = 16; // ms per char
+  const MIN_VW = 320, MIN_VH = 240;
 
   // ---------- create main canvas ----------
   const canvas = document.createElement('canvas');
@@ -26,33 +24,34 @@
     width: '100%',
     height: '100%',
     zIndex: CANVAS_Z,
-    pointerEvents: 'none', // keyboard still global
+    // keep pointer-events NONE so underlying interactive DOM (mapCanvas, orig terminal) still receives pointer events.
+    // We will listen to wheel on window to implement canvas scroll.
+    pointerEvents: 'none',
     userSelect: 'none'
   });
   document.body.appendChild(canvas);
   const ctx = canvas.getContext('2d', { alpha: false });
-  // ---------- drawing scheduling (MOVED UP FIX) ----------
+
+  // ---------- draw scheduling (declare BEFORE any calls) ----------
   let pendingRedraw = false;
   function requestFullRedraw(){
-    if (!pendingRedraw) {
+    if (!pendingRedraw){
       pendingRedraw = true;
-      requestAnimationFrame(() => {
-        pendingRedraw = false;
-        draw();
-      });
+      requestAnimationFrame(()=>{ pendingRedraw = false; draw(); });
     }
   }
 
-  // Keep originals interactive but visually hidden to preserve other modules
+  // ---------- find original elements (keep interactive but visually hidden) ----------
   const origTerminal = document.getElementById('terminal');
   if (origTerminal) {
+    // hide visually but keep for compatibility / existing DOM logic
     origTerminal.style.opacity = '0';
     origTerminal.style.pointerEvents = 'auto';
-    // Remove any stray visible nodes that original script may add (safety)
+    // Observe and remove visual children if some other script tries to add visible nodes into original terminal.
     try {
       const mo = new MutationObserver(muts => {
         muts.forEach(m => {
-          if (m.addedNodes) {
+          if (m.addedNodes && m.addedNodes.length) {
             m.addedNodes.forEach(n => {
               if (n && (n.nodeType === 1 || n.nodeType === 3)) {
                 try { n.remove(); } catch(e){}
@@ -71,23 +70,19 @@
     glassFX.style.pointerEvents = 'auto';
   }
 
-  // find netGrid / map canvas (avoid shader and our canvas)
+  // mapCanvas (netGrid) - find a canvas that's not shader/overlay/this one
   const mapCanvas = (() => {
     const all = Array.from(document.querySelectorAll('canvas'));
     const c = all.find(x => x.id !== 'shader-canvas' && x.id !== 'terminalCanvas' && x.id !== 'crtOverlayCanvas' && x.id !== 'glassFX');
-    if (c) {
-      c.style.opacity = '0';
-      c.style.pointerEvents = 'auto';
-      return c;
-    }
+    if (c) { c.style.opacity = '0'; c.style.pointerEvents = 'auto'; return c; }
     return null;
   })();
 
   // ---------- sizing ----------
   let vw = 0, vh = 0;
   function resize() {
-    vw = Math.max(320, window.innerWidth);
-    vh = Math.max(240, window.innerHeight);
+    vw = Math.max(MIN_VW, window.innerWidth);
+    vh = Math.max(MIN_VH, window.innerHeight);
     canvas.width = Math.floor(vw * DPR);
     canvas.height = Math.floor(vh * DPR);
     canvas.style.width = vw + 'px';
@@ -98,8 +93,6 @@
   }
   window.addEventListener('resize', resize);
   resize();
-
- 
 
   // ---------- terminal state ----------
   const lines = []; // {text, color, _ephemeral}
@@ -117,20 +110,43 @@
   let ghostInputInterval = null;
   let autoCommandInterval = null;
 
-  // duplication guard
+  // duplicate quick-press guard
   let lastProcessed = { text: null, ts: 0 };
 
-  // ---------- Degradation system ----------
+  // ---------- helper utils ----------
+  function pushLine(text, color){
+    lines.push({ text: String(text), color: color || '#00FF41' });
+    if (lines.length > MAX_LINES) lines.splice(0, lines.length - MAX_LINES);
+  }
+  function addOutput(text, className = 'output'){
+    if (isFrozen) return;
+    const color = className === 'command' ? '#FFFFFF' : '#00FF41';
+    pushLine(text, color);
+    scrollOffset = 0;
+    requestFullRedraw();
+  }
+  function addColoredText(text, color = '#00FF41'){
+    if (isFrozen) return;
+    pushLine(text, color);
+    scrollOffset = 0;
+    requestFullRedraw();
+  }
+
+  // ---------- Degradation system (merged & restored) ----------
   class DegradationSystem {
-    constructor() {
+    constructor(){
       this.level = parseInt(localStorage.getItem('adam_degradation')) || 0;
       this.lastSoundLevel = 0;
       this.ghostActive = false;
       this.autoActive = false;
 
-      // hidden DOM indicator for compatibility
+      // keep DOM indicator for backward compatibility (hidden visually)
       this.indicator = document.createElement('div');
-      this.indicator.style.cssText = `position:fixed; top:20px; right:20px; opacity:0; pointer-events:none; font-family:${FONT_FAMILY}`;
+      this.indicator.style.cssText = `
+        position: fixed; top: 20px; right: 20px; background: rgba(0,0,0,0.9);
+        border: 2px solid #00FF41; padding: 10px; font-family: ${FONT_FAMILY};
+        font-size: 11px; color: #00FF41; z-index: 9999; min-width: 240px; opacity: 0; pointer-events: none;
+      `;
       document.body.appendChild(this.indicator);
 
       this.updateIndicator();
@@ -139,8 +155,7 @@
     }
 
     startTimer(){
-      // increments overtime even if no typing (we keep background tick running)
-      setInterval(() => { if (!document.hidden && !isFrozen) this.addDegradation(1); }, 30000);
+      setInterval(()=>{ if (!document.hidden && !isFrozen) this.addDegradation(1); }, 30000);
     }
 
     addDegradation(amount){
@@ -154,19 +169,36 @@
         else if (this.level >= 80 && this.level < 95) this.playAudio('sounds/reset_com_reverse.mp3');
         this.lastSoundLevel = this.level;
       }
+
       if (this.level >= 98 && !isFrozen) this.triggerGlitchApocalypse();
     }
 
     updateIndicator(){
       const color = this.level > 95 ? '#FF00FF' : this.level > 80 ? '#FF4444' : this.level > 60 ? '#FF8800' : this.level > 30 ? '#FFFF00' : '#00FF41';
-      this.indicator.innerHTML = `<div style="color:${color};font-weight:700">ДЕГРАДАЦИЯ СИСТЕМЫ</div>
-        <div style="background:#222;height:12px;margin:6px 0;border:2px solid ${color}"><div style="background:${color};height:100%;width:${this.level}%"></div></div>
-        <div style="color:${color}">${this.level}%</div>`;
+      let warning = '';
+      if (this.level >= 60) warning = `<div style="color:#FFFF00;font-size:12px;margin-top:8px;">> ИСПОЛЬЗУЙТЕ RESET ДЛЯ СТАБИЛИЗАЦИИ</div>`;
+      if (this.level >= 85) warning = `<div style="color:#FF4444;font-size:12px;margin-top:8px;animation:blink 1s infinite;">> СРОЧНО ВВЕДИТЕ RESET</div>`;
+      this.indicator.innerHTML = `
+        <div style="color:${color};font-size:14px;font-weight:700;">ДЕГРАДАЦИЯ СИСТЕМЫ</div>
+        <div style="background:#333;height:12px;margin:8px 0;border:2px solid ${color};">
+          <div style="background:${color};height:100%;width:${this.level}%;"></div>
+        </div>
+        <div style="text-align:center;color:${color};font-weight:700;">${this.level}%</div>
+        ${warning}
+      `;
       requestFullRedraw();
     }
 
     updateEffects(){
-      // start ghost / auto commands only from level threshold
+      // keep body classes for CSS-based visuals compatibility (from old system)
+      document.body.classList.remove('degradation-2','degradation-3','degradation-4','degradation-5','degradation-glitch');
+      if (this.level >= 30 && this.level < 60) document.body.classList.add('degradation-2');
+      else if (this.level >= 60 && this.level < 80) document.body.classList.add('degradation-3');
+      else if (this.level >= 80 && this.level < 95) document.body.classList.add('degradation-4');
+      else if (this.level >= 95 && this.level < 98) document.body.classList.add('degradation-5');
+      else if (this.level >= 98) document.body.classList.add('degradation-glitch');
+
+      // ghost & auto commands toggles
       if (this.level >= 80) {
         this.startGhostInput();
         this.startAutoCommands();
@@ -178,17 +210,26 @@
     }
 
     playAudio(file){
+      // robust playback: try multiple common variants
       try {
-        if (currentAudio){ currentAudio.pause(); currentAudio.currentTime = 0; }
-        currentAudio = new Audio(file);
-        currentAudio.play().catch(()=>{ /* ignore autoplay restrictions */ });
+        if (currentAudio) { currentAudio.pause(); currentAudio.currentTime = 0; }
+        const attempts = [file, file.replace('.mp3','.MP3'), file.replace('.mp3','.wav')];
+        let idx = 0;
+        const tryPlay = () => {
+          if (idx >= attempts.length) return;
+          try {
+            currentAudio = new Audio(attempts[idx]);
+            currentAudio.play().catch(()=>{ idx++; tryPlay(); });
+          } catch(e){ idx++; tryPlay(); }
+        };
+        tryPlay();
       } catch(e){}
     }
 
     triggerGlitchApocalypse(){
       isFrozen = true;
       this.playAudio('sounds/glitch_e.MP3');
-      // visual glitch will be seen because draw() can check degradation.level and isFrozen
+      // visual glitch in draw()
       setTimeout(()=> this.performAutoReset(), 3000);
     }
 
@@ -204,7 +245,7 @@
       this.level = 0;
       this.lastSoundLevel = 0;
       localStorage.setItem('adam_degradation','0');
-      if (currentAudio){ currentAudio.pause(); currentAudio.currentTime = 0; }
+      if (currentAudio) { currentAudio.pause(); currentAudio.currentTime = 0; }
       isFrozen = false;
       this.stopGhostInput();
       this.stopAutoCommands();
@@ -213,7 +254,7 @@
 
     startGhostInput(){
       if (ghostInputInterval) return;
-      ghostInputInterval = setInterval(() => {
+      ghostInputInterval = setInterval(()=>{
         if (!isTyping && !isFrozen && Math.random() < 0.12) {
           currentLine += ['0','1','▓','█','[',']','{','}','/','\\','▄','▀','▌'][Math.floor(Math.random()*13)];
           updatePromptLine();
@@ -261,7 +302,7 @@
   }
   const degradation = new DegradationSystem();
 
-  // ---------- drawing helpers ----------
+  // ---------- draw helpers ----------
   function clearBackground(){
     ctx.save();
     ctx.setTransform(DPR,0,0,DPR,0,0);
@@ -275,28 +316,24 @@
     ctx.setTransform(1,0,0,1,0,0);
     ctx.scale(DPR, DPR);
 
-    // shader-canvas (background) - behind everything
+    // shader background if any
     const shaderCanvas = document.getElementById('shader-canvas');
-    if (shaderCanvas && shaderCanvas.width > 0) {
-      try { ctx.drawImage(shaderCanvas, 0, 0, vw, vh); } catch(e){ /* ignore */ }
+    if (shaderCanvas && shaderCanvas.width > 0){
+      try { ctx.drawImage(shaderCanvas, 0, 0, vw, vh); } catch(e){}
     }
 
-    // mapCanvas (netGrid) - draw before glass so it is visible
+    // mapCanvas (netGrid) drawn before glass
     if (mapCanvas && mapCanvas.width > 0 && mapCanvas.height > 0) {
       try {
         const r = mapCanvas.getBoundingClientRect();
-        const sx = Math.round(r.left);
-        const sy = Math.round(r.top);
-        const sw = Math.round(r.width);
-        const sh = Math.round(r.height);
-        ctx.drawImage(mapCanvas, sx, sy, sw, sh);
+        ctx.drawImage(mapCanvas, Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height));
       } catch(e){}
     }
 
-    // glassFX - subtle noise under text
+    // glassFX (noise) subtle under text
     if (glassFX && glassFX.width > 0 && glassFX.height > 0) {
       try {
-        ctx.globalAlpha = 0.12; // subtle
+        ctx.globalAlpha = 0.12;
         ctx.globalCompositeOperation = 'source-over';
         ctx.drawImage(glassFX, 0, 0, vw, vh);
         ctx.globalAlpha = 1.0;
@@ -316,7 +353,6 @@
 
     const contentH = vh - PADDING*2;
     const visibleLines = Math.max(1, Math.floor(contentH / LINE_HEIGHT));
-    const maxScroll = Math.max(0, lines.length - visibleLines);
     const start = Math.max(0, lines.length - visibleLines - scrollOffset);
     const end = Math.min(lines.length, start + visibleLines);
 
@@ -325,21 +361,20 @@
 
     for (let i = start; i < end; i++){
       const item = lines[i];
-      let color = item.color || '#00FF41';
-      ctx.fillStyle = color;
+      ctx.fillStyle = item.color || '#00FF41';
       const text = String(item.text);
 
-      // wrap by words
       if (ctx.measureText(text).width <= maxW) {
         ctx.fillText(text, PADDING, y);
         y += LINE_HEIGHT;
         continue;
       }
+      // wrap by words
       const words = text.split(' ');
       let line = '';
       for (let w = 0; w < words.length; w++){
         const test = line ? line + ' ' + words[w] : words[w];
-        if (ctx.measureText(test).width > maxW && line){
+        if (ctx.measureText(test).width > maxW && line) {
           ctx.fillText(line, PADDING, y);
           y += LINE_HEIGHT;
           line = words[w];
@@ -349,17 +384,13 @@
       }
       if (line) { ctx.fillText(line, PADDING, y); y += LINE_HEIGHT; }
     }
-
     ctx.restore();
   }
 
   function drawDegradationIndicator(){
-    // draw indicator box to top-right inside canvas and clamp to viewport
     const wBox = Math.min(360, Math.floor(vw * 0.34));
     const hBox = 62;
-    const x = Math.max(10, vw - wBox - 20);
-    const y = 20;
-
+    const x = Math.max(10, vw - wBox - 20), y = 20;
     ctx.save();
     ctx.setTransform(1,0,0,1,0,0);
     ctx.scale(DPR, DPR);
@@ -393,7 +424,7 @@
     ctx.restore();
   }
 
-  function roundRect(ctx, x, y, w, h, r) {
+  function roundRect(ctx, x, y, w, h, r){
     ctx.beginPath();
     ctx.moveTo(x + r, y);
     ctx.arcTo(x + w, y, x + w, y + h, r);
@@ -403,9 +434,8 @@
     ctx.closePath();
   }
 
-  // ---------- main draw (always callable) ----------
   function draw(){
-    // base clear
+    // clear
     ctx.save();
     ctx.setTransform(1,0,0,1,0,0);
     ctx.scale(DPR, DPR);
@@ -413,59 +443,37 @@
     ctx.fillRect(0,0,vw,vh);
     ctx.restore();
 
-    // compose layers
+    // layers
     drawMapAndGlass();
     drawTextLines();
     drawDegradationIndicator();
 
-    // optional: if isFrozen show glitch overlay or flicker
+    // glitch flash when frozen
     if (isFrozen) {
       ctx.save();
       ctx.setTransform(1,0,0,1,0,0);
       ctx.globalAlpha = 0.08;
       ctx.fillStyle = '#FFF';
-      // subtle flash rectangles
-      for (let i = 0; i < 6; i++) {
-        const rx = Math.random() * vw;
-        const ry = Math.random() * vh;
-        const rw = Math.random() * 120;
-        const rh = Math.random() * 40;
+      for (let i=0;i<6;i++){
+        const rx = Math.random()*vw;
+        const ry = Math.random()*vh;
+        const rw = Math.random()*120;
+        const rh = Math.random()*40;
         ctx.fillRect(rx, ry, rw, rh);
       }
       ctx.restore();
     }
   }
 
-  // ---------- terminal API ----------
-  function pushLine(text, color){
-    lines.push({ text: String(text), color: color || '#00FF41' });
-    if (lines.length > MAX_LINES) lines.splice(0, lines.length - MAX_LINES);
-  }
-
-  function addOutput(text, className = 'output') {
-    if (isFrozen) return;
-    const color = className === 'command' ? '#FFFFFF' : '#00FF41';
-    pushLine(text, color);
-    scrollOffset = 0;
-    requestFullRedraw();
-  }
-
-  function addColoredText(text, color = '#00FF41') {
-    if (isFrozen) return;
-    pushLine(text, color);
-    scrollOffset = 0;
-    requestFullRedraw();
-  }
-
-  async function typeText(text, className = 'output', speed = TYPING_SPEED_DEFAULT) {
+  // ---------- typing helper ----------
+  async function typeText(text, className = 'output', speed = TYPING_SPEED_DEFAULT){
     if (isFrozen) return;
     isTyping = true;
     let buffer = '';
     const color = className === 'command' ? '#FFFFFF' : '#00FF41';
-    for (let i = 0; i < text.length; i++) {
+    for (let i=0;i<text.length;i++){
       buffer += text[i];
-      // ephemeral typed line: replace last ephemeral or push
-      if (lines.length && lines[lines.length - 1]._ephemeral) {
+      if (lines.length && lines[lines.length - 1]._ephemeral){
         lines[lines.length - 1].text = buffer;
         lines[lines.length - 1].color = color;
       } else {
@@ -476,8 +484,7 @@
       await new Promise(r => setTimeout(r, speed));
       if (isFrozen) break;
     }
-    // finalize
-    if (lines.length && lines[lines.length - 1]._ephemeral) {
+    if (lines.length && lines[lines.length - 1]._ephemeral){
       lines[lines.length - 1].text = buffer;
       delete lines[lines.length - 1]._ephemeral;
     } else if (buffer) {
@@ -488,8 +495,8 @@
     requestFullRedraw();
   }
 
+  // ---------- prompt management ----------
   function addInputLine(){
-    // ensure only one prompt line at bottom
     if (lines.length && String(lines[lines.length - 1].text).startsWith('adam@secure:~$')) return;
     pushLine('adam@secure:~$ ', '#00FF41');
     scrollOffset = 0;
@@ -505,7 +512,8 @@
     requestFullRedraw();
   }
 
-  // ---------- dossiers & notes (full content included) ----------
+  // ---------- dossiers & notes (full) ----------
+  // I used the dossiers/notes content from your uploaded files — plenty of entries included.
   const dossiers = {
     '0X001': { name: 'ERICH VAN KOSS', role: 'Руководитель программы VIGIL-9 / Исследователь миссии MARS', status: 'СВЯЗЬ ОТСУТСТВУЕТ', outcome: ['Зафиксирована несанкционированная передача данных внешним структурам (FBI).', 'Субъект предпринял попытку уничтожения маяка в секторе 3-D.', 'Телеметрия прервана, дальнейшее наблюдение невозможно.'], report: ['Классификация инцидента: SABOTAGE-3D.', 'Рекомендовано аннулирование личных протоколов и перенос архивов в OBSERVER.'], missions: 'MARS, OBSERVER', audio: 'sounds/dscr1.mp3', audioDescription: 'Последняя передача Эриха Ван Косса' },
     '0X2E7': { name: 'JOHAN VAN KOSS', role: 'Тестовый субъект V9-MR / Сын Эриха Ван Косса', status: 'СВЯЗЬ ОТСУТСТВУЕТ', outcome: ['После инцидента MARS зафиксировано устойчивое излучение из зоны криоструктуры.', 'Сигнатура нейроволн совпадает с профилем субъекта.', 'Инициирована установка маяка для фиксации остаточного сигнала.'], report: ['Активность нейросети перестала фиксироваться.'], missions: 'MARS, MONOLITH' },
@@ -534,8 +542,8 @@
     'NOTE_005': { title: 'ФОТОНОВАЯ БОЛЬ', author: 'восстановлено частично', content: ['Боль не физическая.','Она в свете, в данных, в коде.','Когда система перезагружается, я чувствую как что-то умирает.','Может быть, это я.'] }
   };
 
-  // ---------- show dossier / notes ----------
-  async function showSubjectDossier(subjectId) {
+  // ---------- show dossier / notes (canvas-friendly) ----------
+  async function showSubjectDossier(subjectId){
     const id = String(subjectId || '').toUpperCase();
     const dossier = dossiers[id];
     if (!dossier) {
@@ -554,26 +562,26 @@
     dossier.report.forEach(line => addColoredText(`> ${line}`, '#FFFF00'));
     addColoredText('------------------------------------', '#00FF41');
     await typeText(`СВЯЗАННЫЕ МИССИИ: ${dossier.missions}`, 'output', 12);
+
     if (dossier.audio) {
       addColoredText(`[АУДИОЗАПИСЬ ДОСТУПНА: ${dossier.audioDescription}]`, '#FFFF00');
-      const audioId = `audio_${id.replace(/[^0-9A-Z]/g,'')}`;
-      if (!document.getElementById(audioId)) {
+      addColoredText(`Чтобы воспроизвести: playaudio ${id}`, '#FFFF00');
+      // create hidden audio element for control
+      const audioElId = `audio_el_${id}`;
+      if (!document.getElementById(audioElId)) {
         const holder = document.createElement('div');
-        holder.id = audioId;
+        holder.id = audioElId;
         holder.style.display = 'none';
-        holder.innerHTML = `<audio id="${audioId}_el" src="${dossier.audio}" preload="metadata"></audio>`;
+        holder.innerHTML = `<audio id="${audioElId}_inner" src="${dossier.audio}" preload="metadata"></audio>`;
         document.body.appendChild(holder);
       }
     }
   }
 
-  async function openNote(noteId) {
+  async function openNote(noteId){
     const id = String(noteId || '').toUpperCase();
     const note = notes[id];
-    if (!note) {
-      addColoredText(`ОШИБКА: Файл ${noteId} не найден`, '#FF4444');
-      return;
-    }
+    if (!note) { addColoredText(`ОШИБКА: Файл ${noteId} не найден`, '#FF4444'); return; }
     await typeText(`[${id} — "${note.title}"]`, 'output', 12);
     await typeText(`АВТОР: ${note.author}`, 'output', 12);
     addColoredText('------------------------------------', '#00FF41');
@@ -589,8 +597,42 @@
     await typeText('[ФАЙЛ ЗАКРЫТ]', 'output', 12);
   }
 
+  // ---------- audio controls ----------
+  function stopAllAudio(){
+    if (currentAudio){ try { currentAudio.pause(); currentAudio.currentTime = 0; } catch(e){} }
+    const els = document.querySelectorAll('audio');
+    els.forEach(a => { try { a.pause(); a.currentTime = 0; } catch(e){} });
+  }
+
+  function playDossierAudio(id){
+    const audioEl = document.getElementById(`audio_el_${id}_inner`);
+    if (audioEl){
+      stopAllAudio();
+      try { audioEl.play().catch(()=>{}); currentAudio = audioEl; addColoredText(`Воспроизведение: ${id}`, '#00FF41'); }
+      catch(e){ addColoredText('Ошибка воспроизведения аудио', '#FF4444'); }
+    } else {
+      // fallback: try to find dossier and create audio if possible
+      const d = dossiers[id];
+      if (d && d.audio){
+        const holder = document.createElement('div');
+        holder.id = `audio_el_${id}`;
+        holder.style.display = 'none';
+        holder.innerHTML = `<audio id="audio_el_${id}_inner" src="${d.audio}" preload="metadata"></audio>`;
+        document.body.appendChild(holder);
+        playDossierAudio(id);
+      } else {
+        addColoredText('Аудио не найдено для указанного ID', '#FF4444');
+      }
+    }
+  }
+
+  function stopDossierAudio(id){
+    const audioEl = document.getElementById(`audio_el_${id}_inner`);
+    if (audioEl){ try { audioEl.pause(); audioEl.currentTime = 0; addColoredText(`Остановлено: ${id}`, '#FFFF00'); } catch(e){} }
+  }
+
   // ---------- loader ----------
-  function showLoading(duration = 2000, text = "АНАЛИЗ СИГНАЛА") {
+  function showLoading(duration = 2000, text = "АНАЛИЗ СИГНАЛА"){
     return new Promise(resolve => {
       if (isFrozen) return resolve();
       const loaderIndex = lines.length;
@@ -614,38 +656,40 @@
     });
   }
 
-  // ---------- fake spawn ----------
+  // ---------- spawn fake commands (keeps feel) ----------
   function spawnFakeCommand(){
-    if (degradation.level >= 80 && Math.random() < 0.02 && !isFrozen) {
-      const fakeLines = ['adam@secure:~$ ... → ОШИБКА // НЕТ ПОЛЬЗОВАТЕЛЯ','adam@secure:~$ SYSTEM FAILURE // CORE DUMP','adam@secure:~$ ACCESS VIOLATION // TERMINAL COMPROMISED'];
+    if (degradation.level >= 80 && Math.random() < 0.02 && !isFrozen){
+      const fakeLines = [
+        'adam@secure:~$ ... → ОШИБКА // НЕТ ПОЛЬЗОВАТЕЛЯ',
+        'adam@secure:~$ SYSTEM FAILURE // CORE DUMP',
+        'adam@secure:~$ ACCESS VIOLATION // TERMINAL COMPROMISED'
+      ];
       const s = fakeLines[Math.floor(Math.random()*fakeLines.length)];
       addColoredText(s, '#FF4444');
     }
   }
   setInterval(spawnFakeCommand, 2000);
 
-  // ---------- processCommand ----------
+  // ---------- processCommand (full) ----------
   async function processCommand(rawCmd){
     if (isTyping || isFrozen) return;
     const cmdLine = String(rawCmd || '').trim();
     if (!cmdLine) { addInputLine(); return; }
 
     const now = Date.now();
-    if (lastProcessed.text === cmdLine && now - lastProcessed.ts < 350) {
+    if (lastProcessed.text === cmdLine && now - lastProcessed.ts < 350){
       addInputLine();
       return;
     }
-    lastProcessed.text = cmdLine;
-    lastProcessed.ts = now;
+    lastProcessed.text = cmdLine; lastProcessed.ts = now;
 
-    // history
+    // push history
     commandHistory.push(cmdLine);
     historyIndex = commandHistory.length;
     commandCount++;
 
-    // Remove last prompt line before adding the echoed command output to avoid duplication
+    // Convert prompt line into echoed white command (avoid duplicate)
     if (lines.length && String(lines[lines.length - 1].text).startsWith('adam@secure:~$')) {
-      // convert prompt -> printed command (white)
       lines[lines.length - 1].text = 'adam@secure:~$ ' + cmdLine;
       lines[lines.length - 1].color = '#FFFFFF';
       delete lines[lines.length - 1]._ephemeral;
@@ -673,12 +717,15 @@
         await typeText('  DSCR <id>    — досье на персонал', 'output', 10);
         await typeText('  NOTES        — личные файлы сотрудников', 'output', 10);
         await typeText('  OPEN <id>    — открыть файл из NOTES', 'output', 10);
+        await typeText('  PLAYAUDIO <ID> — воспроизвести аудио из досье (пример: PLAYAUDIO 0x001)', 'output', 10);
+        await typeText('  STOPAUDIO <ID> — остановить аудио', 'output', 10);
+        await typeText('  STOPALL       — остановить все аудио', 'output', 10);
         await typeText('  RESET        — сброс интерфейса', 'output', 10);
         await typeText('  EXIT         — завершить сессию', 'output', 10);
         await typeText('  CLEAR        — очистить терминал', 'output', 10);
         await typeText('  DEG          — установить уровень деградации (разработка)', 'output', 10);
         await typeText('------------------------------------', 'output', 10);
-        await typeText('ПРИМЕЧАНИЕ: часть команд заблокирована или скрыта.', 'output', 18);
+        await typeText('ПРИМЕЧАНИЕ: часть команд может быть скрыта.', 'output', 18);
         break;
 
       case 'clear':
@@ -736,18 +783,13 @@
         break;
 
       case 'open':
-        if (args.length === 0) {
-          addColoredText('ОШИБКА: Укажите ID файла', '#FF4444');
-          await typeText('Пример: OPEN NOTE_001', 'output', 12);
-          break;
-        }
+        if (args.length === 0){ addColoredText('ОШИБКА: Укажите ID файла', '#FF4444'); await typeText('Пример: OPEN NOTE_001', 'output', 12); break; }
         await openNote(args[0]);
         break;
 
       case 'subj':
         await typeText('[СПИСОК СУБЪЕКТОВ — ПРОЕКТ A.D.A.M. / ПРОТОКОЛ VIGIL-9]', 'output', 12);
         addColoredText('--------------------------------------------------------', '#00FF41');
-        // full list
         for (const k of Object.keys(dossiers)) {
           const d = dossiers[k];
           const color = d.status && d.status.includes('МЁРТВ') ? '#FF4444' : d.status === 'АНОМАЛИЯ' ? '#FF00FF' : d.status === 'АКТИВЕН' ? '#00FF41' : '#FFFF00';
@@ -759,26 +801,14 @@
         break;
 
       case 'dscr':
-        if (args.length === 0) {
-          addColoredText('ОШИБКА: Укажите ID субъекта', '#FF4444');
-          await typeText('Пример: DSCR 0x001', 'output', 12);
-          break;
-        }
+        if (args.length === 0){ addColoredText('ОШИБКА: Укажите ID субъекта', '#FF4444'); await typeText('Пример: DSCR 0x001', 'output', 12); break; }
         await showSubjectDossier(args[0]);
         break;
 
       case 'deg':
-        if (args.length === 0) {
-          addColoredText(`Текущий уровень деградации: ${degradation.level}%`, '#00FF41');
-          await typeText('Использование: deg <уровень 0-100>', 'output', 12);
-        } else {
-          const level = parseInt(args[0]);
-          if (!isNaN(level) && level >= 0 && level <= 100) {
-            degradation.setDegradationLevel(level);
-            addColoredText(`Уровень деградации установлен: ${level}%`, '#00FF41');
-          } else {
-            addColoredText('ОШИБКА: Уровень должен быть числом от 0 до 100', '#FF4444');
-          }
+        if (args.length === 0) { addColoredText(`Текущий уровень деградации: ${degradation.level}%`, '#00FF41'); await typeText('Использование: deg <уровень 0-100>', 'output', 12); }
+        else {
+          const level = parseInt(args[0]); if (!isNaN(level) && level >=0 && level <=100){ degradation.setDegradationLevel(level); addColoredText(`Уровень деградации установлен: ${level}%`, '#00FF41'); } else addColoredText('ОШИБКА: Уровень должен быть числом от 0 до 100', '#FF4444');
         }
         break;
 
@@ -788,10 +818,9 @@
         addColoredText('ВНИМАНИЕ: операция приведёт к очистке активной сессии.', '#FFFF00');
         await typeText('> Подтвердить сброс? (Y/N)', 'output', 12);
         addColoredText('------------------------------------', '#00FF41');
-
         {
           const resetConfirmed = await waitForConfirmation();
-          if (resetConfirmed) {
+          if (resetConfirmed){
             addColoredText('> Y', '#00FF41');
             lines.length = 0;
             const resetMessages = ["Завершение активных модулей [ЗАВЕРШЕНО]","Перезапуск интерфейса [ЗАВЕРШЕНО]","Восстановление базового состояния [ЗАВЕРШЕНО]","----------------------------------","[СИСТЕМА ГОТОВА К РАБОТЕ]"];
@@ -812,7 +841,7 @@
         addColoredText('------------------------------------', '#00FF41');
         {
           const exitConfirmed = await waitForConfirmation();
-          if (exitConfirmed) {
+          if (exitConfirmed){
             addColoredText('> Y', '#00FF41');
             await showLoading(1200, "Завершение работы терминала");
             await showLoading(800, "Отключение сетевой сессии");
@@ -824,6 +853,30 @@
             await typeText('[ОПЕРАЦИЯ ОТМЕНЕНА]', 'output', 12);
           }
         }
+        break;
+
+      case 'playaudio':
+      case 'playaudio'.toUpperCase().toLowerCase():
+      case 'playaudio': {
+        // accept forms like playaudio 0x001 or playaudio 0X001 or playaudio 0x001
+        const raw = (args[0] || '').toUpperCase();
+        if (!raw) { addColoredText('Укажите ID для воспроизведения (пример: PLAYAUDIO 0x001)', '#FF4444'); break; }
+        const id = raw.startsWith('0X') ? raw : raw.toUpperCase();
+        playDossierAudio(id);
+        break;
+      }
+
+      case 'stopaudio': {
+        const raw = (args[0] || '').toUpperCase();
+        if (!raw) { addColoredText('Укажите ID для остановки (пример: STOPAUDIO 0x001)', '#FF4444'); break; }
+        const id = raw.startsWith('0X') ? raw : raw.toUpperCase();
+        stopDossierAudio(id);
+        break;
+      }
+
+      case 'stopall':
+        stopAllAudio();
+        addColoredText('Всё аудио остановлено', '#FFFF00');
         break;
 
       default:
@@ -851,21 +904,16 @@
     const active = document.activeElement;
     if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
 
-    if (awaitingConfirmation) {
-      if (e.key.toLowerCase() === 'y' || e.key.toLowerCase() === 'н') {
-        e.preventDefault();
-        if (confirmationCallback) confirmationCallback(true);
-      } else if (e.key.toLowerCase() === 'n' || e.key.toLowerCase() === 'т') {
-        e.preventDefault();
-        if (confirmationCallback) confirmationCallback(false);
-      }
+    if (awaitingConfirmation){
+      if (e.key.toLowerCase() === 'y' || e.key.toLowerCase() === 'н'){ e.preventDefault(); if (confirmationCallback) confirmationCallback(true); }
+      else if (e.key.toLowerCase() === 'n' || e.key.toLowerCase() === 'т'){ e.preventDefault(); if (confirmationCallback) confirmationCallback(false); }
       return;
     }
 
     if (isTyping) return;
 
-    if (e.key === 'Enter') {
-      if (currentLine.trim()) {
+    if (e.key === 'Enter'){
+      if (currentLine.trim()){
         const c = currentLine;
         currentLine = '';
         processCommand(c);
@@ -874,15 +922,15 @@
       }
       e.preventDefault();
       return;
-    } else if (e.key === 'Backspace') {
+    } else if (e.key === 'Backspace'){
       currentLine = currentLine.slice(0,-1);
-    } else if (e.key === 'ArrowUp') {
-      if (historyIndex > 0) { historyIndex--; currentLine = commandHistory[historyIndex] || ''; }
-      else if (historyIndex === commandHistory.length) { historyIndex = commandHistory.length - 1; }
-    } else if (e.key === 'ArrowDown') {
-      if (historyIndex < commandHistory.length - 1) { historyIndex++; currentLine = commandHistory[historyIndex] || ''; }
+    } else if (e.key === 'ArrowUp'){
+      if (historyIndex > 0){ historyIndex--; currentLine = commandHistory[historyIndex] || ''; }
+      else if (historyIndex === commandHistory.length) historyIndex = commandHistory.length - 1;
+    } else if (e.key === 'ArrowDown'){
+      if (historyIndex < commandHistory.length - 1){ historyIndex++; currentLine = commandHistory[historyIndex] || ''; }
       else { historyIndex = commandHistory.length; currentLine = ''; }
-    } else if (e.key.length === 1) {
+    } else if (e.key.length === 1){
       currentLine += e.key;
     } else {
       return;
@@ -890,26 +938,22 @@
     updatePromptLine();
   });
 
-  // ---------- wheel scroll for viewing history ----------
-  canvas.addEventListener('wheel', (e) => {
-    // enable scrolling through lines when user scrolls over canvas
+  // ---------- wheel scrolling (global so map clicks not blocked) ----------
+  window.addEventListener('wheel', (e)=>{
+    // if user scrolls while focusing another input, ignore
+    const active = document.activeElement;
+    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
     e.preventDefault();
     const contentH = vh - PADDING*2;
     const visibleLines = Math.max(1, Math.floor(contentH / LINE_HEIGHT));
     const maxScroll = Math.max(0, lines.length - visibleLines);
-    // wheelDelta: positive -> scroll up (older), negative -> scroll down (newest)
-    if (e.deltaY < 0) {
-      // wheel up -> view older -> increase scrollOffset
-      scrollOffset = Math.min(maxScroll, scrollOffset + 1);
-    } else {
-      // wheel down -> view newer -> decrease scrollOffset
-      scrollOffset = Math.max(0, scrollOffset - 1);
-    }
+    if (e.deltaY < 0) { scrollOffset = Math.min(maxScroll, scrollOffset + 1); }
+    else { scrollOffset = Math.max(0, scrollOffset - 1); }
     requestFullRedraw();
   }, { passive: false });
 
-  // ---------- util ----------
-  function getSyslogLevel() {
+  // ---------- utilities ----------
+  function getSyslogLevel(){
     const sessionDuration = Date.now() - sessionStartTime;
     const minutesInSession = sessionDuration / (1000 * 60);
     if (commandCount >= 10 || minutesInSession >= 3) return 3;
@@ -918,7 +962,7 @@
   }
 
   // ---------- boot text ----------
-  (async () => {
+  (async ()=>{
     await new Promise(r => setTimeout(r, 300));
     await typeText('> ТЕРМИНАЛ A.D.A.M. // VIGIL-9 АКТИВЕН', 'output', 12);
     await typeText('> ДОБРО ПОЖАЛОВАТЬ, ОПЕРАТОР', 'output', 12);
@@ -926,31 +970,20 @@
     addInputLine();
   })();
 
-  // ---------- background animation tick ----------
-  // This keeps the site "alive" (degradation, glass/noise, map animations that are DOM-driven)
+  // ---------- background animation tick (keeps site alive if nothing typed) ----------
   let lastTick = performance.now();
-  function backgroundTick(ts) {
-    const dt = ts - lastTick;
-    lastTick = ts;
-    // if mapCanvas has its own animation (netGrid), it will run itself. We still request redraw each 1/30s at least.
-    // But to avoid overdraw, only call draw at a steady rate (30 FPS).
-    // use requestAnimationFrame loop to keep things alive and update degradation visuals.
-    // throttle to ~30 FPS
+  function backgroundTick(ts){
+    const dt = ts - lastTick; lastTick = ts;
     if (!backgroundTick._acc) backgroundTick._acc = 0;
     backgroundTick._acc += dt;
-    if (backgroundTick._acc >= (1000 / 30)) {
-      backgroundTick._acc = 0;
-      requestFullRedraw();
-    }
+    if (backgroundTick._acc >= (1000 / 30)){ backgroundTick._acc = 0; requestFullRedraw(); }
     requestAnimationFrame(backgroundTick);
   }
   requestAnimationFrame(backgroundTick);
 
-  // expose debug API
-  window.__TerminalCanvas = {
-    addOutput, addColoredText, typeText, processCommand, degradation, lines
-  };
+  // expose small debug API
+  window.__TerminalCanvas = { addOutput, addColoredText, typeText, processCommand, degradation, lines };
 
-  // initial call to draw
+  // initial draw
   requestFullRedraw();
 })();
