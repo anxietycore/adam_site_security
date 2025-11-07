@@ -1,551 +1,526 @@
-// script_curved.js
-// Curved / warped main-screen script (replacement for script.js)
-// - Draws Start/Boot/Login screens into a canvas 'interfaceCanvas'
-// - Applies WebGL barrel-curvature overlay sampling that canvas
-// - Keeps DOM inputs interactive but visually hidden (so keyboard works naturally)
-// - Behaviors match original script.js (boot sequence, login, redirect)
-// Usage: replace old script.js with this file in index.html
+// script.js
+// Full UI renderer for index.html — draws Start / Boot / Login screens into a curved canvas (uiCanvas).
+// - Uses shader-canvas (background) and glassFX (noise) if present
+// - Leaves DOM interactive but visually hidden (opacity:0, pointer-events:auto)
+// - Boot sequence, login logic preserved
+// - Exposes window.__UICanvas for overlay/curvature scripts to pick up
+// Drop-in replacement for your previous script.js
 
 (() => {
   // ---------- CONFIG ----------
-  const FONT_FAMILY = "'Press Start 2P', monospace, monospace";
-  const BG_COLOR = '#000';
-  const TEXT_COLOR = '#00FF41';
-  const ERROR_COLOR = '#FF4444';
-  const SUCCESS_COLOR = '#00FF41';
-  const BOOT_LINE_DELAY = 1000; // ms between boot lines
-  const CANVAS_DPR = Math.min(window.devicePixelRatio || 1, 2);
-  const DISTORTION = 0.32; // barrel distortion amount; tweak for more/less bend
-  const OVERLAY_FPS = 30;
-  const CANVAS_Z = 900; // over everything
-  const INTERFACE_PADDING = 28;
-  let _needsRender = true;
+  const FONT_FAMILY = "'Press Start 2P', monospace";
+  const FONT_SIZE_PX = 14;
+  const LINE_HEIGHT = Math.round(FONT_SIZE_PX * 1.35);
+  const PADDING = 28;
+  const DPR = Math.min(window.devicePixelRatio || 1, 2);
+  const UI_CANVAS_Z = 200; // sits above shader but below possible global overlay
+  const TYPING_SPEED = 22; // ms per char for boot text
 
-  // ---------- helpers ----------
-  function q(id){ return document.getElementById(id); }
-  function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+  // ---------- DOM refs (originals will be kept interactive but hidden visually) ----------
+  const dom = {
+    startScreen: document.getElementById('start-screen'),
+    bootScreen: document.getElementById('boot-screen'),
+    loginScreen: document.getElementById('login-screen'),
+    startBtn: document.getElementById('start-btn'),
+    username: document.getElementById('username'),
+    password: document.getElementById('password'),
+    loginBtn: document.getElementById('login-btn'),
+    loginError: document.getElementById('login-error'),
+    shaderCanvas: document.getElementById('shader-canvas'),
+    glassFX: document.getElementById('glassFX')
+  };
 
-  // ---------- find existing DOM elements ----------
-  const startScreen = q('start-screen');
-  const bootScreen = q('boot-screen');
-  const loginScreen = q('login-screen');
-  const usernameInput = q('username');
-  const passwordInput = q('password');
-  const startBtn = q('start-btn');
-  const loginBtn = q('login-btn');
-  const bootTextNodeList = document.querySelectorAll('#boot-screen .boot-text p');
-
-  // If any of required DOM is missing, we still proceed but log warnings.
-  if (!startScreen || !bootScreen || !loginScreen) {
-    console.warn('script_curved: one or more screens not found — falling back to minimal behavior.');
-  }
-
-  // Keep original inputs interactive but hide them visually (so native focus/IME works).
-  if (usernameInput) { usernameInput.style.opacity = '0'; usernameInput.style.pointerEvents = 'auto'; }
-  if (passwordInput) { passwordInput.style.opacity = '0'; passwordInput.style.pointerEvents = 'auto'; }
-  if (startBtn) { startBtn.style.opacity = '0'; startBtn.style.pointerEvents = 'auto'; }
-  if (loginBtn) { loginBtn.style.opacity = '0'; loginBtn.style.pointerEvents = 'auto'; }
-
-  // ---------- create interface canvas ----------
-  const interfaceCanvas = document.createElement('canvas');
-  interfaceCanvas.id = 'interfaceCanvas';
-  Object.assign(interfaceCanvas.style, {
+  // ---------- create main UI canvas ----------
+  const uiCanvas = document.createElement('canvas');
+  uiCanvas.id = 'uiCanvas';
+  Object.assign(uiCanvas.style, {
     position: 'fixed',
     left: '0',
     top: '0',
     width: '100%',
     height: '100%',
-    zIndex: CANVAS_Z,
-    pointerEvents: 'none',
-    // we draw our own visuals; interactions still go to hidden DOM inputs
+    zIndex: UI_CANVAS_Z,
+    pointerEvents: 'none', // allow underlying (hidden) DOM to receive events
+    display: 'block'
   });
-  document.body.appendChild(interfaceCanvas);
-  const ictx = interfaceCanvas.getContext('2d', { alpha: false });
+  document.body.appendChild(uiCanvas);
+  const ctx = uiCanvas.getContext('2d', { alpha: false });
+
+  // expose for overlays / debugging
+  window.__UICanvas = uiCanvas;
+
+  // ---------- ensure original DOM is interactive but invisible ----------
+  function hideOriginalsButKeepInteractive() {
+    Object.values(dom).forEach(el => {
+      if (!el || !(el instanceof HTMLElement)) return;
+      // don't hide shader and glassFX canvases (we sample them)
+      if (el.id === 'shader-canvas' || el.id === 'glassFX') return;
+      try {
+        el.style.opacity = '0';
+        // keep pointer events so original handlers (buttons/inputs) still work
+        el.style.pointerEvents = 'auto';
+        // keep layout so clicks fall in correct place
+      } catch (e) {}
+    });
+    // For safety: ensure login inputs are focusable while hidden (so keyboard login works)
+    if (dom.username) dom.username.tabIndex = 0;
+    if (dom.password) dom.password.tabIndex = 0;
+  }
+  hideOriginalsButKeepInteractive();
 
   // ---------- sizing ----------
-  let vw = Math.max(320, window.innerWidth);
-  let vh = Math.max(240, window.innerHeight);
-  function resizeCanvas() {
+  let vw = 0, vh = 0;
+  function resize() {
     vw = Math.max(320, window.innerWidth);
     vh = Math.max(240, window.innerHeight);
-    interfaceCanvas.width = Math.floor(vw * CANVAS_DPR);
-    interfaceCanvas.height = Math.floor(vh * CANVAS_DPR);
-    interfaceCanvas.style.width = vw + 'px';
-    interfaceCanvas.style.height = vh + 'px';
-    ictx.setTransform(CANVAS_DPR,0,0,CANVAS_DPR,0,0);
+    uiCanvas.width = Math.floor(vw * DPR);
+    uiCanvas.height = Math.floor(vh * DPR);
+    uiCanvas.style.width = vw + 'px';
+    uiCanvas.style.height = vh + 'px';
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.scale(DPR, DPR);
     requestRender();
   }
-  window.addEventListener('resize', resizeCanvas);
-  resizeCanvas();
+  window.addEventListener('resize', resize);
+  resize();
 
-  // ---------- state (for screens) ----------
-  let currentScreen = 'start'; // 'start'|'boot'|'login'
-  let bootLineIndex = 0;
-  let bootAnimating = false;
-  function requestRender(){ _needsRender = true; }
-  function clearRenderFlag(){ _needsRender = false; }
-
-  // ---------- draw primitives ----------
-  function clearInterface() {
-    ictx.save();
-    ictx.setTransform(CANVAS_DPR,0,0,CANVAS_DPR,0,0);
-    ictx.fillStyle = BG_COLOR;
-    ictx.fillRect(0,0,vw, vh);
-    ictx.restore();
+  // ---------- render scheduling ----------
+  let _needsRender = false;
+  function requestRender(){
+    if (!_needsRender){
+      _needsRender = true;
+      requestAnimationFrame(() => { _needsRender = false; render(); });
+    }
   }
 
-  function drawLogo(x,y,scale=1) {
-    // draws the ASCII block logo used in index.html (scaled)
-    // We'll render using monospace and maintain proportions
-    const lines = [
-      "\\    _ \\    \\     \\  | ",
-      "   _ \\   |  |  _ \\   |\\/ | ",
+  // ---------- State ----------
+  const State = {
+    screen: 'start', // 'start' | 'boot' | 'login'
+    bootTextIndex: 0,
+    bootLines: [],
+    bootAnimIndex: 0,
+    bootVisibleLines: [],
+    bootTicking: false,
+    bootTimestamps: [],
+    bootCompleted: false,
+    loginMessageOpacity: 0,
+    lastTick: performance.now()
+  };
+
+  // Boot text defaults (copied from your index.html boot-text)
+  State.bootLines = [
+    '> ИНИЦИАЛИЗАЦИЯ ПРОТОКОЛА БЕЗОПАСНОСТИ A.D.A.M...',
+    '> ЗАГРУЗКА ПОДСИСТЕМЫ VIGIL-9...',
+    '> ТЕСТ ПАМЯТИ: УСПЕШНО',
+    '> КРИПТОМОДУЛЬ: АКТИВИРОВАН',
+    '> ПРЕДУПРЕЖДЕНИЕ: НЕСАНКЦИОНИРОВАННЫЙ ДОСТУП ЗАПРЕЩЁН',
+    '> СИСТЕМА ГОТОВА'
+  ];
+
+  // ---------- Helpers for drawing ----------
+  function clearUI(){
+    ctx.save();
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.scale(DPR, DPR);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0,0,vw,vh);
+    ctx.restore();
+  }
+
+  function drawBackground(){
+    ctx.save();
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.scale(DPR, DPR);
+    // shader-canvas drawn full-screen behind UI if present
+    if (dom.shaderCanvas && dom.shaderCanvas.width > 0) {
+      try { ctx.drawImage(dom.shaderCanvas, 0, 0, vw, vh); } catch(e) {}
+    } else {
+      // fallback gradient if shader not present
+      const g = ctx.createLinearGradient(0,0,0,vh);
+      g.addColorStop(0, '#001010');
+      g.addColorStop(1, '#000');
+      ctx.fillStyle = g;
+      ctx.fillRect(0,0,vw,vh);
+    }
+
+    // glassFX noise layer — under UI but above shader, subtle
+    if (dom.glassFX && dom.glassFX.width > 0) {
+      try {
+        ctx.globalAlpha = 0.12;
+        ctx.drawImage(dom.glassFX, 0, 0, vw, vh);
+        ctx.globalAlpha = 1.0;
+      } catch(e){}
+    }
+    ctx.restore();
+  }
+
+  function drawCenteredAsciiLogo(y){
+    const pre = [
+      " \\    _ \\    \\     \\  | ",
+      "  _ \\   |  |  _ \\   |\\/ | ",
       " _/  _\\ ___/ _/  _\\ _|  _| "
     ];
-    const fontSize = 12 * scale;
-    ictx.save();
-    ictx.font = `${fontSize}px ${FONT_FAMILY}`;
-    ictx.fillStyle = TEXT_COLOR;
-    ictx.textBaseline = 'top';
-    for (let i=0;i<lines.length;i++){
-      ictx.fillText(lines[i], x, y + i * (fontSize + 2));
+    ctx.save();
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.scale(DPR, DPR);
+    ctx.fillStyle = '#00FF41';
+    ctx.font = `12px ${FONT_FAMILY}`;
+    const centerX = vw/2;
+    for (let i=0;i<pre.length;i++){
+      const text = pre[i];
+      const w = ctx.measureText(text).width;
+      ctx.fillText(text, centerX - w/2, y + i * (LINE_HEIGHT - 6));
     }
-    ictx.restore();
-  }
-
-  function drawButtonRect(x,y,w,h,text,opts={bg:'#111',border:'#00FF41',textColor:TEXT_COLOR}) {
-    ictx.save();
-    ictx.globalAlpha = 1;
-    ictx.fillStyle = opts.bg;
-    roundRect(ictx, x, y, w, h, 6);
-    ictx.fill();
-    ictx.lineWidth = 2;
-    ictx.strokeStyle = opts.border;
-    roundRect(ictx, x, y, w, h, 6);
-    ictx.stroke();
-    ictx.font = `12px ${FONT_FAMILY}`;
-    ictx.fillStyle = opts.textColor;
-    ictx.textBaseline = 'middle';
-    ictx.textAlign = 'center';
-    ictx.fillText(text, x + w/2, y + h/2);
-    ictx.restore();
-  }
-
-  function roundRect(ctx,x,y,w,h,r){
-    ctx.beginPath();
-    ctx.moveTo(x+r,y);
-    ctx.arcTo(x+w,y,x+w,y+h,r);
-    ctx.arcTo(x+w,y+h,x,y+h,r);
-    ctx.arcTo(x,y+h,x,y,r);
-    ctx.arcTo(x,y,x+w,y,r);
-    ctx.closePath();
+    ctx.restore();
   }
 
   function drawStartScreen(){
-    clearInterface();
-    const pad = INTERFACE_PADDING;
-    // Logo top-left
-    drawLogo(pad, pad, 1.25);
-    // Message center-left
-    ictx.save();
-    ictx.font = `14px ${FONT_FAMILY}`;
-    ictx.fillStyle = TEXT_COLOR;
-    ictx.textBaseline = 'top';
-    const msg = '> СИСТЕМА A.D.A.M. ГОТОВА К ЗАПУСКУ';
-    ictx.fillText(msg, pad, pad + 80);
-    ictx.restore();
+    // visual layout: centered box with ascii + button-like rect + subtitle text
+    const boxW = Math.min(760, Math.floor(vw * 0.7));
+    const boxH = 220;
+    const x = (vw - boxW)/2;
+    const y = (vh - boxH)/2 - 40;
+    // panel bg
+    ctx.save();
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.scale(DPR, DPR);
 
-    // big start button centered
-    const bw = 220, bh = 44;
-    const bx = (vw - bw) / 2;
-    const by = vh - 140;
-    drawButtonRect(bx, by, bw, bh, '> ЗАПУСТИТЬ СИСТЕМУ', {bg:'#050505', border:'#00FF41', textColor:TEXT_COLOR});
+    // panel bg
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    roundRect(ctx, x, y, boxW, boxH, 8);
+    ctx.fill();
+
+    // border
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#00FF41';
+    roundRect(ctx, x, y, boxW, boxH, 8);
+    ctx.stroke();
+
+    // ascii
+    drawCenteredAsciiLogo(y + 12);
+
+    // title text
+    ctx.fillStyle = '#00FF41';
+    ctx.font = `14px ${FONT_FAMILY}`;
+    const title = '> СИСТЕМА A.D.A.M. ГОТОВА К ЗАПУСКУ';
+    const tw = ctx.measureText(title).width;
+    ctx.fillText(title, (vw - tw)/2, y + 100);
+
+    // button look (we will not intercept clicks — underlying DOM button handles that)
+    const btnW = 220, btnH = 36;
+    const btnX = (vw - btnW)/2;
+    const btnY = y + 130;
+    // base
+    ctx.fillStyle = '#111';
+    roundRect(ctx, btnX, btnY, btnW, btnH, 6);
+    ctx.fill();
+    // border
+    ctx.strokeStyle = '#00FF41';
+    ctx.lineWidth = 1.5;
+    roundRect(ctx, btnX, btnY, btnW, btnH, 6);
+    ctx.stroke();
+    // label
+    ctx.fillStyle = '#00FF41';
+    ctx.font = `13px ${FONT_FAMILY}`;
+    const label = 'ЗАПУСТИТЬ СИСТЕМУ';
+    const lw = ctx.measureText(label).width;
+    ctx.fillText(label, btnX + (btnW - lw)/2, btnY + (btnH - 12)/2);
+
+    ctx.restore();
   }
 
   function drawBootScreen(){
-    clearInterface();
-    const pad = INTERFACE_PADDING;
-    drawLogo(pad, pad, 1);
-    ictx.save();
-    ictx.font = `14px ${FONT_FAMILY}`;
-    ictx.fillStyle = TEXT_COLOR;
-    ictx.textBaseline = 'top';
-    const instructions = [
-      '> ИНИЦИАЛИЗАЦИЯ ПРОТОКОЛА БЕЗОПАСНОСТИ A.D.A.M...',
-      '> ЗАГРУЗКА ПОДСИСТЕМЫ VIGIL-9...',
-      '> ТЕСТ ПАМЯТИ: УСПЕШНО',
-      '> КРИПТОМОДУЛЬ: АКТИВИРОВАН',
-      '> ПРЕДУПРЕЖДЕНИЕ: НЕСАНКЦИОНИРОВАННЫЙ ДОСТУП ЗАПРЕЩЁН',
-      '> СИСТЕМА ГОТОВА'
-    ];
-    // draw up to bootLineIndex (animated)
-    for (let i=0;i<bootLineIndex && i<instructions.length;i++){
-      ictx.fillText(instructions[i], pad, pad + 70 + i * 22);
+    // layout similar to original: center-left box with boot lines appearing
+    const boxW = Math.min(820, Math.floor(vw * 0.78));
+    const boxH = Math.min(420, Math.floor(vh * 0.6));
+    const x = (vw - boxW)/2;
+    const y = (vh - boxH)/2 - 20;
+
+    ctx.save();
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.scale(DPR, DPR);
+
+    // panel
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    roundRect(ctx, x, y, boxW, boxH, 8);
+    ctx.fill();
+    ctx.strokeStyle = '#00FF41';
+    ctx.lineWidth = 2;
+    roundRect(ctx, x, y, boxW, boxH, 8);
+    ctx.stroke();
+
+    // ascii top-left of panel
+    ctx.fillStyle = '#00FF41';
+    ctx.font = `12px ${FONT_FAMILY}`;
+    const logoY = y + 12;
+    drawCenteredAsciiLogo(logoY);
+
+    // boot text area
+    ctx.fillStyle = '#00FF41';
+    ctx.font = `13px ${FONT_FAMILY}`;
+    const textX = x + 18;
+    let lineY = y + 110;
+    const visibleCount = Math.floor((boxH - 120) / LINE_HEIGHT);
+    const toShow = State.bootVisibleLines.slice(-visibleCount);
+    for (let i = 0; i < toShow.length; i++){
+      ctx.fillStyle = '#00FF41';
+      ctx.fillText(toShow[i], textX, lineY + i * LINE_HEIGHT);
     }
-    ictx.restore();
+
+    ctx.restore();
   }
 
-  function drawLoginScreen() {
-    clearInterface();
-    const pad = INTERFACE_PADDING;
-    drawLogo(pad, pad, 1);
-    ictx.save();
-    ictx.font = `14px ${FONT_FAMILY}`;
-    ictx.fillStyle = TEXT_COLOR;
-    ictx.textBaseline = 'top';
-    ictx.fillText('> ДОСТУП К ТЕРМИНАЛУ', pad, pad + 70);
+  function drawLoginScreen(){
+    // center small form
+    const boxW = Math.min(560, Math.floor(vw * 0.54));
+    const boxH = 260;
+    const x = (vw - boxW)/2;
+    const y = (vh - boxH)/2;
 
-    // Draw username field representation
-    const fieldW = 360, fieldH = 36;
-    const fx = (vw - fieldW) / 2;
-    const usernameY = vh/2 - 36;
-    const passwordY = vh/2 + 8;
+    ctx.save();
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.scale(DPR, DPR);
 
-    // Username label
-    ictx.font = `10px ${FONT_FAMILY}`;
-    ictx.fillStyle = '#999';
-    ictx.fillText('ИМЯ ПОЛЬЗОВАТЕЛЯ:', fx, usernameY - 18);
+    // panel
+    ctx.fillStyle = 'rgba(0,0,0,0.8)';
+    roundRect(ctx, x, y, boxW, boxH, 8);
+    ctx.fill();
+    ctx.strokeStyle = '#00FF41';
+    ctx.lineWidth = 2;
+    roundRect(ctx, x, y, boxW, boxH, 8);
+    ctx.stroke();
 
-    // username box
-    ictx.globalAlpha = 1;
-    ictx.fillStyle = '#070707';
-    roundRect(ictx, fx, usernameY, fieldW, fieldH, 4);
-    ictx.fill();
-    ictx.lineWidth = 2;
-    ictx.strokeStyle = '#00FF41';
-    ictx.stroke();
+    // title
+    ctx.fillStyle = '#00FF41';
+    ctx.font = `14px ${FONT_FAMILY}`;
+    const title = 'ДОСТУП К ТЕРМИНАЛУ';
+    const tw = ctx.measureText(title).width;
+    ctx.fillText(title, x + (boxW - tw)/2, y + 14);
 
-    // show typed username from hidden input if present
-    const uval = (usernameInput && usernameInput.value) ? usernameInput.value : '';
-    ictx.font = `12px ${FONT_FAMILY}`;
-    ictx.fillStyle = TEXT_COLOR;
-    ictx.textBaseline = 'middle';
-    ictx.fillText(uval || '', fx + 10, usernameY + fieldH/2);
+    // labels + values (read from DOM inputs so visual reflects actual input values)
+    ctx.font = `12px ${FONT_FAMILY}`;
+    ctx.fillStyle = '#FFFF00';
+    ctx.fillText('ИМЯ ПОЛЬЗОВАТЕЛЯ:', x + 20, y + 54);
+    ctx.fillStyle = '#CCCCCC';
+    const uname = (dom.username && dom.username.value) ? dom.username.value : '';
+    ctx.fillText(uname || ' ', x + 200, y + 54);
 
-    // password label
-    ictx.font = `10px ${FONT_FAMILY}`;
-    ictx.fillStyle = '#999';
-    ictx.fillText('ПАРОЛЬ:', fx, passwordY - 18);
+    ctx.fillStyle = '#FFFF00';
+    ctx.fillText('ПАРОЛЬ:', x + 20, y + 84);
+    ctx.fillStyle = '#CCCCCC';
+    const pwdMask = (dom.password && dom.password.value) ? '•'.repeat(dom.password.value.length) : '';
+    ctx.fillText(pwdMask || ' ', x + 200, y + 84);
 
-    // password box
-    ictx.fillStyle = '#070707';
-    roundRect(ictx, fx, passwordY, fieldW, fieldH, 4);
-    ictx.fill();
-    ictx.lineWidth = 2;
-    ictx.strokeStyle = '#00FF41';
-    ictx.stroke();
+    // "button" area visual
+    const btnW = 180, btnH = 34;
+    const btnX = x + (boxW - btnW)/2;
+    const btnY = y + boxH - 56;
+    ctx.fillStyle = '#111';
+    roundRect(ctx, btnX, btnY, btnW, btnH, 6);
+    ctx.fill();
+    ctx.strokeStyle = '#00FF41';
+    roundRect(ctx, btnX, btnY, btnW, btnH, 6);
+    ctx.stroke();
+    ctx.fillStyle = '#00FF41';
+    ctx.font = `13px ${FONT_FAMILY}`;
+    const label = 'АУТЕНТИФИКАЦИЯ';
+    const lw = ctx.measureText(label).width;
+    ctx.fillText(label, btnX + (btnW - lw)/2, btnY + (btnH - 12)/2);
 
-    // show masked password
-    const pval = (passwordInput && passwordInput.value) ? '*'.repeat(passwordInput.value.length) : '';
-    ictx.font = `12px ${FONT_FAMILY}`;
-    ictx.fillStyle = TEXT_COLOR;
-    ictx.fillText(pval || '', fx + 10, passwordY + fieldH/2);
+    // error message if exists (read from DOM node)
+    if (dom.loginError && !dom.loginError.classList.contains('hidden')) {
+      ctx.fillStyle = dom.loginError.style.color || '#FF0000';
+      ctx.font = `12px ${FONT_FAMILY}`;
+      const errText = dom.loginError.textContent || 'ДОСТУП ЗАПРЕЩЁН';
+      ctx.fillText(errText, x + 18, y + boxH - 84);
+    }
 
-    // login button
-    drawButtonRect(fx + fieldW + 14, passwordY, 120, fieldH, 'АУТЕНТИФИКАЦИЯ', {bg:'#050505', border:'#00FF41', textColor:TEXT_COLOR});
-
-    ictx.restore();
+    ctx.restore();
   }
 
-  // ---------- boot animation control ----------
-  function startBootSequenceCurved() {
-    currentScreen = 'boot';
-    bootAnimating = true;
-    bootLineIndex = 0;
-    // ensure DOM classes as original script did
-    if (startScreen) startScreen.classList.add('hidden');
-    if (bootScreen) bootScreen.classList.remove('hidden');
-    // start stepping
-    const linesTotal = bootTextNodeList && bootTextNodeList.length ? bootTextNodeList.length : 6;
-    (function step() {
-      bootLineIndex++;
-      requestRender();
-      if (bootLineIndex < linesTotal) {
-        setTimeout(step, BOOT_LINE_DELAY);
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  // ---------- main render ----------
+  function render(){
+    clearUI();
+    drawBackground();
+
+    if (State.screen === 'start') {
+      drawStartScreen();
+    } else if (State.screen === 'boot') {
+      drawBootScreen();
+    } else if (State.screen === 'login') {
+      drawLoginScreen();
+    }
+
+    // request curvature overlay refresh if available (some overlays sample uiCanvas)
+    if (window.__CRTOverlay && typeof window.__CRTOverlay.update === 'function') {
+      try { window.__CRTOverlay.update(); } catch(e) {}
+    }
+  }
+
+  // ---------- Boot sequence logic (animated text reveal) ----------
+  let _bootTimer = null;
+  function startBootSequence() {
+    if (State.screen !== 'start') return;
+    // reveal DOM boot screen (hidden but interactive)
+    if (dom.startScreen) dom.startScreen.classList.add('hidden'); // hide original visual (we render)
+    if (dom.bootScreen) dom.bootScreen.classList.remove('hidden'); // keep interactive
+    State.screen = 'boot';
+    State.bootVisibleLines = [];
+    State.bootAnimIndex = 0;
+    State.bootTicking = true;
+    // animate each line with delay
+    const delayBetween = 900;
+    State.bootLines.forEach((line, idx) => {
+      setTimeout(() => {
+        // animate line typing
+        animateLineTyping(line, 0, (final) => {
+          State.bootVisibleLines.push(final);
+          requestRender();
+          // if last line, complete boot
+          if (idx === State.bootLines.length - 1) {
+            setTimeout(() => {
+              State.bootCompleted = true;
+              // after small pause show login screen
+              setTimeout(showLoginScreen, 900);
+            }, 600);
+          }
+        });
+      }, idx * delayBetween);
+    });
+  }
+
+  function animateLineTyping(line, pos, callback){
+    const speed = TYPING_SPEED;
+    let buf = '';
+    function step(){
+      if (pos < line.length) {
+        buf += line[pos++];
+        // keep ephemeral last line visible while typing
+        const ephemeralIndex = State.bootVisibleLines._typingIndex;
+        // place ephemeral in array to be picked up by draw
+        State.bootVisibleLines.push(buf); // push progressively, remove last ephemeral on next tick
+        // Keep only the last ephemeral copy while typing by popping previous
+        if (State.bootVisibleLines.length > 0 && State.bootVisibleLines._lastEphemeralIdx != null) {
+          // remove previous ephemeral (if not yet fixed)
+          const idx = State.bootVisibleLines._lastEphemeralIdx;
+          if (idx >= 0 && idx < State.bootVisibleLines.length - 1) {
+            State.bootVisibleLines.splice(idx, 1);
+          }
+        }
+        State.bootVisibleLines._lastEphemeralIdx = State.bootVisibleLines.length - 1;
+        requestRender();
+        setTimeout(step, speed);
       } else {
-        bootAnimating = false;
-        setTimeout(showLoginScreenCurved, 800);
+        // finalize
+        // remove ephemeral index metadata
+        State.bootVisibleLines._lastEphemeralIdx = null;
+        callback(line);
       }
-    })();
+    }
+    step();
   }
 
-  function showLoginScreenCurved() {
-    currentScreen = 'login';
-    if (bootScreen) bootScreen.classList.add('hidden');
-    if (loginScreen) loginScreen.classList.remove('hidden');
-    // focus real input so keyboard works
-    usernameInput && usernameInput.focus();
+  function showLoginScreen() {
+    // switch state
+    if (dom.bootScreen) dom.bootScreen.classList.add('hidden');
+    if (dom.loginScreen) dom.loginScreen.classList.remove('hidden'); // make interactive
+    State.screen = 'login';
     requestRender();
+    // auto focus username input (it is invisible but interactive)
+    try { dom.username && dom.username.focus(); } catch(e){}
   }
 
-  // ---------- login logic (mirrors original) ----------
+  // ---------- Login logic (keeps original semantics) ----------
   const VALID_CREDENTIALS = { username: "qq", password: "ww" };
-  function attemptLogin() {
-    const u = usernameInput ? usernameInput.value : '';
-    const p = passwordInput ? passwordInput.value : '';
-    const loginError = q('login-error');
+
+  function doLogin() {
+    const u = dom.username ? dom.username.value : '';
+    const p = dom.password ? dom.password.value : '';
+    const err = dom.loginError;
     if (u === VALID_CREDENTIALS.username && p === VALID_CREDENTIALS.password) {
-      if (loginError) {
-        loginError.textContent = 'ДОСТУП РАЗРЕШЁН';
-        loginError.style.color = SUCCESS_COLOR;
-        loginError.classList.remove('hidden');
-      }
-      // fade out body like original
+      if (err) { err.textContent = 'ДОСТУП РАЗРЕШЁН'; err.style.color = '#00FF41'; err.classList.remove('hidden'); }
+      // fade out whole document visually then redirect to terminal.html
       document.body.style.transition = 'opacity 0.8s ease-in-out';
       document.body.style.opacity = '0';
-      setTimeout(() => {
-        try { window.location.href = 'terminal.html'; } catch(e){ console.warn(e); }
-      }, 800);
+      setTimeout(() => { window.location.href = 'terminal.html'; }, 800);
     } else {
-      if (loginError) {
-        loginError.textContent = 'ДОСТУП ЗАПРЕЩЁН';
-        loginError.style.color = ERROR_COLOR;
-        loginError.classList.remove('hidden');
-      }
-      if (passwordInput) passwordInput.value = '';
-      if (usernameInput) usernameInput.focus();
+      if (err) { err.textContent = 'ДОСТУП ЗАПРЕЩЁН'; err.style.color = '#FF0000'; err.classList.remove('hidden'); }
+      if (dom.password) dom.password.value = '';
+      try { dom.username && dom.username.focus(); } catch(e){}
       requestRender();
     }
   }
 
-  // ---------- hook up original DOM events to our curved UI ----------
-  if (startBtn) startBtn.addEventListener('click', startBootSequenceCurved);
-  // keyboard press Enter should trigger login if on login screen
+  // ---------- events hooking (wire DOM interactions to this canvas-rendered UI) ----------
+  // Start button (original DOM button exists but is invisible; keep it clickable)
+  if (dom.startBtn) {
+    dom.startBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      startBootSequence();
+    });
+  }
+
+  // Login button
+  if (dom.loginBtn) {
+    dom.loginBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      doLogin();
+    });
+  }
+
+  // Enter key triggers login when on login screen (we keep DOM inputs interactive)
   document.addEventListener('keydown', (e) => {
-    // don't hijack if focus in other inputs intentionally
-    if (currentScreen === 'start') {
-      if (e.key === 'Enter') {
-        // simulate start button
-        e.preventDefault();
-        startBootSequenceCurved();
-      }
-    } else if (currentScreen === 'login') {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        attemptLogin();
-      }
-    }
-  });
-  if (loginBtn) loginBtn.addEventListener('click', attemptLogin);
-
-  // Also keep direct click on canvas mapped to underlying buttons:
-  // (since original DOM buttons are opacity:0 but pointerEvents:auto, clicks fall through;
-  //  still implement a fallback so clicking on visual button triggers start/login)
-  interfaceCanvas.addEventListener('click', (e) => {
-    const rect = interfaceCanvas.getBoundingClientRect();
-    const cx = (e.clientX - rect.left);
-    const cy = (e.clientY - rect.top);
-    // map to Start button position
-    if (currentScreen === 'start') {
-      const bw = 220, bh = 44;
-      const bx = (vw - bw) / 2;
-      const by = vh - 140;
-      if (cx >= bx && cx <= bx + bw && cy >= by && cy <= by + bh) {
-        // trigger original start btn if exists
-        if (startBtn) startBtn.click();
-        else startBootSequenceCurved();
-      }
-    } else if (currentScreen === 'login') {
-      // login button area (drawn near password field)
-      const fieldW = 360, fieldH = 36;
-      const fx = (vw - fieldW) / 2;
-      const passwordY = vh/2 + 8;
-      const lbx = fx + fieldW + 14;
-      const lby = passwordY;
-      const lbw = 120, lbh = fieldH;
-      if (cx >= lbx && cx <= lbx + lbw && cy >= lby && cy <= lby + lbh) {
-        if (loginBtn) loginBtn.click();
-        else attemptLogin();
-      }
+    // if focus is in an input and Enter pressed — let original handler call login; else if login screen active, pressing Enter triggers doLogin
+    if (State.screen === 'login' && (e.key === 'Enter')) {
+      // allow inputs to handle value first — small timeout
+      setTimeout(() => doLogin(), 0);
     }
   });
 
-  // ---------- render loop for interface canvas ----------
-  function renderInterface() {
-    if (!_needsRender) return;
-    clearRenderFlag();
-    if (currentScreen === 'start') drawStartScreen();
-    else if (currentScreen === 'boot') drawBootScreen();
-    else if (currentScreen === 'login') drawLoginScreen();
-    else clearInterface();
-  }
+  // If user clicks visually somewhere, the underlying DOM receives it because uiCanvas pointerEvents:none.
+  // However some browsers may not forward keyboard focus — we ensured inputs have tabIndex and we call focus() programmatically.
 
-  // ---------- WebGL overlay (barrel distortion) ----------
-  // We'll create a full-screen overlay canvas that samples interfaceCanvas and warps it.
-  const overlay = document.createElement('canvas');
-  overlay.id = 'interfaceOverlay';
-  Object.assign(overlay.style, {
-    position: 'fixed',
-    left: '0',
-    top: '0',
-    width: '100%',
-    height: '100%',
-    zIndex: CANVAS_Z + 1,
-    pointerEvents: 'none'
-  });
-  document.body.appendChild(overlay);
+  // ---------- animation / heartbeat tick ----------
+  // separate tick to keep shader / glass / other animations alive and to refresh at ~30fps
+  let lastRAF = performance.now();
+  (function heartbeat(ts){
+    const dt = ts - lastRAF;
+    lastRAF = ts;
+    // tick some UI things if needed (fade messages etc)
+    requestRender(); // keep UI alive; render throttling inside requestRender prevents overdraw
+    requestAnimationFrame(heartbeat);
+  })(performance.now());
 
-  const gl = overlay.getContext('webgl', { antialias: false });
-  if (!gl) {
-    console.error('script_curved: WebGL not available; falling back to direct canvas (no curvature).');
-    // If no WebGL, just show interfaceCanvas above everything and hide overlay.
-    overlay.remove();
-    interfaceCanvas.style.zIndex = CANVAS_Z + 1;
-    // schedule render loop
-    requestAnimationFrame(tick);
-  } else {
-    // resize overlay
-    function resizeOverlay() {
-      overlay.width = Math.floor(window.innerWidth * CANVAS_DPR);
-      overlay.height = Math.floor(window.innerHeight * CANVAS_DPR);
-      overlay.style.width = window.innerWidth + 'px';
-      overlay.style.height = window.innerHeight + 'px';
-      gl.viewport(0,0,overlay.width, overlay.height);
-    }
-    window.addEventListener('resize', resizeOverlay);
-    resizeOverlay();
-
-    const vs = `
-      attribute vec2 aPos;
-      attribute vec2 aUV;
-      varying vec2 vUV;
-      void main(){ vUV = aUV; gl_Position = vec4(aPos,0.0,1.0); }
-    `;
-    const fs = `
-      precision mediump float;
-      varying vec2 vUV;
-      uniform sampler2D uTex;
-      uniform float uDist;
-      void main(){
-        vec2 uv = vUV * 2.0 - 1.0;
-        float r = length(uv);
-        vec2 d = mix(uv, uv * r, uDist);
-        vec2 f = (d + 1.0) * 0.5;
-        f.y = 1.0 - f.y;
-        vec4 c = texture2D(uTex, clamp(f, 0.0, 1.0));
-        gl_FragColor = c;
-      }
-    `;
-    function compileShader(src, type) {
-      const s = gl.createShader(type);
-      gl.shaderSource(s, src);
-      gl.compileShader(s);
-      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
-        console.error('shader compile error', gl.getShaderInfoLog(s));
-      }
-      return s;
-    }
-    const prog = gl.createProgram();
-    gl.attachShader(prog, compileShader(vs, gl.VERTEX_SHADER));
-    gl.attachShader(prog, compileShader(fs, gl.FRAGMENT_SHADER));
-    gl.linkProgram(prog);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-      console.error('shader link error', gl.getProgramInfoLog(prog));
-    }
-    gl.useProgram(prog);
-
-    // quad
-    const quad = new Float32Array([
-      -1,-1, 0,0,
-       1,-1, 1,0,
-      -1, 1, 0,1,
-       1, 1, 1,1
-    ]);
-    const buf = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-    gl.bufferData(gl.ARRAY_BUFFER, quad, gl.STATIC_DRAW);
-    const aPos = gl.getAttribLocation(prog, 'aPos');
-    const aUV = gl.getAttribLocation(prog, 'aUV');
-    gl.enableVertexAttribArray(aPos);
-    gl.enableVertexAttribArray(aUV);
-    gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 16, 0);
-    gl.vertexAttribPointer(aUV, 2, gl.FLOAT, false, 16, 8);
-
-    // texture from interfaceCanvas
-    const tex = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, tex);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-
-    const uDistLoc = gl.getUniformLocation(prog, 'uDist');
-    gl.uniform1f(uDistLoc, DISTORTION);
-
-    function updateTextureFromInterface() {
-      try {
-        gl.bindTexture(gl.TEXTURE_2D, tex);
-        gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, interfaceCanvas);
-      } catch (e) {
-        // fail silently (cross-origin or other)
-      }
-    }
-
-    // overlay draw
-    function drawOverlay() {
-      updateTextureFromInterface();
-      gl.clearColor(0,0,0,0);
-      gl.clear(gl.COLOR_BUFFER_BIT);
-      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-    }
-
-    // run overlay at fixed FPS to avoid overtaxing
-    let lastOverlayTick = 0;
-    const overlayFrameMs = 1000 / OVERLAY_FPS;
-    function overlayTick(ts) {
-      if (!lastOverlayTick) lastOverlayTick = ts;
-      const dt = ts - lastOverlayTick;
-      if (dt >= overlayFrameMs) {
-        lastOverlayTick = ts;
-        drawOverlay();
-      }
-      requestAnimationFrame(overlayTick);
-    }
-    requestAnimationFrame(overlayTick);
-  }
-
-  // ---------- main tick: keep canvas updated when needed ----------
-  let rafId = null;
-  function tick(ts) {
-    renderInterface();
-    rafId = requestAnimationFrame(tick);
-  }
-  // start tick to ensure interface canvas is always up-to-date with DOM changes/inputs
-  rafId = requestAnimationFrame(tick);
-
-  // ---------- initial states mirror original script.js ----------
-  // visits count as original
-  try {
-    let visits = parseInt(localStorage.getItem('adam_visits')) || 0;
-    localStorage.setItem('adam_visits', ++visits);
-  } catch(e){}
-
-  // show start by default, hide others visually to avoid double visuals (but keep them in DOM)
-  if (startScreen) startScreen.classList.remove('hidden');
-  if (bootScreen) bootScreen.classList.add('hidden');
-  if (loginScreen) loginScreen.classList.add('hidden');
-  currentScreen = 'start';
-  requestRender();
-
-  // ---------- small API (for debugging) ----------
-  window.__ScriptCurved = {
-    startBoot: startBootSequenceCurved,
-    showLogin: showLoginScreenCurved,
-    attemptLogin,
-    requestRender,
-    setDistortion(v){ 
-      const nv = Number(v);
-      if (!isNaN(nv)) {
-        try { 
-          const loc = window.__ScriptCurved._uDistLoc;
-          // if we had exposed location, set uniform; else we can store for next overlay render
-        } catch(e){}
-      }
-    }
+  // ---------- utility: ensure shader/glass updates are sampled ----------
+  // If overlay scripts have been loaded earlier and reported "canvas not found", some overlays expect a global to call to re-init.
+  // Provide a simple hook they can call in case they were loaded earlier:
+  window.__uiCanvasReady = function() {
+    // This function exists so external overlays can call it after their init if they checked early and failed.
+    // We simply trigger a render and expose the canvas object.
+    requestRender();
+    return uiCanvas;
   };
 
-  // ---------- expose readiness ----------
-  console.info('script_curved: interface canvas + curvature overlay initialized.');
+  // ---------- initial boot text reveal triggered by clicking start only — but show initial text prompt ----------
+  // On load, keep start screen visible (we render start screen). If your DOM already calls startBootSequence, we still handle it.
+  // Also render once so overlay picks it up
+  requestRender();
 
+  // ---------- final notes ----------
+  // Keep the original DOM elements present and interactive but invisible (we already did that).
+  // If you find that your curvature overlay (screenCurvature.js / crt_overlay.js) logs "uiCanvas not found",
+  // ensure that overlay is included AFTER this script in your HTML, or call overlay re-init manually:
+  // if overlay exposes init function, call it. We also expose window.__UICanvas for convenience.
+
+  // done
 })();
