@@ -48,6 +48,7 @@
 
   // expose for overlays / debugging
   window.__UICanvas = uiCanvas;
+  let _needsRender = false;
 
   // ---------- ensure original DOM is interactive but invisible ----------
   function hideOriginalsButKeepInteractive() {
@@ -85,7 +86,6 @@
   resize();
 
   // ---------- render scheduling ----------
-  let _needsRender = false;
   function requestRender(){
     if (!_needsRender){
       _needsRender = true;
