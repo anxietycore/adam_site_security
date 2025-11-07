@@ -19,6 +19,7 @@
   const OVERLAY_FPS = 30;
   const CANVAS_Z = 900; // over everything
   const INTERFACE_PADDING = 28;
+  let _needsRender = true;
 
   // ---------- helpers ----------
   function q(id){ return document.getElementById(id); }
@@ -81,7 +82,6 @@
   let currentScreen = 'start'; // 'start'|'boot'|'login'
   let bootLineIndex = 0;
   let bootAnimating = false;
-  let _needsRender = true;
   function requestRender(){ _needsRender = true; }
   function clearRenderFlag(){ _needsRender = false; }
 
