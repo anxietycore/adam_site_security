@@ -235,34 +235,38 @@ function initCurvatureOverlay() {
   }
 
   // snapshot and copy into snapshotCanvas
-  async function takeSnapshotAndCopy() {
-    if (!html2canvasLoaded || !html2canvasFn) return false;
-    try {
-      // request html2canvas to render the SNAP_TARGET
-      const options = {
-        backgroundColor: null,
-        scale: DPR,
-        logging: false,
-        // allowTaint and useCORS help with remote images, but your assets should be same-origin
-        useCORS: true
-      };
-      const rendered = await html2canvasFn(SNAP_TARGET, options);
-      // rendered is a canvas; draw it into our snapshotCanvas (may be already DPR-scaled)
-      // ensure sizes match
-      snapshotCanvas.width = rendered.width;
-      snapshotCanvas.height = rendered.height;
-      // copy pixels
-      snapCtx.setTransform(1,0,0,1,0,0); // drawImage uses CSS px if not scaled; we set raw pixel copy
-      snapCtx.clearRect(0,0,snapshotCanvas.width, snapshotCanvas.height);
-      snapCtx.drawImage(rendered, 0, 0);
-      // now update GL texture
-      updateTextureFromSnapshot(snapshotCanvas);
-      return true;
-    } catch (e) {
-      console.warn('Curvature overlay: snapshot failed', e);
-      return false;
-    }
+async function takeSnapshotAndCopy() {
+  if (!html2canvasLoaded || !html2canvasFn) return false;
+  try {
+    // временно скрыть оверлей, чтобы не попасть в снимок
+    overlay.style.display = 'none';
+
+    const options = {
+      backgroundColor: null,
+      scale: DPR,
+      logging: false,
+      useCORS: true
+    };
+
+    const rendered = await html2canvasFn(SNAP_TARGET, options);
+
+    // вернуть оверлей обратно
+    overlay.style.display = 'block';
+
+    snapshotCanvas.width = rendered.width;
+    snapshotCanvas.height = rendered.height;
+    snapCtx.setTransform(1,0,0,1,0,0);
+    snapCtx.clearRect(0,0,snapshotCanvas.width, snapshotCanvas.height);
+    snapCtx.drawImage(rendered, 0, 0);
+    updateTextureFromSnapshot(snapshotCanvas);
+    return true;
+  } catch (e) {
+    overlay.style.display = 'block'; // на случай ошибки вернуть видимость
+    console.warn('Curvature overlay: snapshot failed', e);
+    return false;
   }
+}
+
 
   // main loop: take snapshots at SNAP_FPS and render GL overlay every frame (requestAnimationFrame)
   let lastSnap = 0;
