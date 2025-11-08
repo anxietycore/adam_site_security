@@ -1,10 +1,13 @@
-// script.js — fixed start section
+// script.js
+// Главный скрипт страницы + WebGL фон с изгибом (identical CRT-style curvature to terminal)
+// Заменяет старый script.js — сохраняет ваши кнопки/логин/boot логику и добавляет shader для изгиба.
+
+// --- конфиги / переменные, доступные раньше, чем функции (fix for "before initialization") ---
+let needsUniformsUpdate = true; // объявлено заранее чтобы initShaderBackground мог его читать
+const VALID_CREDENTIALS = { username: "qq", password: "ww" };
+
 (() => {
-  // === fix: moved variable up ===
-  let needsUniformsUpdate = false;
-
-  const VALID_CREDENTIALS = { username: "qq", password: "ww" };
-
+  // ----------------- UI logic (как в старом script.js) -----------------
   document.addEventListener('DOMContentLoaded', () => {
     let visits = parseInt(localStorage.getItem('adam_visits')) || 0;
     localStorage.setItem('adam_visits', ++visits);
@@ -12,7 +15,8 @@
     const startBtn = document.getElementById('start-btn');
     if (startBtn) startBtn.addEventListener('click', startBootSequence);
 
-    initShaderBackground(); // safe to call now
+    // init shader background (after DOM is ready)
+    initShaderBackground();
   });
 
   function startBootSequence() {
@@ -143,14 +147,12 @@
     `;
 
     // fragment shader: procedural animated noise + barrel distortion (curvature)
-    // We generate a soft moving noise / plasma and then apply barrel warp similar to terminal overlay.
     const fsSrc = `
       precision mediump float;
       varying vec2 vUv;
       uniform vec2 uResolution;
       uniform float uTime;
       uniform float uDist; // distortion amount
-      // simple pseudo-random
       float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
       float noise(vec2 p){
         vec2 i = floor(p);
@@ -162,7 +164,6 @@
         vec2 u = f*f*(3.0-2.0*f);
         return mix(a, b, u.x) + (c - a)*u.y*(1.0 - u.x) + (d - b)*u.x*u.y;
       }
-      // fbm
       float fbm(vec2 p){
         float v = 0.0;
         float a = 0.5;
@@ -174,42 +175,24 @@
         return v;
       }
       void main(){
-        // uv in [-1,1]
         vec2 uv = vUv * 2.0 - 1.0;
-        // aspect correction
         float aspect = uResolution.x / uResolution.y;
         uv.x *= aspect;
-
-        // barrel distortion (mix of original and radial)
         float r = length(uv);
         vec2 warped = mix(uv, uv * r, uDist);
-        // back to 0..1
         vec2 f = (warped / vec2(aspect,1.0) + 1.0) * 0.5;
-
-        // clamp to avoid sampling outside
         f = clamp(f, 0.0, 1.0);
-
-        // animated plasma / noise (based on original uv but time-modulated)
         float t = uTime * 0.12;
         vec2 p = f * 6.0;
         float n = fbm(p + vec2(t, t * 0.4));
         float n2 = fbm(p * 1.7 - vec2(t*0.6, -t*0.3));
         float val = mix(n, n2, 0.5);
-
-        // vignette
         float vig = smoothstep(1.0, 0.45, r);
-
-        // color palette: dark greenish matrix-like with subtle blue/purple
         vec3 col = vec3(0.02, 0.04, 0.02) + vec3(0.0, 0.9, 0.12) * pow(val, 2.0) * 0.65;
         col *= 0.5 + 0.5 * vig;
-
-        // slight moving faint glow/flare in center
         float glow = exp(-dot(f - 0.5, f - 0.5) * 8.0) * (0.2 + 0.8 * sin(uTime * 0.6) * 0.25);
         col += vec3(0.05, 0.04, 0.03) * glow;
-
-        // final gamma-ish
         col = pow(col, vec3(0.9));
-
         gl_FragColor = vec4(col, 1.0);
       }
     `;
@@ -250,31 +233,22 @@
 
     // default distortion — match terminal overlay typical value
     let DISTORTION = 0.32; // tweakable; 0 = none, 0.25..0.45 typical
-    // expose global setter for debugging if needed
-    window.__ShaderBackground = {
-      setDistortion(v) { DISTORTION = v; }
-    };
+    window.__ShaderBackground = { setDistortion(v) { DISTORTION = v; } };
 
     // animation loop
     let startTime = performance.now();
 
     function renderFrame(now) {
-      // compute elapsed time
       const t = (now - startTime) / 1000;
-
-      // update uniforms
       if (needsUniformsUpdate) {
         gl.uniform2f(uResolution, canvasW || shaderCanvas.width, canvasH || shaderCanvas.height);
         needsUniformsUpdate = false;
       }
       gl.uniform1f(uTime, t);
       gl.uniform1f(uDist, DISTORTION);
-
-      // draw
       gl.clearColor(0, 0, 0, 1);
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-
       requestAnimationFrame(renderFrame);
     }
     requestAnimationFrame(renderFrame);
@@ -289,4 +263,4 @@
     };
   }
 
-})();
+})(); 
