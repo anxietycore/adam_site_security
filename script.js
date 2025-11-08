@@ -1,11 +1,10 @@
-// script.js
-// Главный скрипт страницы + WebGL фон с изгибом (identical CRT-style curvature to terminal)
-// Заменяет старый script.js — сохраняет ваши кнопки/логин/boot логику и добавляет shader для изгиба.
-
-const VALID_CREDENTIALS = { username: "qq", password: "ww" };
-
+// script.js — fixed start section
 (() => {
-  // ----------------- UI logic (как в старом script.js) -----------------
+  // === fix: moved variable up ===
+  let needsUniformsUpdate = false;
+
+  const VALID_CREDENTIALS = { username: "qq", password: "ww" };
+
   document.addEventListener('DOMContentLoaded', () => {
     let visits = parseInt(localStorage.getItem('adam_visits')) || 0;
     localStorage.setItem('adam_visits', ++visits);
@@ -13,8 +12,7 @@ const VALID_CREDENTIALS = { username: "qq", password: "ww" };
     const startBtn = document.getElementById('start-btn');
     if (startBtn) startBtn.addEventListener('click', startBootSequence);
 
-    // init shader background (after DOM is ready)
-    initShaderBackground();
+    initShaderBackground(); // safe to call now
   });
 
   function startBootSequence() {
@@ -259,7 +257,6 @@ const VALID_CREDENTIALS = { username: "qq", password: "ww" };
 
     // animation loop
     let startTime = performance.now();
-    let needsUniformsUpdate = true;
 
     function renderFrame(now) {
       // compute elapsed time
