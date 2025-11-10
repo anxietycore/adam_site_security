@@ -2,14 +2,20 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <title>TEST CURVATURE</title>
-  <style>
-    body { margin: 0; background: #000; overflow: hidden; }
-    #shader-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; }
-  </style>
+  <title>A.D.A.M. // ТЕРМИНАЛ</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <canvas id="shader-canvas"></canvas>
+  <!-- WebGL фон (без изгиба) -->
+  <canvas id="shader-canvas" aria-hidden="true"></canvas>
+  
+  <!-- Шум (опционально, можно отключить) -->
+  <script src="screenGlass.js"></script>
+  
+  <!-- Основная логика -->
   <script src="script.js"></script>
+  
+  <!-- ИЗГИБ (должен быть ПОСЛЕДНИМ) -->
+  <script src="crt_overlay.js"></script>
 </body>
 </html>
