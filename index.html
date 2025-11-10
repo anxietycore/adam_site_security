@@ -79,7 +79,7 @@
     <!-- Подключаем основной скрипт (включает WebGL + логику интерфейса) -->
       <script src="screenGlass.js"></script>
       <script src="script.js"></script>
-  <!-- ЕДИНЫЙ ИЗГИБ (как в терминале) -->
+<!-- ЕДИНЫЙ ИЗГИБ (как в терминале) -->
 <script>
 (()=>{
   const canvas = document.getElementById('shader-canvas');
@@ -97,20 +97,6 @@
     precision mediump float;
     uniform vec2 uRes;
     uniform float uTime;
-    varying vec2 vUv;
-
-    float hash(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
-    float noise(vec2 p){
-      vec2 i=floor(p), f=fract(p);
-      float a=hash(i), b=hash(i+vec2(1,0)), c=hash(i+vec2(0,1)), d=hash(i+vec2(1,1));
-      vec2 u=f*f*(3.-2.*f);
-      return mix(a,b,u.x)+(c-a)*u.y*(1.-u.x)+(d-b)*u.x*u.y;
-    }
-    float fbm(vec2 p){
-      float v=0., a=.5;
-      for(int i=0;i<5;i++){ v+=a*noise(p); p*=2.; a*=.5; }
-      return v;
-    }
     void main(){
       vec2 uv = (gl_FragCoord.xy/uRes.xy)*2.-1.;
       float asp = uRes.x/uRes.y;
@@ -119,7 +105,19 @@
       uv *= 1. + .32*r;               // баррель-изгиб
       vec2 f = (uv/vec2(asp,1.) + 1.)*.5;
       float t = uTime*.12;
-      float n = fbm(f*6. + vec2(t, t*.5));
+      float n = 0.;
+      vec2 p = f*6. + vec2(t, t*.5);
+      // 4-октавный fbm
+      for(int i=0;i<4;i++){
+        vec2 iP = floor(p), fP = fract(p);
+        float a = fract(sin(dot(iP,vec2(127.1,311.7)))*43758.5453);
+        float b = fract(sin(dot(iP+vec2(1,0),vec2(127.1,311.7)))*43758.5453);
+        float c = fract(sin(dot(iP+vec2(0,1),vec2(127.1,311.7)))*43758.5453);
+        float d = fract(sin(dot(iP+vec2(1,1),vec2(127.1,311.7)))*43758.5453);
+        vec2 u = fP*fP*(3.-2.*fP);
+        n += mix(mix(a,b,u.x),mix(c,d,u.x),u.y) * (1./float(1<<i));
+        p *= 2.;
+      }
       float v = smoothstep(1.,.45,length(uv));
       vec3 col = vec3(.01,.02,.015) + vec3(0.,.8,.1)*pow(n,2.)*.7;
       col *= .5 + .5*v;
@@ -130,13 +128,15 @@
     const sh = gl.createShader(t);
     gl.shaderSource(sh,s);
     gl.compileShader(sh);
+    if(!gl.getShaderParameter(sh,gl.COMPILE_STATUS))
+      console.error(gl.getShaderInfoLog(sh));
     return sh;
   }
   const prog = gl.createProgram();
   gl.attachShader(prog, compile(vs,gl.VERTEX_SHADER));
   gl.attachShader(prog, compile(fs,gl.FRAGMENT_SHADER));
   gl.linkProgram(prog);
-  gl.useProgram(prog);
+  gl.useProgram(prog);                 // <-- ВАЖНО: сразу активируем
 
   const buf = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER,buf);
@@ -155,6 +155,7 @@
     canvas.style.width  = window.innerWidth +'px';
     canvas.style.height = window.innerHeight+'px';
     gl.viewport(0,0,canvas.width,canvas.height);
+    gl.useProgram(prog);               // <-- ещё раз перед uniform
     gl.uniform2f(uRes,canvas.width,canvas.height);
   }
   window.addEventListener('resize',resize);
@@ -164,6 +165,7 @@
   function loop(now){
     gl.clearColor(0,0,0,1);
     gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.useProgram(prog);             // <-- и в цикле тоже
     gl.uniform1f(uTime,(now-start)/1000);
     gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
     requestAnimationFrame(loop);
