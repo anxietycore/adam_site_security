@@ -1,69 +1,28 @@
-// script.js — ГЛАВНАЯ СТРАНИЦА с изгибом (важно: screenGlass.js отключен)
+// script.js — ОТЛАДОЧНАЯ ВЕРСИЯ С КОНСОЛЬЮ
 const VALID_CREDENTIALS = { username: "qq", password: "ww" };
 
 document.addEventListener('DOMContentLoaded', () => {
+  console.log("✅ script.js загружен!");
   let visits = parseInt(localStorage.getItem('adam_visits')) || 0;
   localStorage.setItem('adam_visits', ++visits);
 
   const startBtn = document.getElementById('start-btn');
   if (startBtn) startBtn.addEventListener('click', startBootSequence);
 
-  // === Запускаем фон С ИЗГИБОМ ===
+  console.log("🚀 Запускаем шейдер...");
   initCurvedShaderBackground();
 });
 
-function startBootSequence() {
-  const startScreen = document.getElementById('start-screen');
-  const bootScreen = document.getElementById('boot-screen');
-  if (startScreen) startScreen.classList.add('hidden');
-  if (bootScreen) bootScreen.classList.remove('hidden');
+// ... (весь остальной код остается таким же, как в предыдущей версии) ...
 
-  const bootTexts = document.querySelectorAll('#boot-screen .boot-text p');
-  let i = 0;
-  (function next() {
-    if (i < bootTexts.length) {
-      bootTexts[i++].style.opacity = 1;
-      setTimeout(next, 1000);
-    } else setTimeout(showLoginScreen, 1000);
-  })();
-}
-
-function showLoginScreen() {
-  document.getElementById('boot-screen')?.classList.add('hidden');
-  document.getElementById('login-screen')?.classList.remove('hidden');
-  document.getElementById('username')?.focus();
-}
-
-document.getElementById('login-btn')?.addEventListener('click', login);
-document.addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
-
-function login() {
-  const u = document.getElementById('username')?.value;
-  const p = document.getElementById('password')?.value;
-  const err = document.getElementById('login-error');
-
-  if (u === VALID_CREDENTIALS.username && p === VALID_CREDENTIALS.password) {
-    err.textContent = 'ДОСТУП РАЗРЕШЁН';
-    err.style.color = '#00FF41';
-    err.classList.remove('hidden');
-    document.body.style.transition = 'opacity 0.8s ease-in-out';
-    document.body.style.opacity = '0';
-    setTimeout(() => window.location.href = 'terminal.html', 800);
-  } else {
-    err.textContent = 'ДОСТУП ЗАПРЕЩЁН';
-    err.style.color = '#FF0000';
-    err.classList.remove('hidden');
-    document.getElementById('password').value = '';
-    document.getElementById('username')?.focus();
-  }
-}
-
-// ---------------------------------------------------------------------------
-// WebGL curved shader background — ИЗГИБ ДЛЯ ГЛАВНОЙ СТРАНИЦЫ
-// ---------------------------------------------------------------------------
 function initCurvedShaderBackground() {
   const canvas = document.getElementById('shader-canvas');
-  if (!canvas) return;
+  if (!canvas) {
+    console.error("❌ Canvas #shader-canvas не найден!");
+    return;
+  }
+
+  console.log("✅ Canvas найден, инициализируем WebGL...");
 
   Object.assign(canvas.style, {
     position: 'fixed',
@@ -72,20 +31,18 @@ function initCurvedShaderBackground() {
     width: '100%',
     height: '100%',
     pointerEvents: 'none',
-    zIndex: 0, // под всем интерфейсом
+    zIndex: 0,
   });
 
   const gl = canvas.getContext('webgl', { antialias: false });
-  if (!gl) return console.error('WebGL not supported');
+  if (!gl) {
+    console.error('❌ WebGL не поддерживается');
+    return;
+  }
 
-  const vsSrc = `
-    attribute vec2 aPos;
-    varying vec2 vUv;
-    void main() {
-      vUv = (aPos + 1.0) * 0.5;
-      gl_Position = vec4(aPos, 0.0, 1.0);
-    }
-  `;
+  console.log("✅ WebGL контекст получен");
+
+  const vsSrc = `...`; // (оставь твой вершинный шейдер)
 
   const fsSrc = `
     precision mediump float;
@@ -111,10 +68,9 @@ function initCurvedShaderBackground() {
       float aspect = uRes.x/uRes.y;
       uv.x *= aspect;
       
-      // === ИЗГИБ КАК В ТЕРМИНАЛЕ (BARREL DISTORTION) ===
+      // === ИЗГИБ КАК В ТЕРМИНАЛЕ ===
       float r = dot(uv, uv);
       uv *= 1.0 + 0.32 * r;
-      // =================================================
       
       vec2 f = (uv/vec2(aspect,1.0) + 1.0) * 0.5;
       float t = uTime * 0.12;
@@ -131,7 +87,7 @@ function initCurvedShaderBackground() {
     gl.shaderSource(s, src);
     gl.compileShader(s);
     if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
-      console.error(gl.getShaderInfoLog(s));
+      console.error('❌ Shader compile error:', gl.getShaderInfoLog(s));
       return null;
     }
     return s;
@@ -143,6 +99,14 @@ function initCurvedShaderBackground() {
   gl.attachShader(prog, vs);
   gl.attachShader(prog, fs);
   gl.linkProgram(prog);
+  
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+    console.error('❌ Program link error:', gl.getProgramInfoLog(prog));
+    return;
+  }
+  
+  console.log("✅ Шейдер скомпилирован успешно!");
+
   gl.useProgram(prog);
 
   const buf = gl.createBuffer();
@@ -161,6 +125,7 @@ function initCurvedShaderBackground() {
     canvas.width = w; canvas.height = h;
     gl.viewport(0, 0, w, h);
     gl.uniform2f(uRes, w, h);
+    console.log(`📐 Resize: ${w}x${h}`);
   }
   window.addEventListener('resize', resize);
   resize();
@@ -174,4 +139,5 @@ function initCurvedShaderBackground() {
     requestAnimationFrame(loop);
   }
   requestAnimationFrame(loop);
+  console.log("✅ Анимация шейдера запущена!");
 }
