@@ -163,7 +163,7 @@
       
       // Пытаемся нарисовать содержимое страницы
       // Это самый надёжный метод для index.html
-      const html Element = document.documentElement;
+      const htmlElement = document.documentElement;
       const body = document.body;
       
       // Создаём временный контейнер для рендеринга
