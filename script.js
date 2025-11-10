@@ -1,6 +1,4 @@
-// script.js
-// Главная страница A.D.A.M. + WebGL фон с изгибом (идентичный терминалу)
-
+// script.js — ГЛАВНАЯ СТРАНИЦА с изгибом (важно: screenGlass.js отключен)
 const VALID_CREDENTIALS = { username: "qq", password: "ww" };
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -10,6 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const startBtn = document.getElementById('start-btn');
   if (startBtn) startBtn.addEventListener('click', startBootSequence);
 
+  // === Запускаем фон С ИЗГИБОМ ===
   initCurvedShaderBackground();
 });
 
@@ -60,7 +59,7 @@ function login() {
 }
 
 // ---------------------------------------------------------------------------
-// WebGL curved shader background — идентичен terminal_canvas.js(new).txt
+// WebGL curved shader background — ИЗГИБ ДЛЯ ГЛАВНОЙ СТРАНИЦЫ
 // ---------------------------------------------------------------------------
 function initCurvedShaderBackground() {
   const canvas = document.getElementById('shader-canvas');
@@ -73,10 +72,10 @@ function initCurvedShaderBackground() {
     width: '100%',
     height: '100%',
     pointerEvents: 'none',
-    zIndex: 0,
+    zIndex: 0, // под всем интерфейсом
   });
 
-  const gl = canvas.getContext('webgl', { antialias: false, preserveDrawingBuffer: false });
+  const gl = canvas.getContext('webgl', { antialias: false });
   if (!gl) return console.error('WebGL not supported');
 
   const vsSrc = `
@@ -112,10 +111,10 @@ function initCurvedShaderBackground() {
       float aspect = uRes.x/uRes.y;
       uv.x *= aspect;
       
-      // === ИЗГИБ КАК В ТЕРМИНАЛЕ ===
+      // === ИЗГИБ КАК В ТЕРМИНАЛЕ (BARREL DISTORTION) ===
       float r = dot(uv, uv);
       uv *= 1.0 + 0.32 * r;
-      // ============================
+      // =================================================
       
       vec2 f = (uv/vec2(aspect,1.0) + 1.0) * 0.5;
       float t = uTime * 0.12;
