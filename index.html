@@ -2,7 +2,6 @@
 <html lang="ru">
 <!-- Google Analytics -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-M30NK9KWVH"></script>
-
 <script>
   window.dataLayer = window.dataLayer || [];
   function gtag(){dataLayer.push(arguments);}
@@ -76,10 +75,8 @@
         </div>
     </div>
 
-    <!-- Подключаем основной скрипт (включает WebGL + логику интерфейса) -->
-     <!-- <script src="background.js"></script> - временно убран-->
-      <script src="screenGlass.js"></script>
-      <script src="screenCurvature.js"></script>
-      <script src="script.js"></script>
+    <!-- Подключаем только нужные скрипты -->
+    <script src="screenGlass.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>
