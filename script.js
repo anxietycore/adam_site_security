@@ -111,7 +111,7 @@ function initCurvedShaderBackground() {
       
       // === ИЗГИБ КАК В ТЕРМИНАЛЕ ===
       float r = dot(uv, uv);
-      uv *= 1.0 + 0.32 * r;
+      uv *= 1.0 + 0.6 * r;
       
       vec2 f = (uv/vec2(aspect,1.0) + 1.0) * 0.5;
       float t = uTime * 0.12;
