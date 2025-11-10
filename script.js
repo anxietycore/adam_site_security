@@ -111,8 +111,12 @@ function initCurvedShaderBackground() {
       vec2 uv = vUv * 2.0 - 1.0;
       float aspect = uRes.x/uRes.y;
       uv.x *= aspect;
+      
+      // === ИЗГИБ КАК В ТЕРМИНАЛЕ ===
       float r = dot(uv, uv);
-      uv *= 1.0 + 0.32 * r; // === изгиб как в терминале ===
+      uv *= 1.0 + 0.32 * r;
+      // ============================
+      
       vec2 f = (uv/vec2(aspect,1.0) + 1.0) * 0.5;
       float t = uTime * 0.12;
       float n = fbm(f*6.0 + vec2(t, t*0.5));
