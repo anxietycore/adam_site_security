@@ -1,21 +1,22 @@
-// crt_overlay_index_only.js — видимый overlay, берёт offscreen canvas и делает изгиб + глитч
+// crt_overlay_index_only.js — overlay: distortion + event forwarding (with inverse mapping)
 (() => {
   const DPR = Math.min(window.devicePixelRatio || 1, 1.5);
-  const DISTORTION = 0.34;
+  const DISTORTION = 0.34; // tweak if you want stronger/weaker bend
 
-  // ждём ADAM_UI
+  // wait for ADAM_UI to be ready
   let attempts = 0;
   const checkInterval = setInterval(() => {
     if (window.ADAM_UI && typeof window.ADAM_UI.getSourceCanvas === 'function') {
       clearInterval(checkInterval);
-      initOverlay(window.ADAM_UI.getSourceCanvas());
-    } else if (++attempts > 80) {
+      initOverlay();
+    } else if (++attempts > 60) {
       clearInterval(checkInterval);
       console.warn('ADAM_UI not ready for overlay');
     }
   }, 80);
 
-  function initOverlay(sourceCanvas) {
+  function initOverlay() {
+    const sourceCanvas = window.ADAM_UI.getSourceCanvas();
     const overlay = document.createElement('canvas');
     overlay.id = 'crtOverlayIndex';
     Object.assign(overlay.style, {
@@ -23,8 +24,7 @@
       left: '0', top: '0',
       width: '100vw', height: '100vh',
       zIndex: '1000',
-      pointerEvents: 'auto',
-      display: 'block'
+      pointerEvents: 'auto'
     });
     document.body.appendChild(overlay);
     window.__ADAM_OVERLAY_PRESENT = true;
@@ -32,7 +32,6 @@
     const gl = overlay.getContext('webgl', { antialias: false });
     if (!gl) { console.warn('WebGL not available'); return; }
 
-    // shaders (vertex simple, fragment: distortion + horizontal band glitch)
     const vs = `
       attribute vec2 aPos;
       attribute vec2 aUV;
@@ -42,6 +41,7 @@
         gl_Position = vec4(aPos, 0.0, 1.0);
       }
     `;
+
     const fs = `
       precision mediump float;
       varying vec2 vUV;
@@ -50,30 +50,29 @@
       uniform float uTime;
       uniform float uGlitch;
       float rand(float x){ return fract(sin(x)*43758.5453); }
-      void main(){
-        vec2 uv = vUV * 2.0 - 1.0;
+      void main() {
+        vec2 uv = vUV * 2.0 - 1.0; // -1..1
         float r = length(uv);
         vec2 distorted = mix(uv, uv * r, uDist);
 
-        // apply subtle horizontal glitch bands when glitch>0
+        // glitch bands
         float g = uGlitch;
         if (g > 0.01) {
-          float bands = 40.0;
-          float band = floor((uv.y + 1.0) * 0.5 * bands + uTime * 10.0);
+          float band = floor((uv.y + 1.0)*20.0 + uTime * 40.0);
           float n = rand(band);
           float shift = (n * 2.0 - 1.0) * 0.03 * g;
-          // fade shift near top/bottom
-          float fall = 1.0 - smoothstep(-1.0, 1.0, abs(uv.y) * 1.2);
-          distorted.x += shift * fall;
+          distorted.x += shift * (1.0 - smoothstep(0.0, 0.9, abs(uv.y)));
         }
 
         vec2 finalUV = (distorted + 1.0) * 0.5;
         finalUV.y = 1.0 - finalUV.y;
 
         vec4 col = texture2D(uTex, clamp(finalUV, 0.0, 1.0));
-        // slight vignette so edges darker but subtle
+
+        // mild vignette so edges are not too bright
         float vig = 1.0 - 0.18 * pow(length(finalUV - 0.5), 1.6);
         col.rgb *= vig;
+
         gl_FragColor = col;
       }
     `;
@@ -90,7 +89,7 @@
     gl.attachShader(prog, compile(vs, gl.VERTEX_SHADER));
     gl.attachShader(prog, compile(fs, gl.FRAGMENT_SHADER));
     gl.linkProgram(prog);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) console.error('prog link', gl.getProgramInfoLog(prog));
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) console.error('prog link error', gl.getProgramInfoLog(prog));
     gl.useProgram(prog);
 
     const quad = new Float32Array([
@@ -133,7 +132,6 @@
     resize();
 
     let start = performance.now();
-
     function render() {
       const src = window.ADAM_UI.getSourceCanvas();
       if (src) {
@@ -141,7 +139,7 @@
         try {
           gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
         } catch (err) {
-          // ignore fallback — should not occur for typical canvases
+          // ignore
         }
       }
 
@@ -158,75 +156,95 @@
     }
     render();
 
-    // ---------- pointer mapping: map overlay (screen) coords -> source (CSS) coords
-    // We invert the shader's radial distortion (analytic scalar solution).
-    function screenToSource(x,y) {
-      // overlay size in CSS px
-      const W = window.innerWidth, H = window.innerHeight;
-      // finalUV (the shader formed finalUV then flipped y): finalUV = (distorted+1)/2 ; finalUV.y flipped
-      // For a pixel (x,y) on screen, finalUV = (x/W, 1 - y/H)
-      const fx = x / W;
-      const fy = 1 - (y / H);
-      // uv_t (distorted) in -1..1 space
-      const uv_tx = fx * 2 - 1;
-      const uv_ty = fy * 2 - 1;
-      const ut_len = Math.hypot(uv_tx, uv_ty);
-
-      // Solve scalar s for relation: distorted = uv_src * s, where s = 1 + d*(r_src - 1)
-      // and |distorted| = |uv_src| * s  => letting |uv_src| = r_src, |distorted| = ut_len
-      // we get quadratic: s^2 - (1-d)*s - d*ut_len = 0
-      const d = DISTORTION;
-      // prevent negative ut_len tiny
-      const eps = 1e-6;
-      const a = 1.0;
-      const b = -(1 - d);
-      const c = -d * Math.max(ut_len, eps);
-      // solve s = ( (1-d) + sqrt( (1-d)^2 + 4*d*|u_t| ) ) / 2  (positive root)
-      const disc = Math.max(0, (1 - d)*(1 - d) + 4 * d * Math.max(ut_len, eps));
-      const s = ((1 - d) + Math.sqrt(disc)) * 0.5;
-
-      // original uv (approx) = uv_t / s
-      const ux = uv_tx / s;
-      const uy = uv_ty / s;
-      const src_fx = (ux + 1) * 0.5;
-      const src_fy = 1 - ((uy + 1) * 0.5); // remember shader flips y at end for sampling
-      // map to CSS px of source canvas (which is full-window in our UI)
-      const sx = src_fx * window.innerWidth;
-      const sy = (1 - src_fy) * window.innerHeight; // convert back (double flip)
-      // Note: because we inverted the shader chain carefully, this gives CSS px coords for ADAM_UI
-      // But to be safe, clamp
-      return {
-        x: Math.max(0, Math.min(window.innerWidth, sx)),
-        y: Math.max(0, Math.min(window.innerHeight, sy))
-      };
-    }
-
-    // Convert a pointer event to mapped coords and forward
-    function forwardPointerEvent(evtType, ev) {
-      const rect = overlay.getBoundingClientRect();
-      const cx = ev.clientX - rect.left;
-      const cy = ev.clientY - rect.top;
-      const mapped = screenToSource(cx, cy);
-      // Forward CSS px coords
-      if (evtType === 'move') window.ADAM_UI.handlePointerMove(mapped.x, mapped.y);
-      else window.ADAM_UI.handlePointer(evtType, mapped.x, mapped.y);
-    }
-
-    overlay.addEventListener('pointermove', (e) => { forwardPointerEvent('move', e); }, { passive: true });
-    overlay.addEventListener('pointerdown', (e) => { forwardPointerEvent('pointerdown', e); e.preventDefault(); });
-    overlay.addEventListener('click', (e) => { forwardPointerEvent('click', e); e.preventDefault(); });
-
-    window.addEventListener('keydown', (e) => { window.ADAM_UI.handleKey(e); });
-
-    // expose small api
-    window.__ADAM_OVERLAY = { triggerGlitch: (s,d)=>{ window.ADAM_UI.triggerGlitch(s,d); } };
-
-    // local decrement of global glitch timer (ADAM_UI sets it)
+    // keep glitch timer ticking down (shared state)
     setInterval(() => {
       if (window.__ADAM_GLITCH && window.__ADAM_GLITCH.timer > 0) {
         window.__ADAM_GLITCH.timer = Math.max(0, window.__ADAM_GLITCH.timer - 1);
         if (window.__ADAM_GLITCH.timer === 0) window.__ADAM_GLITCH.strength = 0;
       }
     }, 33);
+
+    // --- CORE: map pointer from screen -> SOURCE coords by INVERTING distortion ---
+    // Shader mapping chain (forward): vUV (0..1) -> uv=(-1..1) -> distorted = mix(uv, uv*r, d)
+    // -> finalUV = (distorted+1)/2 ; finalUV.y = 1 - finalUV.y
+    // So to get sourceUV, we:
+    // 1) take screen vUV = (x/w, y/h)
+    // 2) flip y: s = vec2(vUV.x, 1 - vUV.y)
+    // 3) d = s*2 - 1  (this is the "distorted" target)
+    // 4) find u such that mix(u, u*length(u), dParam) == d  (solve iteratively)
+    // 5) sourceUV = (u + 1) * 0.5
+    function invertDistortion(targetX, targetY, distParam) {
+      // targetX,Y in CSS px relative to viewport
+      const sx = targetX / window.innerWidth;
+      const sy = targetY / window.innerHeight;
+      // flip y to match shader
+      let sX = sx;
+      let sY = 1.0 - sy;
+      // map to -1..1
+      let dX = sX * 2.0 - 1.0;
+      let dY = sY * 2.0 - 1.0;
+
+      // initial guess for u is d
+      let ux = dX;
+      let uy = dY;
+
+      // iterative refinement (fixed-point style). Should converge in ~5-8 iters.
+      for (let i = 0; i < 7; i++) {
+        const r = Math.sqrt(Math.max(0.000001, ux*ux + uy*uy));
+        // forward mapping f(u) = mix(u, u*r, dist)
+        const fx = ux * (1.0 - distParam) + (ux * r) * distParam;
+        const fy = uy * (1.0 - distParam) + (uy * r) * distParam;
+        // error
+        const ex = dX - fx;
+        const ey = dY - fy;
+        // relax update (empirically stable)
+        ux += ex * 0.75;
+        uy += ey * 0.75;
+      }
+
+      // convert back to 0..1 texture UV and flip y back
+      const sourceU = (ux + 1.0) * 0.5;
+      const sourceV = 1.0 - ((uy + 1.0) * 0.5);
+      // clamp
+      return {
+        x: Math.max(0, Math.min(1, sourceU)) * window.innerWidth,
+        y: Math.max(0, Math.min(1, sourceV)) * window.innerHeight
+      };
+    }
+
+    // convert pointer coordinates and forward to ADAM_UI
+    function toLocalCoords(evt) {
+      const rect = overlay.getBoundingClientRect();
+      const x = evt.clientX - rect.left;
+      const y = evt.clientY - rect.top;
+      // invert distortion to get where in source canvas that pixel came from
+      const mapped = invertDistortion(x, y, DISTORTION);
+      return mapped;
+    }
+
+    overlay.addEventListener('pointermove', (e) => {
+      const p = toLocalCoords(e);
+      window.ADAM_UI.handlePointerMove(p.x, p.y);
+      // do not prevent default — allow normal cursor
+    }, { passive: true });
+
+    overlay.addEventListener('pointerdown', (e) => {
+      const p = toLocalCoords(e);
+      window.ADAM_UI.handlePointer('pointerdown', p.x, p.y);
+      e.preventDefault();
+    });
+
+    overlay.addEventListener('click', (e) => {
+      const p = toLocalCoords(e);
+      window.ADAM_UI.handlePointer('click', p.x, p.y);
+      e.preventDefault();
+    });
+
+    window.addEventListener('keydown', (e) => {
+      window.ADAM_UI.handleKey(e);
+    });
+
+    // expose console control
+    window.__ADAM_OVERLAY = { triggerGlitch: (s,d)=>{ window.ADAM_UI.triggerGlitch(s,d); } };
   }
 })();
