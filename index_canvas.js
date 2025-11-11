@@ -1,4 +1,4 @@
-// index_canvas.js — полностью улучшенный с анимациями, глитчем и ховером
+// index_canvas.js — исправленные хитбоксы, плавность, переход
 
 (() => {
   const FONT_FAMILY = "'Press Start 2P', monospace";
@@ -40,8 +40,8 @@
   // Состояния
   const screens = { START: 'start', BOOT: 'boot', LOGIN: 'login' };
   let currentScreen = screens.START;
-  let bootTextIndex = -1;
-  let bootProgress = 0;
+  let bootTextIndex = -1; // -1 = ещё не начали
+  let bootTimer = 0;
   
   const logoText = `    \\    _ \\    \\     \\  | 
    _ \\   |  |  _ \\   |\\/ | 
@@ -64,13 +64,13 @@
   let successMessage = '';
   let successTimer = 0;
 
-  // VHS-глитч эффекты
+  // VHS-глитч
   let glitchOffset = 0;
   let glitchLines = [];
   
   function startGlitch() {
     glitchActive = true;
-    glitchTimer = 30; // ~500ms при 60fps
+    glitchTimer = 30;
     glitchOffset = (Math.random() - 0.5) * 20;
     glitchLines = [];
     for (let i = 0; i < 8; i++) {
@@ -100,11 +100,8 @@
     ctx.font = `${FONT_SIZE}px ${FONT_FAMILY}`;
     ctx.fillStyle = color;
     ctx.textBaseline = 'top';
-    
     const lines = text.split('\n');
-    lines.forEach((line, i) => {
-      ctx.fillText(line, x, y + i * LINE_HEIGHT);
-    });
+    lines.forEach((line, i) => ctx.fillText(line, x, y + i * LINE_HEIGHT));
     ctx.restore();
   }
 
@@ -113,13 +110,18 @@
     return ctx.measureText(text).width;
   }
 
-  // Проверка ховера
+  // Проверка ховера (ВАЖНО: используем CSS-пиксели, не DPR!)
   function checkHover(x, y, w, h) {
     return mouseX >= x && mouseX <= x + w && mouseY >= y && mouseY <= y + h;
   }
 
   // Экран старта
   function drawStartScreen() {
+    if (glitchActive) {
+      ctx.save();
+      ctx.filter = `contrast(1.5) brightness(1.5) hue-rotate(${Math.random() * 30 - 15}deg)`;
+    }
+
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, vw, vh);
 
@@ -140,23 +142,34 @@
     const btnX = (vw - btnWidth) / 2;
     const btnY = logoY + 110;
 
-    // Ховер эффект
+    // Ховер (проверяем в CSS-пикселях!)
     isHoveringButton = checkHover(btnX, btnY, btnWidth, btnHeight);
     
-    // Рамка кнопки (светится при ховере)
+    // Рамка
     ctx.strokeStyle = isHoveringButton ? '#00FF88' : '#00FF41';
     ctx.lineWidth = isHoveringButton ? 2 : 1;
     ctx.strokeRect(btnX, btnY, btnWidth, btnHeight);
 
-    // Текст кнопки
+    // Текст
     drawText(btnText, btnX + 20, btnY + 12, isHoveringButton ? '#00FF88' : '#00FF41');
 
-    // Сохраняем для кликов
+    if (glitchActive) ctx.restore();
+
+    // Сохраняем кнопку для кликов
     window.__buttonArea = { x: btnX, y: btnY, w: btnWidth, h: btnHeight };
   }
 
   // Экран загрузки
   function drawBootScreen() {
+    // Появление каждой строки строго через 1 секунду
+    if (bootTimer % 60 === 0 && bootTextIndex < bootTexts.length - 1) {
+      bootTextIndex++;
+    }
+    bootTimer++;
+
+    // Плавное появление текущей строки
+    const currentLineProgress = (bootTimer % 60) / 60;
+    
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, vw, vh);
 
@@ -166,17 +179,22 @@
     const logoY = vh / 2 - 100;
     drawText(logoText, logoX, logoY);
 
-    // Плавное появление текста
+    // Тексты (предыдущие строки — полностью видны, текущая — плавно)
     bootTexts.forEach((text, i) => {
-      if (i < bootProgress) {
-        const opacity = Math.min(1, bootProgress - i);
-        drawText(text, logoX - 20, logoY + 70 + i * (LINE_HEIGHT + 5), '#00FF41', opacity);
+      if (i < bootTextIndex) {
+        drawText(text, logoX - 20, logoY + 70 + i * (LINE_HEIGHT + 5));
+      } else if (i === bootTextIndex) {
+        drawText(text, logoX - 20, logoY + 70 + i * (LINE_HEIGHT + 5), '#00FF41', currentLineProgress);
       }
     });
 
-    // Анимация прогресса
-    if (bootProgress < bootTexts.length) {
-      bootProgress += 0.05; // скорость появления
+    // Переход к логину через 500ms после последней строки
+    if (bootTextIndex >= bootTexts.length - 1 && bootTimer > 60) {
+      setTimeout(() => {
+        currentScreen = screens.LOGIN;
+        bootTimer = 0;
+        bootTextIndex = -1;
+      }, 500);
     }
   }
 
@@ -185,12 +203,7 @@
     // Глитч-эффект
     if (glitchActive) {
       ctx.save();
-      ctx.filter = 'contrast(1.5) brightness(1.2) hue-rotate(' + (Math.random() * 60 - 30) + 'deg)';
-      
-      // Разрыв цветов (RGB split)
-      glitchLines.forEach(line => {
-        ctx.drawImage(canvas, 0, line.y, vw, line.height, line.offset, line.y, vw, line.height);
-      });
+      ctx.filter = `contrast(1.5) brightness(1.5) hue-rotate(${Math.random() * 30 - 15}deg)`;
     }
 
     ctx.fillStyle = '#000';
@@ -200,14 +213,13 @@
     const title = 'ДОСТУП К ТЕРМИНАЛУ';
     drawText(title, (vw - measureText(title)) / 2, vh / 2 - 80);
 
-    // Поле username (с рамкой)
+    // Username
     const userLabel = 'ИМЯ ПОЛЬЗОВАТЕЛЯ:';
     const userFieldX = (vw - 260) / 2;
     const userFieldY = vh / 2 - 30;
     const userFieldW = 260;
     const userFieldH = 30;
     
-    // Рамка поля (подсвечивается при фокусе)
     ctx.strokeStyle = inputField === 'username' ? '#00FF88' : '#00FF41';
     ctx.lineWidth = inputField === 'username' ? 2 : 1;
     ctx.strokeRect(userFieldX, userFieldY, userFieldW, userFieldH);
@@ -217,7 +229,7 @@
     const userFieldText = `${username}${cursorBlink % 30 < 15 && inputField === 'username' ? '█' : ''}`;
     drawText(userFieldText, userFieldX + 5, userFieldY + 6, '#FFFFFF');
 
-    // Поле password
+    // Password
     const passLabel = 'ПАРОЛЬ:';
     const passFieldX = (vw - 260) / 2;
     const passFieldY = vh / 2 + 10;
@@ -234,14 +246,13 @@
     const passFieldText = `${masked}${cursorBlink % 30 < 15 && inputField === 'password' ? '█' : ''}`;
     drawText(passFieldText, passFieldX + 5, passFieldY + 6, '#FFFFFF');
 
-    // Кнопка входа
+    // Кнопка
     const btnText = 'АУТЕНТИФИКАЦИЯ';
     const btnWidth = measureText(btnText) + 40;
     const btnHeight = 35;
     const btnX = (vw - btnWidth) / 2;
     const btnY = vh / 2 + 60;
 
-    // Ховер
     isHoveringButton = checkHover(btnX, btnY, btnWidth, btnHeight);
     
     ctx.strokeStyle = isHoveringButton ? '#00FF88' : '#00FF41';
@@ -249,24 +260,26 @@
     ctx.strokeRect(btnX, btnY, btnWidth, btnHeight);
     drawText(btnText, btnX + 20, btnY + 10, isHoveringButton ? '#00FF88' : '#00FF41');
 
-    // Ошибка
+    // Сообщения
     if (errorMessage && errorTimer > 0) {
       drawText(errorMessage, (vw - measureText(errorMessage)) / 2, vh / 2 + 110, '#FF0000');
       errorTimer--;
     }
 
-    // Успех
     if (successMessage && successTimer > 0) {
       drawText(successMessage, (vw - measureText(successMessage)) / 2, vh / 2 + 110, '#00FF41');
       successTimer--;
     }
 
+    // Сохраняем области
     window.__buttonArea = { x: btnX, y: btnY, w: btnWidth, h: btnHeight };
     window.__userFieldArea = { x: userFieldX, y: userFieldY, w: userFieldW, h: userFieldH };
     window.__passFieldArea = { x: passFieldX, y: passFieldY, w: passFieldW, h: passFieldH };
+
+    if (glitchActive) ctx.restore();
   }
 
-  // Главный рендер
+  // Главный цикл
   function render() {
     cursorBlink++;
     updateGlitch();
@@ -283,13 +296,14 @@
   // Переходы
   window.__startBoot = () => {
     currentScreen = screens.BOOT;
-    bootProgress = 0;
+    bootTextIndex = -1;
+    bootTimer = 0;
   };
 
   window.__login = () => {
     if (username === 'qq' && password === 'ww') {
       successMessage = '> ВХОД УСПЕШНЫЙ';
-      successTimer = 60; // ~1 секунда
+      successTimer = 60;
       setTimeout(() => {
         document.body.style.transition = 'opacity 0.8s ease-in-out';
         document.body.style.opacity = '0';
@@ -303,22 +317,19 @@
     }
   };
 
-  // Клики
   canvas.addEventListener('click', (e) => {
     const rect = canvas.getBoundingClientRect();
     mouseX = e.clientX - rect.left;
     mouseY = e.clientY - rect.top;
 
     const btn = window.__buttonArea;
-    if (btn) {
-      if (mouseX >= btn.x && mouseX <= btn.x + btn.w && 
-          mouseY >= btn.y && mouseY <= btn.y + btn.h) {
-        if (currentScreen === screens.START) window.__startBoot();
-        else if (currentScreen === screens.LOGIN) window.__login();
-      }
+    if (btn && mouseX >= btn.x && mouseX <= btn.x + btn.w && 
+        mouseY >= btn.y && mouseY <= btn.y + btn.h) {
+      if (currentScreen === screens.START) window.__startBoot();
+      else if (currentScreen === screens.LOGIN) window.__login();
     }
 
-    // Клик в поля ввода
+    // Клик в поля
     if (currentScreen === screens.LOGIN) {
       if (checkHover(window.__userFieldArea.x, window.__userFieldArea.y, 
                      window.__userFieldArea.w, window.__userFieldArea.h)) {
@@ -330,28 +341,24 @@
     }
   });
 
-  // Движение мыши
   canvas.addEventListener('mousemove', (e) => {
     const rect = canvas.getBoundingClientRect();
     mouseX = e.clientX - rect.left;
     mouseY = e.clientY - rect.top;
   });
 
-  // Клавиатура
   document.addEventListener('keydown', (e) => {
     if (currentScreen !== screens.LOGIN) return;
     
     if (e.key === 'Enter') {
       window.__login();
     } else if (e.key === 'Backspace') {
-      if (inputField === 'username') username = username.slice(0, -1);
-      else password = password.slice(0, -1);
+      inputField === 'username' ? username = username.slice(0, -1) : password = password.slice(0, -1);
     } else if (e.key === 'Tab') {
       e.preventDefault();
       inputField = inputField === 'username' ? 'password' : 'username';
     } else if (e.key.length === 1) {
-      if (inputField === 'username') username += e.key;
-      else password += e.key;
+      inputField === 'username' ? username += e.key : password += e.key;
     }
   });
 })();
