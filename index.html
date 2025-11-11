@@ -1,22 +1,31 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ru">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>A.D.A.M. // ТЕРМИНАЛ</title>
+  <link rel="stylesheet" href="style.css">
   <style>
-    html,body { height:100%; margin:0; background:#000; overflow:hidden; }
-    body { font-family: 'Press Start 2P', monospace, monospace; -webkit-font-smoothing:antialiased; }
+    /* минимальные стили чтобы scanline был над оверлеем если нужно */
+    .scanline {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 2000;
+      mix-blend-mode: overlay;
+      opacity: 0.12;
+      background-image:
+        linear-gradient(rgba(0,0,0,0.04) 50%, rgba(255,255,255,0.01) 50%);
+      background-size: 100% 2px;
+    }
+    body { margin:0; background:#000; }
   </style>
 </head>
 <body>
-  <!-- Шумовой фон (базовый слой) — подключаем первым -->
-  <script src="screenGlass.js"></script>
-  
-  <!-- UI-логика (offscreen canvas) -->
+  <!-- Невидимый (логический) canvas рисует весь интерфейс и даёт API -->
+  <!-- НЕ подключаем index_canvas.js раньше оверлея — порядок важен -->
   <script src="index_canvas.js"></script>
-  
-  <!-- Визуальный оверлей с искажением и смешиванием слоёв -->
   <script src="crt_overlay_index_only.js"></script>
+  <div class="scanline"></div>
 </body>
 </html>
