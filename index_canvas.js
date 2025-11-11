@@ -1,5 +1,4 @@
-// index_canvas.js — финальная версия с прозрачным фоном, точными хитбоксами, без дублирования
-
+// index_canvas_fixed.js — исправленная версия с правильным шумом, хитбоксами и вёрсткой
 (() => {
   const FONT_FAMILY = "'Press Start 2P', monospace";
   const FONT_SIZE_PX = 14;
@@ -23,9 +22,9 @@
 
   let vw = 0, vh = 0;
   let mouseX = 0, mouseY = 0;
-  let inputField = null; // 'username' | 'password' | null
+  let inputField = null;
+  let cursorBlink = 0;
 
-  // Состояния
   const screens = { START: 'start', BOOT: 'boot', LOGIN: 'login' };
   let currentScreen = screens.START;
   let username = '', password = '';
@@ -46,7 +45,6 @@
     '> СИСТЕМА ГОТОВА'
   ];
 
-  // ======== РАЗМЕР ========
   function resize() {
     vw = window.innerWidth;
     vh = window.innerHeight;
@@ -59,7 +57,6 @@
   window.addEventListener('resize', resize);
   resize();
 
-  // ======== УТИЛИТЫ ========
   function drawText(text, x, y, color = '#00FF41', opacity = 1) {
     ctx.save();
     ctx.globalAlpha = opacity;
@@ -79,9 +76,18 @@
     return px >= x && px <= x + w && py >= y && py <= y + h;
   }
 
-  // ======== РЕНДЕР ЭКРАНОВ ========
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
   function drawStart() {
-    ctx.clearRect(0, 0, vw, vh); // ПРОЗРАЧНАЯ очистка!
+    ctx.clearRect(0, 0, vw, vh);
     
     const logoW = measure(logo.split('\n')[0]);
     const logoX = (vw - logoW) / 2;
@@ -91,7 +97,6 @@
     const statusY = logoY + 90;
     drawText('> СИСТЕМА A.D.A.M. ГОТОВА К ЗАПУСКУ', (vw - measure('> СИСТЕМА A.D.A.M. ГОТОВА К ЗАПУСКУ')) / 2, statusY);
 
-    // КНОПКА
     const btnText = 'ЗАПУСТИТЬ СИСТЕМУ';
     const btnW = measure(btnText) + 60;
     const btnH = 45;
@@ -99,9 +104,17 @@
     const btnY = statusY + 60;
     const hovered = inRect(mouseX, mouseY, btnX, btnY, btnW, btnH);
     
+    ctx.save();
+    ctx.fillStyle = hovered ? 'rgba(0, 255, 65, 0.1)' : 'rgba(0, 255, 65, 0.05)';
+    roundRect(ctx, btnX, btnY, btnW, btnH, 6);
+    ctx.fill();
+    
     ctx.strokeStyle = hovered ? '#00FF88' : '#00FF41';
     ctx.lineWidth = hovered ? 3 : 2;
-    ctx.strokeRect(btnX, btnY, btnW, btnH);
+    roundRect(ctx, btnX, btnY, btnW, btnH, 6);
+    ctx.stroke();
+    ctx.restore();
+    
     drawText(btnText, btnX + 30, btnY + 12, hovered ? '#00FF88' : '#00FF41');
 
     window.__clickZones = { startBtn: { x: btnX, y: btnY, w: btnW, h: btnH } };
@@ -142,7 +155,6 @@
     const fieldH = 42;
     const labelDy = -FIELD_PADDING - 5;
 
-    // Заголовок
     const title = 'ДОСТУП К ТЕРМИНАЛУ';
     drawText(title, (vw - measure(title)) / 2, centerY - 120);
 
@@ -150,9 +162,18 @@
     const userX = (vw - fieldW) / 2;
     const userY = centerY - 30;
     drawText('ИМЯ ПОЛЬЗОВАТЕЛЯ:', userX, userY + labelDy, '#00FF41', 0.85);
+    
+    ctx.save();
+    ctx.fillStyle = inputField === 'username' ? 'rgba(0, 255, 65, 0.1)' : 'rgba(0, 255, 65, 0.05)';
+    roundRect(ctx, userX, userY, fieldW, fieldH, 6);
+    ctx.fill();
+    
     ctx.strokeStyle = inputField === 'username' ? '#00FF88' : '#00FF41';
     ctx.lineWidth = inputField === 'username' ? 3 : 2;
-    ctx.strokeRect(userX, userY, fieldW, fieldH);
+    roundRect(ctx, userX, userY, fieldW, fieldH, 6);
+    ctx.stroke();
+    ctx.restore();
+    
     const userText = username + (cursorBlink % 30 < 15 && inputField === 'username' ? '█' : '');
     drawText(userText, userX + FIELD_PADDING, userY + 10, '#FFFFFF');
 
@@ -160,14 +181,23 @@
     const passX = (vw - fieldW) / 2;
     const passY = centerY + 40;
     drawText('ПАРОЛЬ:', passX, passY + labelDy, '#00FF41', 0.85);
+    
+    ctx.save();
+    ctx.fillStyle = inputField === 'password' ? 'rgba(0, 255, 65, 0.1)' : 'rgba(0, 255, 65, 0.05)';
+    roundRect(ctx, passX, passY, fieldW, fieldH, 6);
+    ctx.fill();
+    
     ctx.strokeStyle = inputField === 'password' ? '#00FF88' : '#00FF41';
     ctx.lineWidth = inputField === 'password' ? 3 : 2;
-    ctx.strokeRect(passX, passY, fieldW, fieldH);
+    roundRect(ctx, passX, passY, fieldW, fieldH, 6);
+    ctx.stroke();
+    ctx.restore();
+    
     const masked = '*'.repeat(password.length);
     const passText = masked + (cursorBlink % 30 < 15 && inputField === 'password' ? '█' : '');
     drawText(passText, passX + FIELD_PADDING, passY + 10, '#FFFFFF');
 
-    // КНОПКА
+    // BUTTON
     const btnText = 'АУТЕНТИФИКАЦИЯ';
     const btnW = measure(btnText) + 60;
     const btnH = 38;
@@ -175,12 +205,20 @@
     const btnY = centerY + 100;
     const hovered = inRect(mouseX, mouseY, btnX, btnY, btnW, btnH);
     
+    ctx.save();
+    ctx.fillStyle = hovered ? 'rgba(0, 255, 65, 0.1)' : 'rgba(0, 255, 65, 0.05)';
+    roundRect(ctx, btnX, btnY, btnW, btnH, 6);
+    ctx.fill();
+    
     ctx.strokeStyle = hovered ? '#00FF88' : '#00FF41';
     ctx.lineWidth = hovered ? 3 : 2;
-    ctx.strokeRect(btnX, btnY, btnW, btnH);
+    roundRect(ctx, btnX, btnY, btnW, btnH, 6);
+    ctx.stroke();
+    ctx.restore();
+    
     drawText(btnText, btnX + 30, btnY + 10, hovered ? '#00FF88' : '#00FF41');
 
-    // Сообщения
+    // MESSAGES
     if (errorMsg && errorTimer > 0) {
       drawText(errorMsg, (vw - measure(errorMsg)) / 2, centerY + 160, '#FF0000');
       errorTimer--;
@@ -190,7 +228,7 @@
       successTimer--;
     }
 
-    // Зоны клика
+    // CLICK ZONES
     window.__clickZones = {
       userField: { x: userX, y: userY, w: fieldW, h: fieldH },
       passField: { x: passX, y: passY, w: fieldW, h: fieldH },
@@ -198,8 +236,6 @@
     };
   }
 
-  // ======== ЦИКЛ ========
-  let cursorBlink = 0;
   function render() {
     cursorBlink++;
     switch(currentScreen) {
@@ -211,7 +247,7 @@
   }
   render();
 
-  // ======== СОБЫТИЯ ========
+  // EVENTS
   canvas.addEventListener('click', (e) => {
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -235,6 +271,7 @@
       } else {
         inputField = null;
       }
+      cursorBlink = 0; // Reset cursor blink immediately
     }
   });
 
@@ -252,6 +289,7 @@
     } else if (e.key === 'Tab') {
       e.preventDefault();
       inputField = inputField === 'username' ? 'password' : 'username';
+      cursorBlink = 0;
     } else if (e.key === 'Backspace') {
       if (inputField === 'username') username = username.slice(0, -1);
       if (inputField === 'password') password = password.slice(0, -1);
@@ -277,12 +315,13 @@
     }
   }
 
-  // ======== УМЕНЬШЕНИЕ ШУМА ТОЛЬКО НА ГЛАВНОЙ ========
-  window.addEventListener('load', () => {
-    const glass = document.getElementById('glassFX');
-    if (glass) {
-      // Уменьшаем яркость в 3 раза по сравнению с терминалом
-      glass.style.opacity = '0.08';
+  // GLITCH EFFECT
+  setInterval(() => {
+    if (Math.random() < 0.1) {
+      document.body.style.filter = `hue-rotate(${Math.random() * 360}deg)`;
+      setTimeout(() => {
+        document.body.style.filter = 'none';
+      }, 100);
     }
-  });
+  }, 3000);
 })();
