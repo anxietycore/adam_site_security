@@ -1,20 +1,26 @@
-// crt_overlay_index_only.js — overlay that samples offscreen index canvas and handles interaction
+// crt_overlay_index_only.js — overlay с искажением + форвардингом событий
 (() => {
   const DPR = Math.min(window.devicePixelRatio || 1, 1.5);
-  const DISTORTION = 0.34;
+  const DISTORTION = 0.32;
 
+  // ждём indexCanvas
   let attempts = 0;
   const checkInterval = setInterval(() => {
-    if (window.ADAM_UI && typeof window.ADAM_UI.getSourceCanvas === 'function') {
+    const sourceCanvas = document.getElementById('indexCanvas');
+    if (sourceCanvas) {
       clearInterval(checkInterval);
-      initOverlay(window.ADAM_UI.getSourceCanvas());
-    } else if (++attempts > 60) {
+      initOverlay(sourceCanvas);
+    } else if (++attempts > 50) {
       clearInterval(checkInterval);
-      console.warn('ADAM_UI not ready for overlay');
+      console.warn('indexCanvas not found after 50 attempts');
     }
-  }, 80);
+  }, 100);
 
   function initOverlay(sourceCanvas) {
+    // Скрываем визуал оригинального canvas, но оставляем его рендерить и принимать programmatic events
+    sourceCanvas.style.opacity = '0';      // визуально невидим, но рендерится и доступен для событий
+    sourceCanvas.style.pointerEvents = 'none'; // мы будем форвардить события вручную
+
     const overlay = document.createElement('canvas');
     overlay.id = 'crtOverlayIndex';
     Object.assign(overlay.style, {
@@ -22,14 +28,21 @@
       left: '0', top: '0',
       width: '100vw', height: '100vh',
       zIndex: '1000',
-      pointerEvents: 'auto'
+      pointerEvents: 'auto',   // ловим события здесь
+      display: 'block'
     });
     document.body.appendChild(overlay);
-    window.__ADAM_OVERLAY_PRESENT = true;
 
-    const gl = overlay.getContext('webgl', { antialias: false });
-    if (!gl) { console.warn('WebGL not available'); return; }
+    // webgl с альфой, чтобы фон (шум, scanline div и т.д.) был виден
+    const gl = overlay.getContext('webgl', { antialias: false, alpha: true });
+    if (!gl) {
+      console.error('WebGL not available');
+      return;
+    }
 
+    gl.clearColor(0, 0, 0, 0);
+
+    // vertex + fragment
     const vs = `
       attribute vec2 aPos;
       attribute vec2 aUV;
@@ -39,31 +52,19 @@
         gl_Position = vec4(aPos, 0.0, 1.0);
       }
     `;
+
     const fs = `
       precision mediump float;
       varying vec2 vUV;
       uniform sampler2D uTex;
       uniform float uDist;
-      uniform float uTime;
-      uniform float uGlitch;
-      float rand(float x) { return fract(sin(x)*43758.5453); }
       void main() {
         vec2 uv = vUV * 2.0 - 1.0;
         float r = length(uv);
         vec2 distorted = mix(uv, uv * r, uDist);
-        float g = uGlitch;
-        if (g > 0.01) {
-          float band = floor(uv.y * 40.0 + uTime * 50.0);
-          float noise = rand(band) * 2.0 - 1.0;
-          float shift = noise * 0.02 * g;
-          distorted.x += shift * (1.0 - smoothstep(0.0, 0.9, abs(uv.y)*1.2));
-        }
         vec2 finalUV = (distorted + 1.0) * 0.5;
         finalUV.y = 1.0 - finalUV.y;
-        vec4 col = texture2D(uTex, clamp(finalUV, 0.0, 1.0));
-        float vign = 1.0 - 0.25 * pow(length(finalUV - 0.5), 1.5);
-        col.rgb *= vign;
-        gl_FragColor = col;
+        gl_FragColor = texture2D(uTex, clamp(finalUV, 0.0, 1.0));
       }
     `;
 
@@ -81,6 +82,9 @@
     gl.attachShader(prog, compile(vs, gl.VERTEX_SHADER));
     gl.attachShader(prog, compile(fs, gl.FRAGMENT_SHADER));
     gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+      console.error(gl.getProgramInfoLog(prog));
+    }
     gl.useProgram(prog);
 
     const quad = new Float32Array([
@@ -102,9 +106,6 @@
     gl.vertexAttribPointer(aUV, 2, gl.FLOAT, false, 16, 8);
 
     const uDistLoc = gl.getUniformLocation(prog, 'uDist');
-    const uTimeLoc = gl.getUniformLocation(prog, 'uTime');
-    const uGlitchLoc = gl.getUniformLocation(prog, 'uGlitch');
-
     gl.uniform1f(uDistLoc, DISTORTION);
 
     const tex = gl.createTexture();
@@ -114,86 +115,170 @@
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
+    // Размеры
     function resize() {
-      overlay.width = Math.floor(window.innerWidth * DPR);
-      overlay.height = Math.floor(window.innerHeight * DPR);
-      overlay.style.width = window.innerWidth + 'px';
-      overlay.style.height = window.innerHeight + 'px';
+      const cw = Math.max(1, overlay.clientWidth);
+      const ch = Math.max(1, overlay.clientHeight);
+      overlay.width = Math.floor(cw * DPR);
+      overlay.height = Math.floor(ch * DPR);
+      overlay.style.width = cw + 'px';
+      overlay.style.height = ch + 'px';
       gl.viewport(0, 0, overlay.width, overlay.height);
     }
     window.addEventListener('resize', resize);
     resize();
 
-    let start = performance.now();
-
+    // Рендер: копируем источник в текстуру и рисуем искажение
     function render() {
-      const src = window.ADAM_UI.getSourceCanvas();
-      if (src) {
-        gl.bindTexture(gl.TEXTURE_2D, tex);
-        try {
-          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
-        } catch (err) {
-          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, src.width, src.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-          const temp = gl.createFramebuffer();
-          gl.bindFramebuffer(gl.FRAMEBUFFER, temp);
-          gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
-          const ctx2 = document.createElement('canvas').getContext('2d');
-          ctx2.canvas.width = src.width;
-          ctx2.canvas.height = src.height;
-          ctx2.drawImage(src, 0, 0);
-          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, ctx2.canvas);
-          gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-        }
+      if (!sourceCanvas) return;
+      // обновляем текстуру из source (source может быть скрыт визуально, но он рендерится)
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      try {
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, sourceCanvas);
+      } catch (e) {
+        // некоторые браузеры могут кидать если размеры 0, игнорируем
       }
-
-      const t = (performance.now() - start) * 0.001;
-      gl.uniform1f(uTimeLoc, t);
-
-      const gstate = window.__ADAM_GLITCH || { strength: 0, timer: 0 };
-      const gval = gstate.timer > 0 ? Math.min(1.0, gstate.strength) : 0.0;
-      gl.uniform1f(uGlitchLoc, gval);
-
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       requestAnimationFrame(render);
     }
     render();
 
-    // === ИСПРАВЛЕНО: события теперь в CSS px, как ожидает ADAM_UI ===
-    function toLocal(evt) {
+    // --- Форвардинг событий ---
+    // Принцип: при событии на overlay вычисляем vUV = (clientX/clientWidth, clientY/clientHeight)
+    // затем повторяем ту же математику из шейдера, чтобы найти координату в текстуре (sourceCanvas).
+    // и создаем ивент на sourceCanvas с клиентскими координатами, соответствующими sourceCanvas.
+    function screenToTexUV(clientX, clientY) {
       const rect = overlay.getBoundingClientRect();
-      return {
-        x: evt.clientX - rect.left,
-        y: evt.clientY - rect.top
-      };
+      // нормализуем в [0,1]
+      const vx = (clientX - rect.left) / rect.width;
+      const vy = (clientY - rect.top) / rect.height;
+      // vUV -> uv in [-1,1]
+      const ux = vx * 2.0 - 1.0;
+      const uy = vy * 2.0 - 1.0;
+      const r = Math.hypot(ux, uy);
+      const s = 1.0 - DISTORTION + DISTORTION * r;
+      // distorted = uv * s
+      const dx = ux * s;
+      const dy = uy * s;
+      // finalUV = (distorted + 1)/2 ; then shader did finalUV.y = 1.0 - finalUV.y before sampling
+      const finalX = (dx + 1.0) * 0.5;
+      const finalY = (dy + 1.0) * 0.5;
+      const texX = finalX;
+      const texY = 1.0 - finalY; // flipped
+      return { texX: clamp(texX, 0, 1), texY: clamp(texY, 0, 1) };
     }
 
-    overlay.addEventListener('pointermove', (e) => {
-      const p = toLocal(e);
-      window.ADAM_UI.handlePointerMove(p.x, p.y);
-    }, { passive: false });
+    function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 
-    overlay.addEventListener('pointerdown', (e) => {
-      const p = toLocal(e);
-      window.ADAM_UI.handlePointer('pointerdown', p.x, p.y);
-    });
+    function forwardMouseEvent(originalEvent, eventType) {
+      if (!sourceCanvas) return;
+      const uv = screenToTexUV(originalEvent.clientX, originalEvent.clientY);
+      const srcRect = sourceCanvas.getBoundingClientRect();
+      // client coords on sourceCanvas
+      const clientX = srcRect.left + uv.texX * srcRect.width;
+      const clientY = srcRect.top + uv.texY * srcRect.height;
 
-    overlay.addEventListener('click', (e) => {
-      const p = toLocal(e);
-      window.ADAM_UI.handlePointer('click', p.x, p.y);
-    });
+      // Если sourceCanvas получает реальные events from user normally, it uses clientX/clientY.
+      const evt = new MouseEvent(eventType, {
+        bubbles: true,
+        cancelable: true,
+        view: window,
+        clientX: clientX,
+        clientY: clientY,
+        screenX: window.screenX + clientX,
+        screenY: window.screenY + clientY,
+        button: originalEvent.button,
+        buttons: originalEvent.buttons,
+        ctrlKey: originalEvent.ctrlKey,
+        shiftKey: originalEvent.shiftKey,
+        altKey: originalEvent.altKey,
+        metaKey: originalEvent.metaKey
+      });
+      sourceCanvas.dispatchEvent(evt);
+    }
 
-    window.addEventListener('keydown', (e) => {
-      window.ADAM_UI.handleKey(e);
-    });
-
-    window.__ADAM_OVERLAY = { triggerGlitch: (s,d)=>{ window.ADAM_UI.triggerGlitch(s,d);} };
-
-    setInterval(() => {
-      if (window.__ADAM_GLITCH && window.__ADAM_GLITCH.timer > 0) {
-        window.__ADAM_GLITCH.timer = Math.max(0, window.__ADAM_GLITCH.timer - 1);
-        if (window.__ADAM_GLITCH.timer === 0) window.__ADAM_GLITCH.strength = 0;
+    // For touch events support (mobile) — map first touch
+    function forwardTouchEvent(originalEvent, type) {
+      if (!sourceCanvas) return;
+      if (!originalEvent.touches || originalEvent.touches.length === 0) {
+        // use changedTouches fallback
+        const list = originalEvent.changedTouches || [];
+        if (list.length === 0) return;
+        const t = list[0];
+        const uv = screenToTexUV(t.clientX, t.clientY);
+        const srcRect = sourceCanvas.getBoundingClientRect();
+        const clientX = srcRect.left + uv.texX * srcRect.width;
+        const clientY = srcRect.top + uv.texY * srcRect.height;
+        const simulated = new TouchEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          touches: [],
+          targetTouches: [],
+          changedTouches: [new Touch({
+            identifier: Date.now(),
+            target: sourceCanvas,
+            clientX: clientX,
+            clientY: clientY,
+            screenX: clientX,
+            screenY: clientY,
+            pageX: clientX,
+            pageY: clientY
+          })]
+        });
+        sourceCanvas.dispatchEvent(simulated);
+        return;
       }
-    }, 33);
+      // for simplicity forward only first touch point
+      const t = originalEvent.touches[0];
+      const uv = screenToTexUV(t.clientX, t.clientY);
+      const srcRect = sourceCanvas.getBoundingClientRect();
+      const clientX = srcRect.left + uv.texX * srcRect.width;
+      const clientY = srcRect.top + uv.texY * srcRect.height;
+      const simulated = new TouchEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        touches: [new Touch({
+          identifier: Date.now(),
+          target: sourceCanvas,
+          clientX: clientX,
+          clientY: clientY,
+          screenX: clientX,
+          screenY: clientY,
+          pageX: clientX,
+          pageY: clientY
+        })],
+        targetTouches: [],
+        changedTouches: []
+      });
+      sourceCanvas.dispatchEvent(simulated);
+    }
+
+    // capture mousemove, mousedown, mouseup, click and forward
+    overlay.addEventListener('mousemove', (e) => { forwardMouseEvent(e, 'mousemove'); });
+    overlay.addEventListener('mousedown', (e) => { forwardMouseEvent(e, 'mousedown'); });
+    overlay.addEventListener('mouseup', (e) => { forwardMouseEvent(e, 'mouseup'); });
+    overlay.addEventListener('click', (e) => { forwardMouseEvent(e, 'click'); });
+
+    // pointer events as fallback
+    overlay.addEventListener('pointermove', (e) => { forwardMouseEvent(e, 'mousemove'); });
+    overlay.addEventListener('pointerdown', (e) => { forwardMouseEvent(e, 'mousedown'); });
+    overlay.addEventListener('pointerup', (e) => { forwardMouseEvent(e, 'mouseup'); });
+
+    // touch forwarding (basic)
+    overlay.addEventListener('touchstart', (e) => { forwardTouchEvent(e, 'touchstart'); e.preventDefault(); }, { passive: false });
+    overlay.addEventListener('touchmove', (e) => { forwardTouchEvent(e, 'touchmove'); e.preventDefault(); }, { passive: false });
+    overlay.addEventListener('touchend', (e) => { forwardTouchEvent(e, 'touchend'); e.preventDefault(); }, { passive: false });
+
+    // доп. — если кто-то (другой код) пытается выставить pointer-events:none на overlay - восстановим
+    const obs = new MutationObserver(() => {
+      if (overlay && overlay.style && overlay.style.pointerEvents !== 'auto') {
+        overlay.style.pointerEvents = 'auto';
+      }
+    });
+    obs.observe(overlay, { attributes: true, attributeFilter: ['style'] });
+
+    // Для отладки:
+    // window._crtOverlay = { overlay, sourceCanvas, gl };
   }
 })();
