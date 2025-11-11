@@ -1,172 +1,166 @@
 @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
 
 * {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
 }
 
 html, body {
-    height: 100%;
-    overflow: hidden;
+  height: 100%;
+  overflow: hidden;
 }
 
 body {
-    background: #000;
-    color: #00FF41;
-    font-family: 'Press Start 2P', monospace;
-    cursor: default;
-    position: relative;
+  background: #000;
+  color: #00FF41;
+  font-family: 'Press Start 2P', monospace;
+  cursor: default;
+  position: relative;
 }
 
-/* WebGL фон (на всех страницах) */
+/* WebGL фон */
 #shader-canvas {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 0;
-    pointer-events: none;
-    display: block;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+  display: block;
 }
 
-/* Шум-эффект (screenGlass.js) */
+/* Шум-эффект */
 #glassFX {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    z-index: 1;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
 }
 
 /* Главный canvas для index.html */
 #indexCanvas {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 50;
-    pointer-events: auto;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 50;
+  pointer-events: auto;
 }
 
 /* Canvas для терминала */
 #terminalCanvas {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 50;
-    pointer-events: auto;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 50;
+  pointer-events: auto;
 }
 
-/* Изгиб экрана (последний слой) */
+/* Изгиб экрана (главная) */
+#crtOverlayIndex {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1000;
+  pointer-events: auto;
+}
+
+/* Изгиб экрана (терминал) */
 #crtOverlayCanvas {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 1000;
-    pointer-events: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1000;
+  pointer-events: none;
 }
 
-/* Сканлайн-эффект (опционально) */
+/* Сканлайн-эффект */
 .scanline {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(
-        to bottom,
-        rgba(0, 0, 0, 0) 50%,
-        rgba(0, 255, 65, 0.03) 50%
-    );
-    background-size: 100% 4px;
-    pointer-events: none;
-    z-index: 100;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0) 50%,
+    rgba(0, 255, 65, 0.03) 50%
+  );
+  background-size: 100% 4px;
+  pointer-events: none;
+  z-index: 100;
 }
 
-/* Скрытый класс (если понадобится) */
+/* Скрытый класс */
 .hidden {
-    display: none !important;
+  display: none !important;
 }
 
-/* Остальные стили для terminal.html (оставлены) */
+/* Стили для terminal.html */
 #terminal {
-    padding: 20px;
-    height: 100vh;
-    overflow-y: auto;
-    background: rgba(0, 0, 0, 0.9);
+  padding: 20px;
+  height: 100vh;
+  overflow-y: auto;
+  background: rgba(0, 0, 0, 0.9);
+  opacity: 0;
+  pointer-events: auto;
 }
 
 .output {
-    margin: 5px 0;
-    white-space: pre-wrap;
-    line-height: 1.4;
+  margin: 5px 0;
+  white-space: pre-wrap;
+  line-height: 1.4;
 }
 
 .command {
-    color: #FFFFFF;
-    margin: 5px 0;
-    line-height: 1.4;
+  color: #FFFFFF;
+  margin: 5px 0;
+  line-height: 1.4;
 }
 
 .input-line {
-    display: flex;
-    align-items: center;
-    margin: 10px 0;
+  display: flex;
+  align-items: center;
+  margin: 10px 0;
 }
 
 .prompt {
-    color: #00FF41;
+  color: #00FF41;
 }
 
 .cmd {
-    color: #FFFFFF;
+  color: #FFFFFF;
 }
 
 .cursor {
-    animation: blink 1s step-end infinite;
-    background-color: #00FF41;
-    margin-left: 2px;
+  animation: blink 1s step-end infinite;
+  background-color: #00FF41;
+  margin-left: 2px;
 }
 
 @keyframes blink {
-    50% { opacity: 0; }
-}
-
-/* ДОБАВЬТЕ ЭТИ СТИЛИ В КОНЕЦ ФАЙЛА */
-
-/* Сканлайн-эффект для главной */
-.scanline {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(
-        to bottom,
-        rgba(0, 0, 0, 0) 50%,
-        rgba(0, 255, 65, 0.03) 50%
-    );
-    background-size: 100% 4px;
-    pointer-events: none;
-    z-index: 100;
-}
-
-/* Яркость шума для главной (убираем затемнение) */
-#glassFX {
-    opacity: 0.28 !important; /* Явная яркость как в терминале */
+  50% { opacity: 0; }
 }
 
 /* Убедимся, что изгиб работает правильно */
 #crtOverlayIndex, #crtOverlayCanvas {
-    z-index: 1000;
-    pointer-events: none;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+/* Для главной: pointer-events: auto на overlay */
+#crtOverlayIndex {
+  pointer-events: auto;
 }
