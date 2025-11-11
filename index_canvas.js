@@ -1,11 +1,11 @@
-// index_canvas_final.js — полная версия с встроенным шумом, новой темой UI и глитч-интеграцией
+// index_canvas_final_adjusted.js — полная версия с приглушённым шумом
 (() => {
   const FONT_FAMILY = "'Press Start 2P', monospace";
   const FONT_SIZE_PX = 14;
   const LINE_HEIGHT = Math.round(FONT_SIZE_PX * 1.5);
   const FIELD_PADDING = 12;
   const DPR = Math.min(window.devicePixelRatio || 1, 1.5);
-  const NOISE_DPR = Math.min(DPR, 1.25); // шум легче, не нужен высокий DPR
+  const NOISE_DPR = Math.min(DPR, 1.25);
 
   const canvas = document.createElement('canvas');
   canvas.id = 'indexCanvas';
@@ -46,113 +46,96 @@
     '> СИСТЕМА ГОТОВА'
   ];
 
-  // screenGlass.js — чистый белый шум + плавный "сбой сигнала"
-(() => {
-  const DPR = Math.min(window.devicePixelRatio || 1, 1.25);
-  const canvas = document.createElement("canvas");
-  canvas.id = "glassFX";
-  Object.assign(canvas.style, {
-    position: "fixed",
-    top: 0,
-    left: 0,
-    width: "100vw",
-    height: "100vh",
-    pointerEvents: "none",
-    zIndex: "1" // под интерфейсом, над WebGL
-  });
-  document.body.appendChild(canvas);
+  // === КОНФИГУРАЦИЯ ШУМА (регулируйте здесь) ===
+  const NOISE_CONFIG = {
+    baseOpacity: 0.12,        // было 0.28 (основная прозрачность)
+    spikeMultiplier: 1.4,    // было 2.0 (пик усиления в цикле)
+    scratchDensity: 0.00065, // было 0.0013 (плотность царапин)
+    scratchOpacity: 0.018,   // было 0.03-0.11 (яркость царапин)
+    noiseBrightness: { min: 32, max: 120 }, // было 0-255 (диапазон цвета шума)
+    vignetteStrength: 0.42   // было 0.35 (сила виньетки)
+  };
 
-  const ctx = canvas.getContext("2d");
-  let w = 0, h = 0;
-  function resize() {
-    w = canvas.width = window.innerWidth * DPR;
-    h = canvas.height = window.innerHeight * DPR;
-  }
-  window.addEventListener("resize", resize);
-  resize();
+  // === ВСТРОЕННЫЙ ШУМ (адаптированный и приглушённый) ===
+  const noise = {
+    frames: [],
+    fw: 0, fh: 0,
+    t: 0,
+    scratch: null,
+    init(w, h) {
+      this.fw = Math.floor(w * 0.8);
+      this.fh = Math.floor(h * 0.8);
+      // Генерация тёмно-серого шума
+      for (let f = 0; f < 15; f++) {
+        const c = document.createElement('canvas');
+        c.width = this.fw; c.height = this.fh;
+        const nctx = c.getContext('2d');
+        const img = nctx.createImageData(this.fw, this.fh);
+        const d = img.data;
+        for (let i = 0; i < d.length; i += 4) {
+          // Генерируем значение в диапазоне [min, max] вместо [0, 255]
+          const n = NOISE_CONFIG.noiseBrightness.min + Math.random() * (NOISE_CONFIG.noiseBrightness.max - NOISE_CONFIG.noiseBrightness.min);
+          d[i] = d[i + 1] = d[i + 2] = n;
+          d[i + 3] = 255;
+        }
+        nctx.putImageData(img, 0, 0);
+        this.frames.push(c);
+      }
+      // Царапины (редкие и тусклые)
+      const sc = document.createElement('canvas');
+      const sctx = sc.getContext('2d');
+      sc.width = w; sc.height = h;
+      for (let i = 0; i < w * h * NOISE_CONFIG.scratchDensity; i++) {
+        const x = Math.random() * w;
+        const y = Math.random() * h;
+        const l = Math.random() * 40 + 20;
+        const o = Math.random() * NOISE_CONFIG.scratchOpacity + 0.01;
+        sctx.beginPath();
+        sctx.moveTo(x, y);
+        sctx.lineTo(x, y + l);
+        sctx.strokeStyle = `rgba(255,255,255,${o})`;
+        sctx.lineWidth = 0.5 * NOISE_DPR;
+        sctx.stroke();
+      }
+      this.scratch = sc;
+    },
+    render(ctx, w, h) {
+      // Виньетка
+      const g = ctx.createRadialGradient(w / 2, h / 2, h * 0.1, w / 2, h / 2, h * 0.8);
+      g.addColorStop(0, 'rgba(0,0,0,0)');
+      g.addColorStop(1, `rgba(0,0,0,${NOISE_CONFIG.vignetteStrength})`);
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, w, h);
 
-  // === создаём 4 кадра настоящего белого шума ===
-  const frames = [];
-  const fw = Math.floor(w * 0.8);
-  const fh = Math.floor(h * 0.8);
-  for (let f = 0; f < 15; f++) {
-    const c = document.createElement("canvas");
-    c.width = fw; c.height = fh;
-    const nctx = c.getContext("2d");
-    const img = nctx.createImageData(fw, fh);
-    const d = img.data;
-    for (let i = 0; i < d.length; i += 4) {
-      const n = Math.random() * 255;
-      d[i] = d[i + 1] = d[i + 2] = n;
-      d[i + 3] = 255;
+      // Фаза всплеска
+      const cycle = 720; // ~12 сек
+      const phase = this.t % cycle;
+      let spike = 1.0;
+      if (phase < 180) spike = 1 + phase / 180;
+      else if (phase < 360) spike = 2 - (phase - 180) / 180;
+
+      // Шум (с пониженной прозрачностью)
+      const frame = this.frames[Math.floor(this.t / 4) % 15];
+      ctx.globalAlpha = NOISE_CONFIG.baseOpacity * spike;
+      ctx.drawImage(frame, 0, 0, w, h);
+      ctx.globalAlpha = 1;
+
+      // Царапины
+      const offY = (this.t * 0.4) % h;
+      ctx.drawImage(this.scratch, 0, offY - h, w, h);
+      ctx.drawImage(this.scratch, 0, offY, w, h);
+
+      // Блик сверху
+      const fl = 0.4 + Math.sin(this.t / 50) * 0.05;
+      const lamp = ctx.createRadialGradient(w / 2, 0, h * 0.05, w / 2, 0, h * 0.6);
+      lamp.addColorStop(0, `rgba(255,255,255,${0.04 * fl})`);
+      lamp.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = lamp;
+      ctx.fillRect(0, 0, w, h);
+
+      this.t++;
     }
-    nctx.putImageData(img, 0, 0);
-    frames.push(c);
-  }
-
-  // === тонкие царапины ===
-  const scratch = document.createElement("canvas");
-  const sc = scratch.getContext("2d");
-  scratch.width = w; scratch.height = h;
-  const dens = 0.0013;
-  for (let i = 0; i < w * h * dens; i++) {
-    const x = Math.random() * w;
-    const y = Math.random() * h;
-    const l = Math.random() * 40 + 20;
-    const o = Math.random() * 0.08 + 0.03;
-    sc.beginPath();
-    sc.moveTo(x, y);
-    sc.lineTo(x, y + l);
-    sc.strokeStyle = `rgba(255,255,255,${o})`;
-    sc.lineWidth = 0.5 * DPR;
-    sc.stroke();
-  }
-
-  let t = 0;
-
-  function render() {
-    t++;
-    ctx.clearRect(0, 0, w, h);
-
-    // виньетка
-    const g = ctx.createRadialGradient(w / 2, h / 2, h * 0.1, w / 2, h / 2, h * 0.8);
-    g.addColorStop(0, "rgba(0,0,0,0)");
-    g.addColorStop(1, "rgba(0,0,0,0.35)");
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, w, h);
-
-    // фаза всплеска (12с цикл)
-    const cycle = 720; // ~12 сек
-    const phase = t % cycle;
-    let spike = 1.0;
-    if (phase < 180) spike = 1 + phase / 180;        // плавное усиление
-    else if (phase < 360) spike = 2 - (phase - 180) / 180; // плавное затухание
-    else spike = 1;
-
-    // шум
-    const frame = frames[Math.floor(t / 4) % 15];
-    ctx.globalAlpha = 0.28 * spike;
-    ctx.drawImage(frame, 0, 0, w, h);
-    ctx.globalAlpha = 1;
-
-    // царапины
-    const offY = (t * 0.4) % h;
-    ctx.drawImage(scratch, 0, offY - h, w, h);
-    ctx.drawImage(scratch, 0, offY, w, h);
-
-    // лёгкий бликовый градиент сверху
-    const fl = 0.4 + Math.sin(t / 50) * 0.05;
-    const lamp = ctx.createRadialGradient(w / 2, 0, h * 0.05, w / 2, 0, h * 0.6);
-    lamp.addColorStop(0, `rgba(255,255,255,${0.04 * fl})`);
-    lamp.addColorStop(1, "rgba(255,255,255,0)");
-    ctx.fillStyle = lamp;
-    ctx.fillRect(0, 0, w, h);
-
-    requestAnimationFrame(render);
-  }
-
-  render();
-})();
+  };
 
   function resize() {
     vw = window.innerWidth;
@@ -196,7 +179,6 @@
     ctx.closePath();
   }
 
-  // === МИНИМАЛИСТИЧНЫЙ СТИЛЬ: кнопки и поля ===
   const UI_COLORS = {
     base: '#00FF41',
     hover: '#00FF88',
@@ -219,7 +201,6 @@
     const statusY = logoY + 90;
     drawText('> СИСТЕМА A.D.A.M. ГОТОВА К ЗАПУСКУ', (vw - measure('> СИСТЕМА A.D.A.M. ГОТОВА К ЗАПУСКУ')) / 2, statusY);
 
-    // КНОПКА: минималистичная рамка
     const btnText = 'ЗАПУСТИТЬ СИСТЕМУ';
     const btnW = measure(btnText) + 60;
     const btnH = 45;
@@ -282,7 +263,6 @@
     const title = 'ДОСТУП К ТЕРМИНАЛУ';
     drawText(title, (vw - measure(title)) / 2, centerY - 120);
 
-    // USERNAME: минималистичное поле
     const userX = (vw - fieldW) / 2;
     const userY = centerY - 30;
     drawText('ИМЯ ПОЛЬЗОВАТЕЛЯ:', userX, userY + labelDy, UI_COLORS.base, 0.85);
@@ -301,7 +281,6 @@
     const userText = username + (cursorBlink % 30 < 15 && inputField === 'username' ? '█' : '');
     drawText(userText, userX + FIELD_PADDING, userY + 10, '#FFFFFF');
 
-    // PASSWORD
     const passX = (vw - fieldW) / 2;
     const passY = centerY + 40;
     drawText('ПАРОЛЬ:', passX, passY + labelDy, UI_COLORS.base, 0.85);
@@ -321,7 +300,6 @@
     const passText = masked + (cursorBlink % 30 < 15 && inputField === 'password' ? '█' : '');
     drawText(passText, passX + FIELD_PADDING, passY + 10, '#FFFFFF');
 
-    // КНОПКА: минималистичная
     const btnText = 'АУТЕНТИФИКАЦИЯ';
     const btnW = measure(btnText) + 60;
     const btnH = 38;
@@ -341,12 +319,10 @@
     
     drawText(btnText, btnX + 30, btnY + 10, btnHovered ? UI_COLORS.hover : UI_COLORS.base);
 
-    // СООБЩЕНИЯ
     if (errorMsg && errorTimer > 0) {
       drawText(errorMsg, (vw - measure(errorMsg)) / 2, centerY + 160, UI_COLORS.error);
       errorTimer--;
-      // ГЛИТЧ ПРИ ОШИБКЕ: активируем класс body
-      if (errorTimer === errorMsg.length * 2 + 5) { // в момент появления ошибки
+      if (errorTimer === errorMsg.length * 2 + 5) {
         document.body.classList.add('glitch-active');
         setTimeout(() => document.body.classList.remove('glitch-active'), 1000);
       }
@@ -356,7 +332,6 @@
       successTimer--;
     }
 
-    // CLICK ZONES
     window.__clickZones = {
       userField: { x: userX, y: userY, w: fieldW, h: fieldH },
       passField: { x: passX, y: passY, w: fieldW, h: fieldH },
@@ -375,7 +350,6 @@
   }
   render();
 
-  // === СОБЫТИЯ (без изменений, работают через форвардинг) ===
   canvas.addEventListener('click', (e) => {
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -440,11 +414,8 @@
       errorMsg = '> ДОСТУП ЗАПРЕЩЁН';
       errorTimer = 120;
       password = '';
-      // ГЛИТЧ: активируем немедленно
       document.body.classList.add('glitch-active');
       setTimeout(() => document.body.classList.remove('glitch-active'), 1000);
     }
   }
-
-  // Старый глитч-интервал удалён — больше не нужен
 })();
