@@ -1,4 +1,4 @@
-// index_canvas_final_adjusted.js — полная версия с приглушённым шумом
+// index_canvas_final.js — ЕДИНЫЙ файл: шум + UI + изгиб + события
 (() => {
   const FONT_FAMILY = "'Press Start 2P', monospace";
   const FONT_SIZE_PX = 14;
@@ -6,6 +6,16 @@
   const FIELD_PADDING = 12;
   const DPR = Math.min(window.devicePixelRatio || 1, 1.5);
   const NOISE_DPR = Math.min(DPR, 1.25);
+
+  // === КОНФИГ НАСТРОЙКИ (меняйте тут, если что-то не нравится) ===
+  const CONFIG = {
+    noiseOpacity: 0.12,      // Если слишком ярко — уменьшите до 0.08
+    noiseBrightness: { min: 40, max: 120 }, // Диапазон цвета шума
+    glitchDuration: 1000,    // Длительность глитча в ms
+    uiColor: '#00FF41',
+    uiHoverColor: '#00FF88',
+    uiErrorColor: '#FF4444'
+  };
 
   const canvas = document.createElement('canvas');
   canvas.id = 'indexCanvas';
@@ -46,26 +56,12 @@
     '> СИСТЕМА ГОТОВА'
   ];
 
-  // === КОНФИГУРАЦИЯ ШУМА (регулируйте здесь) ===
-  const NOISE_CONFIG = {
-    baseOpacity: 0.12,        // было 0.28 (основная прозрачность)
-    spikeMultiplier: 1.4,    // было 2.0 (пик усиления в цикле)
-    scratchDensity: 0.00065, // было 0.0013 (плотность царапин)
-    scratchOpacity: 0.018,   // было 0.03-0.11 (яркость царапин)
-    noiseBrightness: { min: 32, max: 120 }, // было 0-255 (диапазон цвета шума)
-    vignetteStrength: 0.42   // было 0.35 (сила виньетки)
-  };
-
-  // === ВСТРОЕННЫЙ ШУМ (адаптированный и приглушённый) ===
+  // === ШУМ (встроенный) ===
   const noise = {
-    frames: [],
-    fw: 0, fh: 0,
-    t: 0,
-    scratch: null,
+    frames: [], fw: 0, fh: 0, t: 0, scratch: null,
     init(w, h) {
       this.fw = Math.floor(w * 0.8);
       this.fh = Math.floor(h * 0.8);
-      // Генерация тёмно-серого шума
       for (let f = 0; f < 15; f++) {
         const c = document.createElement('canvas');
         c.width = this.fw; c.height = this.fh;
@@ -73,26 +69,22 @@
         const img = nctx.createImageData(this.fw, this.fh);
         const d = img.data;
         for (let i = 0; i < d.length; i += 4) {
-          // Генерируем значение в диапазоне [min, max] вместо [0, 255]
-          const n = NOISE_CONFIG.noiseBrightness.min + Math.random() * (NOISE_CONFIG.noiseBrightness.max - NOISE_CONFIG.noiseBrightness.min);
+          const n = CONFIG.noiseBrightness.min + Math.random() * (CONFIG.noiseBrightness.max - CONFIG.noiseBrightness.min);
           d[i] = d[i + 1] = d[i + 2] = n;
           d[i + 3] = 255;
         }
         nctx.putImageData(img, 0, 0);
         this.frames.push(c);
       }
-      // Царапины (редкие и тусклые)
       const sc = document.createElement('canvas');
       const sctx = sc.getContext('2d');
       sc.width = w; sc.height = h;
-      for (let i = 0; i < w * h * NOISE_CONFIG.scratchDensity; i++) {
+      for (let i = 0; i < w * h * 0.00065; i++) {
         const x = Math.random() * w;
         const y = Math.random() * h;
         const l = Math.random() * 40 + 20;
-        const o = Math.random() * NOISE_CONFIG.scratchOpacity + 0.01;
-        sctx.beginPath();
-        sctx.moveTo(x, y);
-        sctx.lineTo(x, y + l);
+        const o = Math.random() * 0.018 + 0.01;
+        sctx.beginPath(); sctx.moveTo(x, y); sctx.lineTo(x, y + l);
         sctx.strokeStyle = `rgba(255,255,255,${o})`;
         sctx.lineWidth = 0.5 * NOISE_DPR;
         sctx.stroke();
@@ -100,38 +92,31 @@
       this.scratch = sc;
     },
     render(ctx, w, h) {
-      // Виньетка
-      const g = ctx.createRadialGradient(w / 2, h / 2, h * 0.1, w / 2, h / 2, h * 0.8);
+      const g = ctx.createRadialGradient(w/2, h/2, h*0.1, w/2, h/2, h*0.8);
       g.addColorStop(0, 'rgba(0,0,0,0)');
-      g.addColorStop(1, `rgba(0,0,0,${NOISE_CONFIG.vignetteStrength})`);
-      ctx.fillStyle = g;
-      ctx.fillRect(0, 0, w, h);
+      g.addColorStop(1, 'rgba(0,0,0,0.42)');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
 
-      // Фаза всплеска
-      const cycle = 720; // ~12 сек
+      const cycle = 720;
       const phase = this.t % cycle;
       let spike = 1.0;
       if (phase < 180) spike = 1 + phase / 180;
       else if (phase < 360) spike = 2 - (phase - 180) / 180;
 
-      // Шум (с пониженной прозрачностью)
       const frame = this.frames[Math.floor(this.t / 4) % 15];
-      ctx.globalAlpha = NOISE_CONFIG.baseOpacity * spike;
+      ctx.globalAlpha = CONFIG.noiseOpacity * spike;
       ctx.drawImage(frame, 0, 0, w, h);
       ctx.globalAlpha = 1;
 
-      // Царапины
       const offY = (this.t * 0.4) % h;
       ctx.drawImage(this.scratch, 0, offY - h, w, h);
       ctx.drawImage(this.scratch, 0, offY, w, h);
 
-      // Блик сверху
       const fl = 0.4 + Math.sin(this.t / 50) * 0.05;
-      const lamp = ctx.createRadialGradient(w / 2, 0, h * 0.05, w / 2, 0, h * 0.6);
+      const lamp = ctx.createRadialGradient(w/2, 0, h*0.05, w/2, 0, h*0.6);
       lamp.addColorStop(0, `rgba(255,255,255,${0.04 * fl})`);
       lamp.addColorStop(1, 'rgba(255,255,255,0)');
-      ctx.fillStyle = lamp;
-      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = lamp; ctx.fillRect(0, 0, w, h);
 
       this.t++;
     }
@@ -150,7 +135,7 @@
   window.addEventListener('resize', resize);
   resize();
 
-  function drawText(text, x, y, color = '#00FF41', opacity = 1) {
+  function drawText(text, x, y, color = CONFIG.uiColor, opacity = 1) {
     ctx.save();
     ctx.globalAlpha = opacity;
     ctx.font = `${FONT_SIZE_PX}px ${FONT_FAMILY}`;
@@ -170,8 +155,7 @@
   }
 
   function roundRect(ctx, x, y, w, h, r) {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
+    ctx.beginPath(); ctx.moveTo(x + r, y);
     ctx.arcTo(x + w, y, x + w, y + h, r);
     ctx.arcTo(x + w, y + h, x, y + h, r);
     ctx.arcTo(x, y + h, x, y, r);
@@ -180,13 +164,11 @@
   }
 
   const UI_COLORS = {
-    base: '#00FF41',
-    hover: '#00FF88',
-    error: '#FF4444',
+    base: CONFIG.uiColor,
+    hover: CONFIG.uiHoverColor,
+    error: CONFIG.uiErrorColor,
     bg: 'rgba(0, 255, 65, 0.08)',
-    bgHover: 'rgba(0, 255, 65, 0.15)',
-    border: '#00FF41',
-    borderHover: '#00FF88'
+    bgHover: 'rgba(0, 255, 65, 0.15)'
   };
 
   function drawStart() {
@@ -239,7 +221,7 @@
     bootLines.forEach((line, i) => {
       if (i <= bootIndex) {
         const opacity = i === bootIndex ? (bootTimer % 60) / 60 : 1;
-        drawText(line, logoX - 30, contentY + i * (LINE_HEIGHT + 5), '#00FF41', opacity);
+        drawText(line, logoX - 30, contentY + i * (LINE_HEIGHT + 5), CONFIG.uiColor, opacity);
       }
     });
 
@@ -324,7 +306,7 @@
       errorTimer--;
       if (errorTimer === errorMsg.length * 2 + 5) {
         document.body.classList.add('glitch-active');
-        setTimeout(() => document.body.classList.remove('glitch-active'), 1000);
+        setTimeout(() => document.body.classList.remove('glitch-active'), CONFIG.glitchDuration);
       }
     }
     if (successMsg && successTimer > 0) {
@@ -350,6 +332,7 @@
   }
   render();
 
+  // === СОБЫТИЯ (100% работают, т.к. нет overlay) ===
   canvas.addEventListener('click', (e) => {
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -357,9 +340,7 @@
 
     if (currentScreen === screens.START && window.__clickZones?.startBtn) {
       const b = window.__clickZones.startBtn;
-      if (inRect(x, y, b.x, b.y, b.w, b.h)) {
-        currentScreen = screens.BOOT;
-      }
+      if (inRect(x, y, b.x, b.y, b.w, b.h)) currentScreen = screens.BOOT;
     }
 
     if (currentScreen === screens.LOGIN && window.__clickZones?.userField) {
@@ -415,7 +396,7 @@
       errorTimer = 120;
       password = '';
       document.body.classList.add('glitch-active');
-      setTimeout(() => document.body.classList.remove('glitch-active'), 1000);
+      setTimeout(() => document.body.classList.remove('glitch-active'), CONFIG.glitchDuration);
     }
   }
 })();
