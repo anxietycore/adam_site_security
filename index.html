@@ -6,22 +6,19 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <!-- ШЕЙДЕРНЫЙ ФОН -->
+    <!-- WebGL фон -->
     <canvas id="shader-canvas" aria-hidden="true"></canvas>
     
-    <!-- ЭФФЕКТ ШУМА -->
-    <script src="screenGlass.js"></script>
+    <!-- Шум-эффект (универсальный) -->
+    <div id="glassFX"></div>
     
-    <!-- ОСНОВНОЙ КАНВАС-РЕНДЕРЕР -->
+    <!-- Основной canvas для index -->
     <script src="index_canvas.js"></script>
     
-    <!-- ИЗГИБ ЭКРАНА -->
-    <script src="crt_overlay.js"></script>
+    <!-- Изгиб ТОЛЬКО для index -->
+    <script src="crt_overlay_index_only.js"></script>
     
-    <!-- ЛОГИКА ПЕРЕХОДОВ -->
-    <script src="script.js"></script>
-    
-    <!-- ФОНОВАЯ АНИМАЦИЯ -->
+    <!-- Фоновая анимация -->
     <script src="background.js"></script>
 </body>
 </html>
