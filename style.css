@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
 * {
     margin: 0;
     padding: 0;
@@ -7,195 +8,101 @@
 
 html, body {
     height: 100%;
+    overflow: hidden;
 }
 
 body {
-    background-color: #0a0a0a;
+    background: #000;
     color: #00FF41;
     font-family: 'Press Start 2P', monospace;
-    overflow: hidden;
     cursor: default;
     position: relative;
 }
 
-/* Canvas background */
+/* WebGL фон (на всех страницах) */
 #shader-canvas {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    z-index: 0; /* фон */
+    z-index: 0;
+    pointer-events: none;
     display: block;
-    pointer-events: none; /* не мешает кликам по интерфейсу */
 }
 
-/* Слой контента должен быть выше фона */
-.scanline,
-#start-screen,
-#boot-screen,
-#login-screen,
-#terminal {
-    position: relative;
-    z-index: 10;
+/* Шум-эффект (screenGlass.js) */
+#glassFX {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
 }
 
+/* Главный canvas для index.html */
+#indexCanvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 50;
+    pointer-events: auto;
+}
 
+/* Canvas для терминала */
+#terminalCanvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 50;
+    pointer-events: auto;
+}
+
+/* Изгиб экрана (последний слой) */
+#crtOverlayCanvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1000;
+    pointer-events: none;
+}
+
+/* Сканлайн-эффект (опционально) */
 .scanline {
-    /* если нужны scanline эффекты — можно добавить */
-}
-
-/* Экран запуска */
-#start-screen {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0,0,0,0.9); /* чуть прозрачный, чтобы фон видно было */
-    z-index: 20;
+    background: linear-gradient(
+        to bottom,
+        rgba(0, 0, 0, 0) 50%,
+        rgba(0, 255, 65, 0.03) 50%
+    );
+    background-size: 100% 4px;
+    pointer-events: none;
+    z-index: 100;
 }
 
-.start-message {
-    text-align: center;
-}
-
-#start-btn {
-    background: black;
-    border: 1px solid #00FF41;
-    color: #00FF41;
-    padding: 15px 30px;
-    margin-top: 30px;
-    cursor: pointer;
-    font-family: 'Press Start 2P', monospace;
-    text-transform: uppercase;
-    font-size: 11px;
-}
-
-#start-btn:hover {
-    background: #00FF41;
-    color: black;
-}
-
-/* Экран загрузки */
-#boot-screen {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0,0,0,0.9);
-    z-index: 10;
-}
-
-.boot-message {
-    text-align: left;
-}
-
-.logo pre {
-    font-size: 12px;
-    margin-bottom: 30px;
-    text-align: center;
-}
-
-/* Скрываем текст загрузки изначально и делаем плавное появление */
-#boot-screen .boot-text p {
-    opacity: 0;
-    margin: 10px 0;
-    transition: opacity 0.5s ease-in-out;
-}
-
-/* Экран логина */
-#login-screen {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0,0,0,0.9);
-    z-index: 5;
-}
-
-.login-form {
-    text-align: center;
-    border: 1px solid #00FF41;
-    padding: 30px;
-    background: rgba(0, 0, 0, 0.9);
-}
-
-.login-prompt {
-    font-size: 18px;
-    margin-bottom: 20px;
-    text-transform: uppercase;
-}
-
-.input-group {
-    margin: 15px 0;
-    text-align: left;
-}
-
-.input-group label {
-    display: block;
-    margin-bottom: 5px;
-    font-size: 14px;
-}
-
-.input-group input {
-    width: 250px;
-    background: black;
-    border: 1px solid #00FF41;
-    color: #00FF41;
-    padding: 8px;
-    font-family: 'Press Start 2P', monospace;
-    outline: none;
-}
-
-.input-group input:focus {
-    border-color: #00FF41;
-    box-shadow: 0 0 10px #00FF41;
-}
-
-#login-btn {
-    background: black;
-    border: 1px solid #00FF41;
-    color: #00FF41;
-    padding: 10px 20px;
-    margin-top: 15px;
-    cursor: pointer;
-    font-family: 'Press Start 2P', monospace;
-    text-transform: uppercase;
-}
-
-#login-btn:hover {
-    background: #00FF41;
-    color: black;
-}
-
-.error {
-    color: #ff0000;
-    margin-top: 10px;
-    font-size: 14px;
-}
-
+/* Скрытый класс (если понадобится) */
 .hidden {
     display: none !important;
 }
 
-/* Стили терминала (взяты из оригинала) */
+/* Остальные стили для terminal.html (оставлены) */
 #terminal {
     padding: 20px;
     height: 100vh;
     overflow-y: auto;
-    background: rgba(0, 0, 0, 0.9); /* фон обеспечивает шейдер */
+    background: rgba(0, 0, 0, 0.9);
 }
 
 .output {
