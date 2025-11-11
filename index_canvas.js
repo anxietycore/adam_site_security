@@ -1,10 +1,11 @@
-// index_canvas_fixed.js — исправленная версия с правильным шумом, хитбоксами и вёрсткой
+// index_canvas_final.js — полная версия с встроенным шумом, новой темой UI и глитч-интеграцией
 (() => {
   const FONT_FAMILY = "'Press Start 2P', monospace";
   const FONT_SIZE_PX = 14;
   const LINE_HEIGHT = Math.round(FONT_SIZE_PX * 1.5);
   const FIELD_PADDING = 12;
   const DPR = Math.min(window.devicePixelRatio || 1, 1.5);
+  const NOISE_DPR = Math.min(DPR, 1.25); // шум легче, не нужен высокий DPR
 
   const canvas = document.createElement('canvas');
   canvas.id = 'indexCanvas';
@@ -45,6 +46,87 @@
     '> СИСТЕМА ГОТОВА'
   ];
 
+  // === ВСТРОЕННЫЙ ШУМ (адаптированный из screenGlass.js) ===
+  const noise = {
+    frames: [],
+    fw: 0, fh: 0,
+    t: 0,
+    scratch: null,
+    init(w, h) {
+      this.fw = Math.floor(w * 0.8);
+      this.fh = Math.floor(h * 0.8);
+      // 15 кадров белого шума
+      for (let f = 0; f < 15; f++) {
+        const c = document.createElement('canvas');
+        c.width = this.fw; c.height = this.fh;
+        const nctx = c.getContext('2d');
+        const img = nctx.createImageData(this.fw, this.fh);
+        const d = img.data;
+        for (let i = 0; i < d.length; i += 4) {
+          const n = Math.random() * 255;
+          d[i] = d[i + 1] = d[i + 2] = n;
+          d[i + 3] = 255;
+        }
+        nctx.putImageData(img, 0, 0);
+        this.frames.push(c);
+      }
+      // царапины
+      const sc = document.createElement('canvas');
+      const sctx = sc.getContext('2d');
+      sc.width = w; sc.height = h;
+      const dens = 0.0013;
+      for (let i = 0; i < w * h * dens; i++) {
+        const x = Math.random() * w;
+        const y = Math.random() * h;
+        const l = Math.random() * 40 + 20;
+        const o = Math.random() * 0.08 + 0.03;
+        sctx.beginPath();
+        sctx.moveTo(x, y);
+        sctx.lineTo(x, y + l);
+        sctx.strokeStyle = `rgba(255,255,255,${o})`;
+        sctx.lineWidth = 0.5 * NOISE_DPR;
+        sctx.stroke();
+      }
+      this.scratch = sc;
+    },
+    render(ctx, w, h) {
+      // виньетка
+      const g = ctx.createRadialGradient(w / 2, h / 2, h * 0.1, w / 2, h / 2, h * 0.8);
+      g.addColorStop(0, 'rgba(0,0,0,0)');
+      g.addColorStop(1, 'rgba(0,0,0,0.35)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, w, h);
+
+      // фаза всплеска
+      const cycle = 720; // ~12 сек
+      const phase = this.t % cycle;
+      let spike = 1.0;
+      if (phase < 180) spike = 1 + phase / 180;
+      else if (phase < 360) spike = 2 - (phase - 180) / 180;
+
+      // шум
+      const frame = this.frames[Math.floor(this.t / 4) % 15];
+      ctx.globalAlpha = 0.28 * spike;
+      ctx.drawImage(frame, 0, 0, w, h);
+      ctx.globalAlpha = 1;
+
+      // царапины
+      const offY = (this.t * 0.4) % h;
+      ctx.drawImage(this.scratch, 0, offY - h, w, h);
+      ctx.drawImage(this.scratch, 0, offY, w, h);
+
+      // блик сверху
+      const fl = 0.4 + Math.sin(this.t / 50) * 0.05;
+      const lamp = ctx.createRadialGradient(w / 2, 0, h * 0.05, w / 2, 0, h * 0.6);
+      lamp.addColorStop(0, `rgba(255,255,255,${0.04 * fl})`);
+      lamp.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = lamp;
+      ctx.fillRect(0, 0, w, h);
+
+      this.t++;
+    }
+  };
+
   function resize() {
     vw = window.innerWidth;
     vh = window.innerHeight;
@@ -53,6 +135,7 @@
     canvas.style.width = vw + 'px';
     canvas.style.height = vh + 'px';
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    noise.init(canvas.width, canvas.height);
   }
   window.addEventListener('resize', resize);
   resize();
@@ -86,9 +169,21 @@
     ctx.closePath();
   }
 
+  // === МИНИМАЛИСТИЧНЫЙ СТИЛЬ: кнопки и поля ===
+  const UI_COLORS = {
+    base: '#00FF41',
+    hover: '#00FF88',
+    error: '#FF4444',
+    bg: 'rgba(0, 255, 65, 0.08)',
+    bgHover: 'rgba(0, 255, 65, 0.15)',
+    border: '#00FF41',
+    borderHover: '#00FF88'
+  };
+
   function drawStart() {
     ctx.clearRect(0, 0, vw, vh);
-    
+    noise.render(ctx, canvas.width, canvas.height);
+
     const logoW = measure(logo.split('\n')[0]);
     const logoX = (vw - logoW) / 2;
     const logoY = vh * 0.35;
@@ -97,6 +192,7 @@
     const statusY = logoY + 90;
     drawText('> СИСТЕМА A.D.A.M. ГОТОВА К ЗАПУСКУ', (vw - measure('> СИСТЕМА A.D.A.M. ГОТОВА К ЗАПУСКУ')) / 2, statusY);
 
+    // КНОПКА: минималистичная рамка
     const btnText = 'ЗАПУСТИТЬ СИСТЕМУ';
     const btnW = measure(btnText) + 60;
     const btnH = 45;
@@ -105,24 +201,24 @@
     const hovered = inRect(mouseX, mouseY, btnX, btnY, btnW, btnH);
     
     ctx.save();
-    ctx.fillStyle = hovered ? 'rgba(0, 255, 65, 0.1)' : 'rgba(0, 255, 65, 0.05)';
     roundRect(ctx, btnX, btnY, btnW, btnH, 6);
+    ctx.fillStyle = hovered ? UI_COLORS.bgHover : UI_COLORS.bg;
     ctx.fill();
     
-    ctx.strokeStyle = hovered ? '#00FF88' : '#00FF41';
     ctx.lineWidth = hovered ? 3 : 2;
-    roundRect(ctx, btnX, btnY, btnW, btnH, 6);
+    ctx.strokeStyle = hovered ? UI_COLORS.hover : UI_COLORS.base;
     ctx.stroke();
     ctx.restore();
     
-    drawText(btnText, btnX + 30, btnY + 12, hovered ? '#00FF88' : '#00FF41');
+    drawText(btnText, btnX + 30, btnY + 12, hovered ? UI_COLORS.hover : UI_COLORS.base);
 
     window.__clickZones = { startBtn: { x: btnX, y: btnY, w: btnW, h: btnH } };
   }
 
   function drawBoot() {
     ctx.clearRect(0, 0, vw, vh);
-    
+    noise.render(ctx, canvas.width, canvas.height);
+
     const logoW = measure(logo.split('\n')[0]);
     const logoX = (vw - logoW) / 2;
     const logoY = vh * 0.3;
@@ -149,7 +245,8 @@
 
   function drawLogin() {
     ctx.clearRect(0, 0, vw, vh);
-    
+    noise.render(ctx, canvas.width, canvas.height);
+
     const centerY = vh * 0.45;
     const fieldW = Math.min(420, vw - 100);
     const fieldH = 42;
@@ -158,19 +255,19 @@
     const title = 'ДОСТУП К ТЕРМИНАЛУ';
     drawText(title, (vw - measure(title)) / 2, centerY - 120);
 
-    // USERNAME
+    // USERNAME: минималистичное поле
     const userX = (vw - fieldW) / 2;
     const userY = centerY - 30;
-    drawText('ИМЯ ПОЛЬЗОВАТЕЛЯ:', userX, userY + labelDy, '#00FF41', 0.85);
+    drawText('ИМЯ ПОЛЬЗОВАТЕЛЯ:', userX, userY + labelDy, UI_COLORS.base, 0.85);
     
     ctx.save();
-    ctx.fillStyle = inputField === 'username' ? 'rgba(0, 255, 65, 0.1)' : 'rgba(0, 255, 65, 0.05)';
+    const userHovered = inRect(mouseX, mouseY, userX, userY, fieldW, fieldH) || inputField === 'username';
     roundRect(ctx, userX, userY, fieldW, fieldH, 6);
+    ctx.fillStyle = userHovered ? UI_COLORS.bgHover : UI_COLORS.bg;
     ctx.fill();
     
-    ctx.strokeStyle = inputField === 'username' ? '#00FF88' : '#00FF41';
-    ctx.lineWidth = inputField === 'username' ? 3 : 2;
-    roundRect(ctx, userX, userY, fieldW, fieldH, 6);
+    ctx.lineWidth = userHovered ? 3 : 2;
+    ctx.strokeStyle = userHovered ? UI_COLORS.hover : UI_COLORS.base;
     ctx.stroke();
     ctx.restore();
     
@@ -180,16 +277,16 @@
     // PASSWORD
     const passX = (vw - fieldW) / 2;
     const passY = centerY + 40;
-    drawText('ПАРОЛЬ:', passX, passY + labelDy, '#00FF41', 0.85);
+    drawText('ПАРОЛЬ:', passX, passY + labelDy, UI_COLORS.base, 0.85);
     
     ctx.save();
-    ctx.fillStyle = inputField === 'password' ? 'rgba(0, 255, 65, 0.1)' : 'rgba(0, 255, 65, 0.05)';
+    const passHovered = inRect(mouseX, mouseY, passX, passY, fieldW, fieldH) || inputField === 'password';
     roundRect(ctx, passX, passY, fieldW, fieldH, 6);
+    ctx.fillStyle = passHovered ? UI_COLORS.bgHover : UI_COLORS.bg;
     ctx.fill();
     
-    ctx.strokeStyle = inputField === 'password' ? '#00FF88' : '#00FF41';
-    ctx.lineWidth = inputField === 'password' ? 3 : 2;
-    roundRect(ctx, passX, passY, fieldW, fieldH, 6);
+    ctx.lineWidth = passHovered ? 3 : 2;
+    ctx.strokeStyle = passHovered ? UI_COLORS.hover : UI_COLORS.base;
     ctx.stroke();
     ctx.restore();
     
@@ -197,34 +294,38 @@
     const passText = masked + (cursorBlink % 30 < 15 && inputField === 'password' ? '█' : '');
     drawText(passText, passX + FIELD_PADDING, passY + 10, '#FFFFFF');
 
-    // BUTTON
+    // КНОПКА: минималистичная
     const btnText = 'АУТЕНТИФИКАЦИЯ';
     const btnW = measure(btnText) + 60;
     const btnH = 38;
     const btnX = (vw - btnW) / 2;
     const btnY = centerY + 100;
-    const hovered = inRect(mouseX, mouseY, btnX, btnY, btnW, btnH);
+    const btnHovered = inRect(mouseX, mouseY, btnX, btnY, btnW, btnH);
     
     ctx.save();
-    ctx.fillStyle = hovered ? 'rgba(0, 255, 65, 0.1)' : 'rgba(0, 255, 65, 0.05)';
     roundRect(ctx, btnX, btnY, btnW, btnH, 6);
+    ctx.fillStyle = btnHovered ? UI_COLORS.bgHover : UI_COLORS.bg;
     ctx.fill();
     
-    ctx.strokeStyle = hovered ? '#00FF88' : '#00FF41';
-    ctx.lineWidth = hovered ? 3 : 2;
-    roundRect(ctx, btnX, btnY, btnW, btnH, 6);
+    ctx.lineWidth = btnHovered ? 3 : 2;
+    ctx.strokeStyle = btnHovered ? UI_COLORS.hover : UI_COLORS.base;
     ctx.stroke();
     ctx.restore();
     
-    drawText(btnText, btnX + 30, btnY + 10, hovered ? '#00FF88' : '#00FF41');
+    drawText(btnText, btnX + 30, btnY + 10, btnHovered ? UI_COLORS.hover : UI_COLORS.base);
 
-    // MESSAGES
+    // СООБЩЕНИЯ
     if (errorMsg && errorTimer > 0) {
-      drawText(errorMsg, (vw - measure(errorMsg)) / 2, centerY + 160, '#FF0000');
+      drawText(errorMsg, (vw - measure(errorMsg)) / 2, centerY + 160, UI_COLORS.error);
       errorTimer--;
+      // ГЛИТЧ ПРИ ОШИБКЕ: активируем класс body
+      if (errorTimer === errorMsg.length * 2 + 5) { // в момент появления ошибки
+        document.body.classList.add('glitch-active');
+        setTimeout(() => document.body.classList.remove('glitch-active'), 1000);
+      }
     }
     if (successMsg && successTimer > 0) {
-      drawText(successMsg, (vw - measure(successMsg)) / 2, centerY + 160, '#00FF41');
+      drawText(successMsg, (vw - measure(successMsg)) / 2, centerY + 160, UI_COLORS.base);
       successTimer--;
     }
 
@@ -247,7 +348,7 @@
   }
   render();
 
-  // EVENTS
+  // === СОБЫТИЯ (без изменений, работают через форвардинг) ===
   canvas.addEventListener('click', (e) => {
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -271,7 +372,7 @@
       } else {
         inputField = null;
       }
-      cursorBlink = 0; // Reset cursor blink immediately
+      cursorBlink = 0;
     }
   });
 
@@ -312,16 +413,11 @@
       errorMsg = '> ДОСТУП ЗАПРЕЩЁН';
       errorTimer = 120;
       password = '';
+      // ГЛИТЧ: активируем немедленно
+      document.body.classList.add('glitch-active');
+      setTimeout(() => document.body.classList.remove('glitch-active'), 1000);
     }
   }
 
-  // GLITCH EFFECT
-  setInterval(() => {
-    if (Math.random() < 0.1) {
-      document.body.style.filter = `hue-rotate(${Math.random() * 360}deg)`;
-      setTimeout(() => {
-        document.body.style.filter = 'none';
-      }, 100);
-    }
-  }, 3000);
+  // Старый глитч-интервал удалён — больше не нужен
 })();
