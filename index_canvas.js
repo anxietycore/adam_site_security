@@ -1,17 +1,18 @@
-// index_canvas.js — рисует UI в offscreen canvas и предоставляет window.ADAM_UI
+// index_canvas.js — теперь рисует на offscreen и даёт API window.ADAM_UI
 (() => {
   const FONT_FAMILY = "'Press Start 2P', monospace";
-  const FONT_SIZE_PX = 11; // 🔧 Уменьшен для терминального стиля
-  const LINE_HEIGHT = Math.round(FONT_SIZE_PX * 1.4);
+  const FONT_SIZE_PX = 14;
+  const LINE_HEIGHT = Math.round(FONT_SIZE_PX * 1.5);
   const FIELD_PADDING = 12;
   const DPR = Math.min(window.devicePixelRatio || 1, 1.5);
 
+  // OFFSCREEN canvas — visible canvas removed to avoid duplication
   const canvas = document.createElement('canvas');
-  canvas.id = 'indexCanvasOff';
+  canvas.id = 'indexCanvasOff'; // not appended
   const ctx = canvas.getContext('2d', { alpha: true });
 
   let vw = 0, vh = 0;
-  let mouseX = -9999, mouseY = -9999;
+  let mouseX = 0, mouseY = 0;
   let inputField = null;
   let cursorBlink = 0;
 
@@ -22,6 +23,7 @@
   let errorMsg = '', errorTimer = 0;
   let successMsg = '', successTimer = 0;
 
+  // Hitboxes in logical coordinate space (CSS px)
   let clickZones = {};
 
   const logo = `    \\    _ \\    \\     \\  | 
@@ -37,19 +39,13 @@
     '> СИСТЕМА ГОТОВА'
   ];
 
+  // GLITCH state (control for overlay)
   let glitchStrength = 0;
   let glitchTimer = 0;
 
-  // 🔧 Новая функция для затемнённой цветовой палитры
-  const COLORS = {
-    primary: '#4a6b4a',      // Тусклый зелёный
-    bright: '#6b8a6b',       // Яркий для hover
-    dim: '#3a5a3a',          // Тусклый для неактивных
-    error: '#aa5555',        // Тусклый красный
-    success: '#5a8a5a',      // Тусклый зелёный
-    text: '#5a7a5a',         // Текст
-    border: '#4a5a4a'        // Рамки
-  };
+  // Noise cache (to keep performance ok)
+  let noiseCanvas = document.createElement('canvas');
+  let noiseCtx = noiseCanvas.getContext('2d');
 
   function resize() {
     vw = window.innerWidth;
@@ -59,12 +55,40 @@
     canvas.style.width = vw + 'px';
     canvas.style.height = vh + 'px';
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+    noiseCanvas.width = Math.max(256, Math.floor(vw/2));
+    noiseCanvas.height = Math.max(256, Math.floor(vh/2));
+    generateNoise();
   }
   window.addEventListener('resize', resize);
   resize();
 
-  function drawText(text, x, y, color = COLORS.text) {
+  function generateNoise() {
+    const w = noiseCanvas.width, h = noiseCanvas.height;
+    const id = noiseCtx.createImageData(w, h);
+    for (let i = 0; i < id.data.length; i += 4) {
+      const v = 60 + Math.floor(Math.random() * 60); // keep darker subtle
+      id.data[i] = v;
+      id.data[i+1] = v;
+      id.data[i+2] = v;
+      id.data[i+3] = 18; // low alpha
+    }
+    noiseCtx.putImageData(id, 0, 0);
+  }
+
+  function drawNoise() {
+    // tile the small noise canvas
+    const pat = ctx.createPattern(noiseCanvas, 'repeat');
     ctx.save();
+    ctx.globalAlpha = 0.2; // subtle
+    ctx.fillStyle = pat;
+    ctx.fillRect(0, 0, vw, vh);
+    ctx.restore();
+  }
+
+  function drawText(text, x, y, color = '#9ee99a', opacity = 1) {
+    ctx.save();
+    ctx.globalAlpha = opacity;
     ctx.font = `${FONT_SIZE_PX}px ${FONT_FAMILY}`;
     ctx.fillStyle = color;
     ctx.textBaseline = 'top';
@@ -91,152 +115,171 @@
     ctx_.closePath();
   }
 
+  // Smooth alpha helpers
+  function lerp(a,b,t){return a + (b-a)*t;}
+
+  // Drawers
+  let bootFadeProgress = 0; // smooth appear of boot lines
+
   function drawStart() {
     ctx.clearRect(0, 0, vw, vh);
-    
+    drawNoise();
+
     const logoW = measure(logo.split('\n')[0]);
     const logoX = (vw - logoW) / 2;
     const logoY = vh * 0.35;
-    drawText(logo, logoX, logoY, COLORS.primary);
+    drawText(logo, logoX, logoY, '#9ee99a');
 
     const status = '> СИСТЕМА A.D.A.M. ГОТОВА К ЗАПУСКУ';
     const statusY = logoY + 90;
-    drawText(status, (vw - measure(status)) / 2, statusY, COLORS.primary);
+    drawText(status, (vw - measure(status)) / 2, statusY, '#9ee99a');
 
-    // 🔧 Упрощённая кнопка с точными хитбоксами
     const btnText = 'ЗАПУСТИТЬ СИСТЕМУ';
     const btnW = measure(btnText) + 60;
-    const btnH = 40;
+    const btnH = 45;
     const btnX = (vw - btnW) / 2;
     const btnY = statusY + 60;
     const hovered = inRect(mouseX, mouseY, btnX, btnY, btnW, btnH);
 
     ctx.save();
-    ctx.fillStyle = hovered ? COLORS.dim : 'rgba(42,62,42,0.08)';
+    ctx.fillStyle = hovered ? 'rgba(0, 160, 90, 0.07)' : 'rgba(0,120,60,0.04)';
     roundRect(ctx, btnX, btnY, btnW, btnH, 6);
     ctx.fill();
 
-    ctx.strokeStyle = hovered ? COLORS.bright : COLORS.border;
-    ctx.lineWidth = hovered ? 2 : 1;
+    ctx.strokeStyle = hovered ? '#b9ffcc' : '#9ee99a';
+    ctx.lineWidth = hovered ? 3 : 2;
     roundRect(ctx, btnX, btnY, btnW, btnH, 6);
     ctx.stroke();
     ctx.restore();
 
-    drawText(btnText, btnX + 30, btnY + 10, hovered ? COLORS.bright : COLORS.text);
+    drawText(btnText, btnX + 30, btnY + 12, hovered ? '#b9ffcc' : '#9ee99a');
 
     clickZones = { startBtn: { x: btnX, y: btnY, w: btnW, h: btnH } };
   }
 
   function drawBoot() {
     ctx.clearRect(0, 0, vw, vh);
+    drawNoise();
 
     const logoW = measure(logo.split('\n')[0]);
     const logoX = (vw - logoW) / 2;
-    const logoY = vh * 0.30;
-    drawText(logo, logoX, logoY, COLORS.primary);
+    const logoY = vh * 0.3;
+    drawText(logo, logoX, logoY, '#9ee99a');
 
+    // progress bootIndex smoothly
     bootTimer++;
     if (bootIndex < bootLines.length - 1 && bootTimer % 40 === 0) {
       bootIndex++;
+      bootFadeProgress = 0;
     }
+    bootFadeProgress = Math.min(1, bootFadeProgress + 0.05);
 
     const contentY = logoY + 80;
     bootLines.forEach((line, i) => {
       if (i <= bootIndex) {
-        drawText(line, logoX - 30, contentY + i * (LINE_HEIGHT + 6), COLORS.text);
+        // fade latest line smoothly
+        const opacity = (i === bootIndex) ? bootFadeProgress : 1;
+        drawText(line, logoX - 30, contentY + i * (LINE_HEIGHT + 5), '#9ee99a', opacity);
       }
     });
 
     if (bootIndex >= bootLines.length - 1 && bootTimer > 120) {
-      setTimeout(() => { currentScreen = screens.LOGIN; inputField = 'username'; }, 300);
+      // smooth transition to login
+      setTimeout(() => {
+        currentScreen = screens.LOGIN;
+        inputField = 'username';
+      }, 300);
     }
   }
 
   function drawLogin() {
     ctx.clearRect(0, 0, vw, vh);
+    drawNoise();
 
     const centerY = vh * 0.45;
-    const fieldW = Math.min(380, vw - 100);
-    const fieldH = 36;
-    const labelDy = -FIELD_PADDING - 4;
+    const fieldW = Math.min(420, vw - 100);
+    const fieldH = 42;
+    const labelDy = -FIELD_PADDING - 5;
 
     const title = 'ДОСТУП К ТЕРМИНАЛУ';
-    drawText(title, (vw - measure(title)) / 2, centerY - 110, COLORS.primary);
+    drawText(title, (vw - measure(title)) / 2, centerY - 120, '#9ee99a');
 
     // USERNAME
     const userX = (vw - fieldW) / 2;
-    const userY = centerY - 40;
-    drawText('ИМЯ ПОЛЬЗОВАТЕЛЯ:', userX, userY + labelDy, COLORS.dim);
+    const userY = centerY - 30;
+    drawText('ИМЯ ПОЛЬЗОВАТЕЛЯ:', userX, userY + labelDy, '#9ee99a', 0.9);
 
     ctx.save();
-    ctx.fillStyle = inputField === 'username' ? 'rgba(42,82,62,0.08)' : 'rgba(22,52,42,0.05)';
-    roundRect(ctx, userX, userY, fieldW, fieldH, 5);
+    ctx.fillStyle = inputField === 'username' ? 'rgba(0,160,90,0.06)' : 'rgba(0,120,60,0.04)';
+    roundRect(ctx, userX, userY, fieldW, fieldH, 6);
     ctx.fill();
 
-    ctx.strokeStyle = inputField === 'username' ? COLORS.bright : COLORS.border;
-    ctx.lineWidth = inputField === 'username' ? 2 : 1;
-    roundRect(ctx, userX, userY, fieldW, fieldH, 5);
+    ctx.strokeStyle = inputField === 'username' ? '#b9ffcc' : '#9ee99a';
+    ctx.lineWidth = inputField === 'username' ? 3 : 2;
+    roundRect(ctx, userX, userY, fieldW, fieldH, 6);
     ctx.stroke();
     ctx.restore();
 
     const userText = username + (cursorBlink % 30 < 15 && inputField === 'username' ? '█' : '');
-    drawText(userText, userX + FIELD_PADDING, userY + 8, COLORS.text);
+    drawText(userText, userX + FIELD_PADDING, userY + 10, '#f7f7f7');
 
     // PASSWORD
     const passX = (vw - fieldW) / 2;
-    const passY = centerY + 20;
-    drawText('ПАРОЛЬ:', passX, passY + labelDy, COLORS.dim);
+    const passY = centerY + 40;
+    drawText('ПАРОЛЬ:', passX, passY + labelDy, '#9ee99a', 0.9);
 
     ctx.save();
-    ctx.fillStyle = inputField === 'password' ? 'rgba(42,82,62,0.08)' : 'rgba(22,52,42,0.05)';
-    roundRect(ctx, passX, passY, fieldW, fieldH, 5);
+    ctx.fillStyle = inputField === 'password' ? 'rgba(0,160,90,0.06)' : 'rgba(0,120,60,0.04)';
+    roundRect(ctx, passX, passY, fieldW, fieldH, 6);
     ctx.fill();
 
-    ctx.strokeStyle = inputField === 'password' ? COLORS.bright : COLORS.border;
-    ctx.lineWidth = inputField === 'password' ? 2 : 1;
-    roundRect(ctx, passX, passY, fieldW, fieldH, 5);
+    ctx.strokeStyle = inputField === 'password' ? '#b9ffcc' : '#9ee99a';
+    ctx.lineWidth = inputField === 'password' ? 3 : 2;
+    roundRect(ctx, passX, passY, fieldW, fieldH, 6);
     ctx.stroke();
     ctx.restore();
 
     const masked = '*'.repeat(password.length);
     const passText = masked + (cursorBlink % 30 < 15 && inputField === 'password' ? '█' : '');
-    drawText(passText, passX + FIELD_PADDING, passY + 8, COLORS.text);
+    drawText(passText, passX + FIELD_PADDING, passY + 10, '#f7f7f7');
 
     // BUTTON
     const btnText = 'АУТЕНТИФИКАЦИЯ';
-    const btnW = measure(btnText) + 50;
-    const btnH = 34;
+    const btnW = measure(btnText) + 60;
+    const btnH = 38;
     const btnX = (vw - btnW) / 2;
-    const btnY = centerY + 80;
+    const btnY = centerY + 100;
     const hovered = inRect(mouseX, mouseY, btnX, btnY, btnW, btnH);
 
     ctx.save();
-    ctx.fillStyle = hovered ? 'rgba(42,82,62,0.08)' : 'rgba(22,52,42,0.05)';
-    roundRect(ctx, btnX, btnY, btnW, btnH, 5);
+    ctx.fillStyle = hovered ? 'rgba(0,160,90,0.06)' : 'rgba(0,120,60,0.04)';
+    roundRect(ctx, btnX, btnY, btnW, btnH, 6);
     ctx.fill();
 
-    ctx.strokeStyle = hovered ? COLORS.bright : COLORS.border;
-    ctx.lineWidth = hovered ? 2 : 1;
-    roundRect(ctx, btnX, btnY, btnW, btnH, 5);
+    ctx.strokeStyle = hovered ? '#b9ffcc' : '#9ee99a';
+    ctx.lineWidth = hovered ? 3 : 2;
+    roundRect(ctx, btnX, btnY, btnW, btnH, 6);
     ctx.stroke();
     ctx.restore();
 
-    drawText(btnText, btnX + 25, btnY + 8, hovered ? COLORS.bright : COLORS.text);
+    drawText(btnText, btnX + 30, btnY + 10, hovered ? '#b9ffcc' : '#9ee99a');
 
     // MESSAGES
     if (errorMsg && errorTimer > 0) {
-      const jitter = (errorTimer % 6 < 3) ? (Math.random() * 6 - 3) : 0;
+      // flashing red with slight shake requested by you - set jitter
+      const jitter = (errorTimer % 6 < 3) ? Math.random()*4-2 : 0;
       ctx.save();
-      ctx.translate(jitter, 0);
-      drawText(errorMsg, (vw - measure(errorMsg)) / 2, centerY + 140, COLORS.error);
+      ctx.translate(jitter,0);
+      drawText(errorMsg, (vw - measure(errorMsg)) / 2, centerY + 160, '#ff6b6b');
       ctx.restore();
       errorTimer--;
     }
     if (successMsg && successTimer > 0) {
-      drawText(successMsg, (vw - measure(successMsg)) / 2, centerY + 140, COLORS.success);
+      drawText(successMsg, (vw - measure(successMsg)) / 2, centerY + 160, '#9ee99a');
       successTimer--;
     }
 
+    // CLICK ZONES
     clickZones = {
       userField: { x: userX, y: userY, w: fieldW, h: fieldH },
       passField: { x: passX, y: passY, w: fieldW, h: fieldH },
@@ -247,8 +290,7 @@
   function render() {
     cursorBlink++;
     if (glitchTimer > 0) { glitchTimer--; if (glitchTimer === 0) glitchStrength = 0; }
-
-    switch (currentScreen) {
+    switch(currentScreen) {
       case screens.START: drawStart(); break;
       case screens.BOOT: drawBoot(); break;
       case screens.LOGIN: drawLogin(); break;
@@ -257,74 +299,102 @@
   }
   render();
 
+  // Public API for overlay:
   window.ADAM_UI = {
+    // returns the offscreen canvas (overlay will sample from it)
     getSourceCanvas() { return canvas; },
-    
+
+    // called by overlay when mouse moves or clicks (coords in CSS px)
     handlePointer(type, x, y) {
+      // update mouse for hover etc.
       mouseX = x; mouseY = y;
       if (type === 'click' || type === 'pointerdown') {
-        if (currentScreen === screens.START && clickZones.startBtn && inRect(x, y, clickZones.startBtn.x, clickZones.startBtn.y, clickZones.startBtn.w, clickZones.startBtn.h)) {
+        // immediate focus on pointerdown
+        if (currentScreen === screens.START && clickZones.startBtn && inRect(x,y,clickZones.startBtn.x,clickZones.startBtn.y,clickZones.startBtn.w,clickZones.startBtn.h)) {
           currentScreen = screens.BOOT;
           bootTimer = 0; bootIndex = -1;
           return;
         }
         if (currentScreen === screens.LOGIN) {
-          if (clickZones.userField && inRect(x, y, clickZones.userField.x, clickZones.userField.y, clickZones.userField.w, clickZones.userField.h)) {
-            inputField = 'username'; return;
+          if (clickZones.userField && inRect(x,y,clickZones.userField.x,clickZones.userField.y,clickZones.userField.w,clickZones.userField.h)) {
+            inputField = 'username';
+            return;
           }
-          if (clickZones.passField && inRect(x, y, clickZones.passField.x, clickZones.passField.y, clickZones.passField.w, clickZones.passField.h)) {
-            inputField = 'password'; return;
+          if (clickZones.passField && inRect(x,y,clickZones.passField.x,clickZones.passField.y,clickZones.passField.w,clickZones.passField.h)) {
+            inputField = 'password';
+            return;
           }
-          if (clickZones.authBtn && inRect(x, y, clickZones.authBtn.x, clickZones.authBtn.y, clickZones.authBtn.w, clickZones.authBtn.h)) {
-            login(); return;
+          if (clickZones.authBtn && inRect(x,y,clickZones.authBtn.x,clickZones.authBtn.y,clickZones.authBtn.w,clickZones.authBtn.h)) {
+            login();
+            return;
           }
           inputField = null;
         }
       }
     },
 
-    handlePointerMove(x, y) { mouseX = x; mouseY = y; },
+    handlePointerMove(x,y) {
+      mouseX = x; mouseY = y;
+    },
 
     handleKey(ev) {
       if (currentScreen !== screens.LOGIN || !inputField) return;
       if (ev.key === 'Enter') { login(); }
       else if (ev.key === 'Tab') { ev.preventDefault(); inputField = inputField === 'username' ? 'password' : 'username'; cursorBlink = 0; }
       else if (ev.key === 'Backspace') {
-        if (inputField === 'username') username = username.slice(0, -1);
-        if (inputField === 'password') password = password.slice(0, -1);
-      } else if (ev.key.length === 1) {
+        if (inputField === 'username') username = username.slice(0,-1);
+        if (inputField === 'password') password = password.slice(0,-1);
+      } else if (ev.key.length === 1 && ev.key !== ' ') {
         if (inputField === 'username') username += ev.key;
         if (inputField === 'password') password += ev.key;
       }
     },
 
+    // diagnostic: get current click zones (in CSS px)
     getClickZones() { return clickZones; },
-    
+
+    // force a glitch effect (called when login fails)
     triggerGlitch(strength = 1.0, duration = 30) {
       glitchStrength = Math.min(1, strength);
       glitchTimer = Math.max(glitchTimer, duration);
+      // overlay will read glitchStrength via shared global
       window.__ADAM_GLITCH = { strength: glitchStrength, timer: glitchTimer };
     },
 
-    _internal: { getState: () => ({ currentScreen, username, password, inputField }) }
+    // for overlay to read
+    _internal: { getState: () => ({currentScreen, username, password, inputField}) }
   };
 
+  // local login logic
   function login() {
     if (username === 'qq' && password === 'ww') {
-      successMsg = '> ВХОД УСПЕШНЫЙ'; successTimer = 90;
-      setTimeout(() => { window.location.href = 'terminal.html'; }, 900);
+      successMsg = '> ВХОД УСПЕШНЫЙ';
+      successTimer = 90;
+      // smooth transition
+      setTimeout(() => {
+        // fade out is handled by main app if needed
+        window.location.href = 'terminal.html';
+      }, 900);
     } else {
-      errorMsg = '> ДОСТУП ЗАПРЕЩЁН'; errorTimer = 60; password = '';
+      errorMsg = '> ДОСТУП ЗАПРЕЩЁН';
+      errorTimer = 60;
+      password = '';
+      // brutal glitch
       window.ADAM_UI.triggerGlitch(1.0, 50);
     }
   }
 
+  // expose small keyboard/mouse hooks so users can test without overlay
   document.addEventListener('keydown', (e) => {
+    // if overlay exists it will forward keys — but keep this as fallback
     if (window.__ADAM_OVERLAY_PRESENT) return;
     window.ADAM_UI.handleKey(e);
   });
+
+  // fallback pointer events if overlay not present
   document.addEventListener('pointermove', (e) => {
     if (window.__ADAM_OVERLAY_PRESENT) return;
-    window.ADAM_UI.handlePointerMove(e.clientX, e.clientY);
+    const rect = { left:0, top:0 }; // page coords (we expect full window)
+    window.ADAM_UI.handlePointerMove(e.clientX - rect.left, e.clientY - rect.top);
   });
 })();
