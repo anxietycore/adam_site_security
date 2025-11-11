@@ -19,12 +19,10 @@
     overlay.id = 'crtOverlayIndex';
     Object.assign(overlay.style, {
       position: 'fixed',
-      left: 0, top: 0,
+      left: '0', top: '0',
       width: '100vw', height: '100vh',
       zIndex: '1000',
-      pointerEvents: 'auto',
-      touchAction: 'none',
-      cursor: 'default'
+      pointerEvents: 'auto'
     });
     document.body.appendChild(overlay);
     window.__ADAM_OVERLAY_PRESENT = true;
@@ -41,7 +39,6 @@
         gl_Position = vec4(aPos, 0.0, 1.0);
       }
     `;
-
     const fs = `
       precision mediump float;
       varying vec2 vUV;
@@ -54,7 +51,6 @@
         vec2 uv = vUV * 2.0 - 1.0;
         float r = length(uv);
         vec2 distorted = mix(uv, uv * r, uDist);
-
         float g = uGlitch;
         if (g > 0.01) {
           float band = floor(uv.y * 40.0 + uTime * 50.0);
@@ -62,7 +58,6 @@
           float shift = noise * 0.02 * g;
           distorted.x += shift * (1.0 - smoothstep(0.0, 0.9, abs(uv.y)*1.2));
         }
-
         vec2 finalUV = (distorted + 1.0) * 0.5;
         finalUV.y = 1.0 - finalUV.y;
         vec4 col = texture2D(uTex, clamp(finalUV, 0.0, 1.0));
@@ -86,9 +81,6 @@
     gl.attachShader(prog, compile(vs, gl.VERTEX_SHADER));
     gl.attachShader(prog, compile(fs, gl.FRAGMENT_SHADER));
     gl.linkProgram(prog);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-      console.error('prog link error', gl.getProgramInfoLog(prog));
-    }
     gl.useProgram(prog);
 
     const quad = new Float32Array([
@@ -140,14 +132,25 @@
         gl.bindTexture(gl.TEXTURE_2D, tex);
         try {
           gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
-        } catch (err) {}
+        } catch (err) {
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, src.width, src.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+          const temp = gl.createFramebuffer();
+          gl.bindFramebuffer(gl.FRAMEBUFFER, temp);
+          gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+          const ctx2 = document.createElement('canvas').getContext('2d');
+          ctx2.canvas.width = src.width;
+          ctx2.canvas.height = src.height;
+          ctx2.drawImage(src, 0, 0);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, ctx2.canvas);
+          gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        }
       }
 
       const t = (performance.now() - start) * 0.001;
       gl.uniform1f(uTimeLoc, t);
 
       const gstate = window.__ADAM_GLITCH || { strength: 0, timer: 0 };
-      const gval = (gstate.timer && gstate.timer > 0) ? Math.min(1.0, gstate.strength) : 0.0;
+      const gval = gstate.timer > 0 ? Math.min(1.0, gstate.strength) : 0.0;
       gl.uniform1f(uGlitchLoc, gval);
 
       gl.clear(gl.COLOR_BUFFER_BIT);
@@ -156,32 +159,35 @@
     }
     render();
 
-    // СОБЫТИЯ: точные координаты без getBoundingClientRect
+    // === ИСПРАВЛЕНО: события теперь в CSS px, как ожидает ADAM_UI ===
     function toLocal(evt) {
-      return { x: evt.clientX, y: evt.clientY };
+      const rect = overlay.getBoundingClientRect();
+      return {
+        x: evt.clientX - rect.left,
+        y: evt.clientY - rect.top
+      };
     }
 
-    overlay.addEventListener('mousemove', (e) => {
+    overlay.addEventListener('pointermove', (e) => {
       const p = toLocal(e);
       window.ADAM_UI.handlePointerMove(p.x, p.y);
-      e.preventDefault();
-    }, { passive: true });
+    }, { passive: false });
 
     overlay.addEventListener('pointerdown', (e) => {
       const p = toLocal(e);
       window.ADAM_UI.handlePointer('pointerdown', p.x, p.y);
-      e.preventDefault();
     });
 
     overlay.addEventListener('click', (e) => {
       const p = toLocal(e);
       window.ADAM_UI.handlePointer('click', p.x, p.y);
-      e.preventDefault();
     });
 
     window.addEventListener('keydown', (e) => {
       window.ADAM_UI.handleKey(e);
     });
+
+    window.__ADAM_OVERLAY = { triggerGlitch: (s,d)=>{ window.ADAM_UI.triggerGlitch(s,d);} };
 
     setInterval(() => {
       if (window.__ADAM_GLITCH && window.__ADAM_GLITCH.timer > 0) {
