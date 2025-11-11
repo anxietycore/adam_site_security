@@ -1,14 +1,20 @@
 // index_canvas.js — теперь рисует на offscreen и даёт API window.ADAM_UI
 (() => {
   const FONT_FAMILY = "'Press Start 2P', monospace";
-  const FONT_SIZE_PX = 14;
+  const FONT_SIZE_PX = 12; // <--- МЕНЬШЕ ШРИФТ
   const LINE_HEIGHT = Math.round(FONT_SIZE_PX * 1.5);
   const FIELD_PADDING = 12;
   const DPR = Math.min(window.devicePixelRatio || 1, 1.5);
 
-  // OFFSCREEN canvas — visible canvas removed to avoid duplication
+  // Цветовая палитра
+  const COLOR_PRIMARY = '#00FF88';
+  const COLOR_SECONDARY = '#00AA55';
+  const COLOR_HOVER = '#88FFAA';
+  const COLOR_LOCKED = '#FF5555';
+
+  // OFFSCREEN canvas — not appended to DOM
   const canvas = document.createElement('canvas');
-  canvas.id = 'indexCanvasOff'; // not appended
+  canvas.id = 'indexCanvasOff';
   const ctx = canvas.getContext('2d', { alpha: true });
 
   let vw = 0, vh = 0;
@@ -39,11 +45,11 @@
     '> СИСТЕМА ГОТОВА'
   ];
 
-  // GLITCH state (control for overlay)
+  // GLITCH state
   let glitchStrength = 0;
   let glitchTimer = 0;
 
-  // Noise cache (to keep performance ok)
+  // Noise cache
   let noiseCanvas = document.createElement('canvas');
   let noiseCtx = noiseCanvas.getContext('2d');
 
@@ -67,30 +73,29 @@
     const w = noiseCanvas.width, h = noiseCanvas.height;
     const id = noiseCtx.createImageData(w, h);
     for (let i = 0; i < id.data.length; i += 4) {
-      const v = 60 + Math.floor(Math.random() * 60); // keep darker subtle
+      const v = 60 + Math.floor(Math.random() * 60);
       id.data[i] = v;
       id.data[i+1] = v;
       id.data[i+2] = v;
-      id.data[i+3] = 18; // low alpha
+      id.data[i+3] = 18;
     }
     noiseCtx.putImageData(id, 0, 0);
   }
 
   function drawNoise() {
-    // tile the small noise canvas
     const pat = ctx.createPattern(noiseCanvas, 'repeat');
     ctx.save();
-    ctx.globalAlpha = 0.2; // subtle
+    ctx.globalAlpha = 0.2;
     ctx.fillStyle = pat;
     ctx.fillRect(0, 0, vw, vh);
     ctx.restore();
   }
 
-  function drawText(text, x, y, color = '#9ee99a', opacity = 1) {
+  function drawText(text, x, y, color = COLOR_SECONDARY, opacity = 1) {
     ctx.save();
     ctx.globalAlpha = opacity;
     ctx.font = `${FONT_SIZE_PX}px ${FONT_FAMILY}`;
-    ctx.fillStyle = color;
+    ctx.fillStyle = color || COLOR_SECONDARY;
     ctx.textBaseline = 'top';
     text.split('\n').forEach((line, i) => ctx.fillText(line, x, y + i * LINE_HEIGHT));
     ctx.restore();
@@ -115,12 +120,6 @@
     ctx_.closePath();
   }
 
-  // Smooth alpha helpers
-  function lerp(a,b,t){return a + (b-a)*t;}
-
-  // Drawers
-  let bootFadeProgress = 0; // smooth appear of boot lines
-
   function drawStart() {
     ctx.clearRect(0, 0, vw, vh);
     drawNoise();
@@ -128,31 +127,47 @@
     const logoW = measure(logo.split('\n')[0]);
     const logoX = (vw - logoW) / 2;
     const logoY = vh * 0.35;
-    drawText(logo, logoX, logoY, '#9ee99a');
+    drawText(logo, logoX, logoY, COLOR_PRIMARY);
 
     const status = '> СИСТЕМА A.D.A.M. ГОТОВА К ЗАПУСКУ';
     const statusY = logoY + 90;
-    drawText(status, (vw - measure(status)) / 2, statusY, '#9ee99a');
+    drawText(status, (vw - measure(status)) / 2, statusY, COLOR_PRIMARY);
 
     const btnText = 'ЗАПУСТИТЬ СИСТЕМУ';
     const btnW = measure(btnText) + 60;
-    const btnH = 45;
+    const btnH = 40; // <-- МЕНЬШЕ ВЫСОТА
     const btnX = (vw - btnW) / 2;
-    const btnY = statusY + 60;
+    const btnY = statusY + 50; // <-- БЛИЖЕ
     const hovered = inRect(mouseX, mouseY, btnX, btnY, btnW, btnH);
 
+    // Установка курсора через API
+    if (window.ADAM_UI && window.ADAM_UI.setCursor) {
+      window.ADAM_UI.setCursor(hovered ? 'pointer' : 'default');
+    }
+
+    // Рисуем кнопку с градиентом
     ctx.save();
-    ctx.fillStyle = hovered ? 'rgba(0, 160, 90, 0.07)' : 'rgba(0,120,60,0.04)';
+    const gradient = ctx.createLinearGradient(btnX, btnY, btnX, btnY + btnH);
+    if (hovered) {
+      gradient.addColorStop(0, 'rgba(0,255,136,0.15)');
+      gradient.addColorStop(1, 'rgba(0,170,85,0.25)');
+      ctx.shadowColor = COLOR_HOVER;
+      ctx.shadowBlur = 8;
+    } else {
+      gradient.addColorStop(0, 'rgba(0,170,85,0.05)');
+      gradient.addColorStop(1, 'rgba(0,100,50,0.1)');
+    }
+    ctx.fillStyle = gradient;
     roundRect(ctx, btnX, btnY, btnW, btnH, 6);
     ctx.fill();
 
-    ctx.strokeStyle = hovered ? '#b9ffcc' : '#9ee99a';
-    ctx.lineWidth = hovered ? 3 : 2;
+    ctx.strokeStyle = hovered ? COLOR_PRIMARY : COLOR_SECONDARY;
+    ctx.lineWidth = hovered ? 2 : 1;
     roundRect(ctx, btnX, btnY, btnW, btnH, 6);
     ctx.stroke();
     ctx.restore();
 
-    drawText(btnText, btnX + 30, btnY + 12, hovered ? '#b9ffcc' : '#9ee99a');
+    drawText(btnText, btnX + 30, btnY + 10, hovered ? COLOR_HOVER : COLOR_PRIMARY);
 
     clickZones = { startBtn: { x: btnX, y: btnY, w: btnW, h: btnH } };
   }
@@ -164,9 +179,8 @@
     const logoW = measure(logo.split('\n')[0]);
     const logoX = (vw - logoW) / 2;
     const logoY = vh * 0.3;
-    drawText(logo, logoX, logoY, '#9ee99a');
+    drawText(logo, logoX, logoY, COLOR_PRIMARY);
 
-    // progress bootIndex smoothly
     bootTimer++;
     if (bootIndex < bootLines.length - 1 && bootTimer % 40 === 0) {
       bootIndex++;
@@ -177,14 +191,12 @@
     const contentY = logoY + 80;
     bootLines.forEach((line, i) => {
       if (i <= bootIndex) {
-        // fade latest line smoothly
         const opacity = (i === bootIndex) ? bootFadeProgress : 1;
-        drawText(line, logoX - 30, contentY + i * (LINE_HEIGHT + 5), '#9ee99a', opacity);
+        drawText(line, logoX - 30, contentY + i * (LINE_HEIGHT + 5), COLOR_PRIMARY, opacity);
       }
     });
 
     if (bootIndex >= bootLines.length - 1 && bootTimer > 120) {
-      // smooth transition to login
       setTimeout(() => {
         currentScreen = screens.LOGIN;
         inputField = 'username';
@@ -198,24 +210,34 @@
 
     const centerY = vh * 0.45;
     const fieldW = Math.min(420, vw - 100);
-    const fieldH = 42;
+    const fieldH = 38; // <-- МЕНЬШЕ ВЫСОТА
     const labelDy = -FIELD_PADDING - 5;
 
     const title = 'ДОСТУП К ТЕРМИНАЛУ';
-    drawText(title, (vw - measure(title)) / 2, centerY - 120, '#9ee99a');
+    drawText(title, (vw - measure(title)) / 2, centerY - 120, COLOR_PRIMARY);
 
-    // USERNAME
+    // USERNAME field
     const userX = (vw - fieldW) / 2;
     const userY = centerY - 30;
-    drawText('ИМЯ ПОЛЬЗОВАТЕЛЯ:', userX, userY + labelDy, '#9ee99a', 0.9);
+    drawText('ИМЯ ПОЛЬЗОВАТЕЛЯ:', userX, userY + labelDy, COLOR_SECONDARY, 0.9);
 
     ctx.save();
-    ctx.fillStyle = inputField === 'username' ? 'rgba(0,160,90,0.06)' : 'rgba(0,120,60,0.04)';
+    const userGradient = ctx.createLinearGradient(userX, userY, userX, userY + fieldH);
+    if (inputField === 'username') {
+      userGradient.addColorStop(0, 'rgba(0,255,136,0.1)');
+      userGradient.addColorStop(1, 'rgba(0,170,85,0.15)');
+      ctx.shadowColor = COLOR_PRIMARY;
+      ctx.shadowBlur = 6;
+    } else {
+      userGradient.addColorStop(0, 'rgba(0,170,85,0.05)');
+      userGradient.addColorStop(1, 'rgba(0,100,50,0.08)');
+    }
+    ctx.fillStyle = userGradient;
     roundRect(ctx, userX, userY, fieldW, fieldH, 6);
     ctx.fill();
 
-    ctx.strokeStyle = inputField === 'username' ? '#b9ffcc' : '#9ee99a';
-    ctx.lineWidth = inputField === 'username' ? 3 : 2;
+    ctx.strokeStyle = inputField === 'username' ? COLOR_PRIMARY : COLOR_SECONDARY;
+    ctx.lineWidth = inputField === 'username' ? 2 : 1;
     roundRect(ctx, userX, userY, fieldW, fieldH, 6);
     ctx.stroke();
     ctx.restore();
@@ -223,18 +245,28 @@
     const userText = username + (cursorBlink % 30 < 15 && inputField === 'username' ? '█' : '');
     drawText(userText, userX + FIELD_PADDING, userY + 10, '#f7f7f7');
 
-    // PASSWORD
+    // PASSWORD field
     const passX = (vw - fieldW) / 2;
     const passY = centerY + 40;
-    drawText('ПАРОЛЬ:', passX, passY + labelDy, '#9ee99a', 0.9);
+    drawText('ПАРОЛЬ:', passX, passY + labelDy, COLOR_SECONDARY, 0.9);
 
     ctx.save();
-    ctx.fillStyle = inputField === 'password' ? 'rgba(0,160,90,0.06)' : 'rgba(0,120,60,0.04)';
+    const passGradient = ctx.createLinearGradient(passX, passY, passX, passY + fieldH);
+    if (inputField === 'password') {
+      passGradient.addColorStop(0, 'rgba(0,255,136,0.1)');
+      passGradient.addColorStop(1, 'rgba(0,170,85,0.15)');
+      ctx.shadowColor = COLOR_PRIMARY;
+      ctx.shadowBlur = 6;
+    } else {
+      passGradient.addColorStop(0, 'rgba(0,170,85,0.05)');
+      passGradient.addColorStop(1, 'rgba(0,100,50,0.08)');
+    }
+    ctx.fillStyle = passGradient;
     roundRect(ctx, passX, passY, fieldW, fieldH, 6);
     ctx.fill();
 
-    ctx.strokeStyle = inputField === 'password' ? '#b9ffcc' : '#9ee99a';
-    ctx.lineWidth = inputField === 'password' ? 3 : 2;
+    ctx.strokeStyle = inputField === 'password' ? COLOR_PRIMARY : COLOR_SECONDARY;
+    ctx.lineWidth = inputField === 'password' ? 2 : 1;
     roundRect(ctx, passX, passY, fieldW, fieldH, 6);
     ctx.stroke();
     ctx.restore();
@@ -243,30 +275,45 @@
     const passText = masked + (cursorBlink % 30 < 15 && inputField === 'password' ? '█' : '');
     drawText(passText, passX + FIELD_PADDING, passY + 10, '#f7f7f7');
 
-    // BUTTON
+    // AUTH BUTTON
     const btnText = 'АУТЕНТИФИКАЦИЯ';
     const btnW = measure(btnText) + 60;
-    const btnH = 38;
+    const btnH = 36; // <-- МЕНЬШЕ ВЫСОТА
     const btnX = (vw - btnW) / 2;
     const btnY = centerY + 100;
     const hovered = inRect(mouseX, mouseY, btnX, btnY, btnW, btnH);
 
+    // Установка курсора
+    if (window.ADAM_UI && window.ADAM_UI.setCursor) {
+      const anyHover = hovered || inputField;
+      window.ADAM_UI.setCursor(anyHover ? 'pointer' : 'default');
+    }
+
     ctx.save();
-    ctx.fillStyle = hovered ? 'rgba(0,160,90,0.06)' : 'rgba(0,120,60,0.04)';
+    const btnGradient = ctx.createLinearGradient(btnX, btnY, btnX, btnY + btnH);
+    if (hovered) {
+      btnGradient.addColorStop(0, 'rgba(0,255,136,0.15)');
+      btnGradient.addColorStop(1, 'rgba(0,170,85,0.25)');
+      ctx.shadowColor = COLOR_HOVER;
+      ctx.shadowBlur = 8;
+    } else {
+      btnGradient.addColorStop(0, 'rgba(0,170,85,0.05)');
+      btnGradient.addColorStop(1, 'rgba(0,100,50,0.1)');
+    }
+    ctx.fillStyle = btnGradient;
     roundRect(ctx, btnX, btnY, btnW, btnH, 6);
     ctx.fill();
 
-    ctx.strokeStyle = hovered ? '#b9ffcc' : '#9ee99a';
-    ctx.lineWidth = hovered ? 3 : 2;
+    ctx.strokeStyle = hovered ? COLOR_PRIMARY : COLOR_SECONDARY;
+    ctx.lineWidth = hovered ? 2 : 1;
     roundRect(ctx, btnX, btnY, btnW, btnH, 6);
     ctx.stroke();
     ctx.restore();
 
-    drawText(btnText, btnX + 30, btnY + 10, hovered ? '#b9ffcc' : '#9ee99a');
+    drawText(btnText, btnX + 30, btnY + 10, hovered ? COLOR_HOVER : COLOR_PRIMARY);
 
     // MESSAGES
     if (errorMsg && errorTimer > 0) {
-      // flashing red with slight shake requested by you - set jitter
       const jitter = (errorTimer % 6 < 3) ? Math.random()*4-2 : 0;
       ctx.save();
       ctx.translate(jitter,0);
@@ -275,11 +322,10 @@
       errorTimer--;
     }
     if (successMsg && successTimer > 0) {
-      drawText(successMsg, (vw - measure(successMsg)) / 2, centerY + 160, '#9ee99a');
+      drawText(successMsg, (vw - measure(successMsg)) / 2, centerY + 160, COLOR_PRIMARY);
       successTimer--;
     }
 
-    // CLICK ZONES
     clickZones = {
       userField: { x: userX, y: userY, w: fieldW, h: fieldH },
       passField: { x: passX, y: passY, w: fieldW, h: fieldH },
@@ -299,17 +345,13 @@
   }
   render();
 
-  // Public API for overlay:
+  // Public API
   window.ADAM_UI = {
-    // returns the offscreen canvas (overlay will sample from it)
     getSourceCanvas() { return canvas; },
-
-    // called by overlay when mouse moves or clicks (coords in CSS px)
+    
     handlePointer(type, x, y) {
-      // update mouse for hover etc.
       mouseX = x; mouseY = y;
       if (type === 'click' || type === 'pointerdown') {
-        // immediate focus on pointerdown
         if (currentScreen === screens.START && clickZones.startBtn && inRect(x,y,clickZones.startBtn.x,clickZones.startBtn.y,clickZones.startBtn.w,clickZones.startBtn.h)) {
           currentScreen = screens.BOOT;
           bootTimer = 0; bootIndex = -1;
@@ -350,51 +392,40 @@
       }
     },
 
-    // diagnostic: get current click zones (in CSS px)
     getClickZones() { return clickZones; },
-
-    // force a glitch effect (called when login fails)
-    triggerGlitch(strength = 1.0, duration = 30) {
-      glitchStrength = Math.min(1, strength);
-      glitchTimer = Math.max(glitchTimer, duration);
-      // overlay will read glitchStrength via shared global
-      window.__ADAM_GLITCH = { strength: glitchStrength, timer: glitchTimer };
-    },
-
-    // for overlay to read
-    _internal: { getState: () => ({currentScreen, username, password, inputField}) }
+    
+    _internal: { getState: () => ({currentScreen, username, password, inputField}) },
+    
+    // API для смены курсора
+    setCursor(cursor) {
+      const overlay = document.getElementById('crtOverlayIndex');
+      if (overlay) overlay.style.cursor = cursor;
+    }
   };
 
-  // local login logic
   function login() {
     if (username === 'qq' && password === 'ww') {
       successMsg = '> ВХОД УСПЕШНЫЙ';
       successTimer = 90;
-      // smooth transition
       setTimeout(() => {
-        // fade out is handled by main app if needed
         window.location.href = 'terminal.html';
       }, 900);
     } else {
       errorMsg = '> ДОСТУП ЗАПРЕЩЁН';
       errorTimer = 60;
       password = '';
-      // brutal glitch
       window.ADAM_UI.triggerGlitch(1.0, 50);
     }
   }
 
-  // expose small keyboard/mouse hooks so users can test without overlay
   document.addEventListener('keydown', (e) => {
-    // if overlay exists it will forward keys — but keep this as fallback
     if (window.__ADAM_OVERLAY_PRESENT) return;
     window.ADAM_UI.handleKey(e);
   });
 
-  // fallback pointer events if overlay not present
   document.addEventListener('pointermove', (e) => {
     if (window.__ADAM_OVERLAY_PRESENT) return;
-    const rect = { left:0, top:0 }; // page coords (we expect full window)
+    const rect = { left:0, top:0 };
     window.ADAM_UI.handlePointerMove(e.clientX - rect.left, e.clientY - rect.top);
   });
 })();
