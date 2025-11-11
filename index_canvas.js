@@ -1,7 +1,7 @@
 // index_canvas.js — теперь рисует на offscreen и даёт API window.ADAM_UI
 (() => {
   const FONT_FAMILY = "'Press Start 2P', monospace";
-  const FONT_SIZE_PX = 14;
+  const FONT_SIZE_PX = 13; // чуть меньше, как просил
   const LINE_HEIGHT = Math.round(FONT_SIZE_PX * 1.5);
   const FIELD_PADDING = 12;
   const DPR = Math.min(window.devicePixelRatio || 1, 1.5);
@@ -43,9 +43,10 @@
   let glitchStrength = 0;
   let glitchTimer = 0;
 
-  // Noise cache (to keep performance ok)
+  // Noise cache (to keep performance ok) — small canvas tiled
   let noiseCanvas = document.createElement('canvas');
   let noiseCtx = noiseCanvas.getContext('2d');
+  let noiseOffsetX = 0, noiseOffsetY = 0;
 
   function resize() {
     vw = window.innerWidth;
@@ -56,8 +57,8 @@
     canvas.style.height = vh + 'px';
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
 
-    noiseCanvas.width = Math.max(256, Math.floor(vw/2));
-    noiseCanvas.height = Math.max(256, Math.floor(vh/2));
+    noiseCanvas.width = Math.max(256, Math.floor(vw / 2));
+    noiseCanvas.height = Math.max(256, Math.floor(vh / 2));
     generateNoise();
   }
   window.addEventListener('resize', resize);
@@ -67,22 +68,26 @@
     const w = noiseCanvas.width, h = noiseCanvas.height;
     const id = noiseCtx.createImageData(w, h);
     for (let i = 0; i < id.data.length; i += 4) {
-      const v = 60 + Math.floor(Math.random() * 60); // keep darker subtle
+      const v = 40 + Math.floor(Math.random() * 40); // темнее
       id.data[i] = v;
       id.data[i+1] = v;
       id.data[i+2] = v;
-      id.data[i+3] = 18; // low alpha
+      id.data[i+3] = 28; // немного прозрачнее
     }
     noiseCtx.putImageData(id, 0, 0);
   }
 
-  function drawNoise() {
-    // tile the small noise canvas
-    const pat = ctx.createPattern(noiseCanvas, 'repeat');
+  function drawNoise(t) {
+    // движущийся шум — с небольшой параллаксной скоростью
+    noiseOffsetX = (noiseOffsetX + 0.3) % noiseCanvas.width;
+    noiseOffsetY = (noiseOffsetY + 0.12) % noiseCanvas.height;
     ctx.save();
-    ctx.globalAlpha = 0.2; // subtle
-    ctx.fillStyle = pat;
-    ctx.fillRect(0, 0, vw, vh);
+    ctx.globalAlpha = 0.14; // тоньше
+    for (let x = -noiseCanvas.width; x < vw + noiseCanvas.width; x += noiseCanvas.width) {
+      for (let y = -noiseCanvas.height; y < vh + noiseCanvas.height; y += noiseCanvas.height) {
+        ctx.drawImage(noiseCanvas, x + Math.floor(noiseOffsetX), y + Math.floor(noiseOffsetY));
+      }
+    }
     ctx.restore();
   }
 
@@ -135,24 +140,24 @@
     drawText(status, (vw - measure(status)) / 2, statusY, '#9ee99a');
 
     const btnText = 'ЗАПУСТИТЬ СИСТЕМУ';
-    const btnW = measure(btnText) + 60;
-    const btnH = 45;
+    const btnW = measure(btnText) + 56;
+    const btnH = 44;
     const btnX = (vw - btnW) / 2;
     const btnY = statusY + 60;
     const hovered = inRect(mouseX, mouseY, btnX, btnY, btnW, btnH);
 
     ctx.save();
-    ctx.fillStyle = hovered ? 'rgba(0, 160, 90, 0.07)' : 'rgba(0,120,60,0.04)';
+    ctx.fillStyle = hovered ? 'rgba(0,160,90,0.07)' : 'rgba(0,120,60,0.035)';
     roundRect(ctx, btnX, btnY, btnW, btnH, 6);
     ctx.fill();
 
-    ctx.strokeStyle = hovered ? '#b9ffcc' : '#9ee99a';
+    ctx.strokeStyle = hovered ? '#cfffe0' : '#9ee99a';
     ctx.lineWidth = hovered ? 3 : 2;
     roundRect(ctx, btnX, btnY, btnW, btnH, 6);
     ctx.stroke();
     ctx.restore();
 
-    drawText(btnText, btnX + 30, btnY + 12, hovered ? '#b9ffcc' : '#9ee99a');
+    drawText(btnText, btnX + 28, btnY + 10, hovered ? '#cfffe0' : '#9ee99a');
 
     clickZones = { startBtn: { x: btnX, y: btnY, w: btnW, h: btnH } };
   }
@@ -172,19 +177,17 @@
       bootIndex++;
       bootFadeProgress = 0;
     }
-    bootFadeProgress = Math.min(1, bootFadeProgress + 0.05);
+    bootFadeProgress = Math.min(1, bootFadeProgress + 0.06);
 
     const contentY = logoY + 80;
     bootLines.forEach((line, i) => {
       if (i <= bootIndex) {
-        // fade latest line smoothly
         const opacity = (i === bootIndex) ? bootFadeProgress : 1;
-        drawText(line, logoX - 30, contentY + i * (LINE_HEIGHT + 5), '#9ee99a', opacity);
+        drawText(line, logoX - 30, contentY + i * (LINE_HEIGHT + 6), '#9ee99a', opacity);
       }
     });
 
     if (bootIndex >= bootLines.length - 1 && bootTimer > 120) {
-      // smooth transition to login
       setTimeout(() => {
         currentScreen = screens.LOGIN;
         inputField = 'username';
@@ -210,11 +213,11 @@
     drawText('ИМЯ ПОЛЬЗОВАТЕЛЯ:', userX, userY + labelDy, '#9ee99a', 0.9);
 
     ctx.save();
-    ctx.fillStyle = inputField === 'username' ? 'rgba(0,160,90,0.06)' : 'rgba(0,120,60,0.04)';
+    ctx.fillStyle = inputField === 'username' ? 'rgba(0,160,90,0.06)' : 'rgba(0,120,60,0.035)';
     roundRect(ctx, userX, userY, fieldW, fieldH, 6);
     ctx.fill();
 
-    ctx.strokeStyle = inputField === 'username' ? '#b9ffcc' : '#9ee99a';
+    ctx.strokeStyle = inputField === 'username' ? '#cfffe0' : '#9ee99a';
     ctx.lineWidth = inputField === 'username' ? 3 : 2;
     roundRect(ctx, userX, userY, fieldW, fieldH, 6);
     ctx.stroke();
@@ -229,11 +232,11 @@
     drawText('ПАРОЛЬ:', passX, passY + labelDy, '#9ee99a', 0.9);
 
     ctx.save();
-    ctx.fillStyle = inputField === 'password' ? 'rgba(0,160,90,0.06)' : 'rgba(0,120,60,0.04)';
+    ctx.fillStyle = inputField === 'password' ? 'rgba(0,160,90,0.06)' : 'rgba(0,120,60,0.035)';
     roundRect(ctx, passX, passY, fieldW, fieldH, 6);
     ctx.fill();
 
-    ctx.strokeStyle = inputField === 'password' ? '#b9ffcc' : '#9ee99a';
+    ctx.strokeStyle = inputField === 'password' ? '#cfffe0' : '#9ee99a';
     ctx.lineWidth = inputField === 'password' ? 3 : 2;
     roundRect(ctx, passX, passY, fieldW, fieldH, 6);
     ctx.stroke();
@@ -245,31 +248,31 @@
 
     // BUTTON
     const btnText = 'АУТЕНТИФИКАЦИЯ';
-    const btnW = measure(btnText) + 60;
+    const btnW = measure(btnText) + 56;
     const btnH = 38;
     const btnX = (vw - btnW) / 2;
     const btnY = centerY + 100;
     const hovered = inRect(mouseX, mouseY, btnX, btnY, btnW, btnH);
 
     ctx.save();
-    ctx.fillStyle = hovered ? 'rgba(0,160,90,0.06)' : 'rgba(0,120,60,0.04)';
+    ctx.fillStyle = hovered ? 'rgba(0,160,90,0.06)' : 'rgba(0,120,60,0.035)';
     roundRect(ctx, btnX, btnY, btnW, btnH, 6);
     ctx.fill();
 
-    ctx.strokeStyle = hovered ? '#b9ffcc' : '#9ee99a';
+    ctx.strokeStyle = hovered ? '#cfffe0' : '#9ee99a';
     ctx.lineWidth = hovered ? 3 : 2;
     roundRect(ctx, btnX, btnY, btnW, btnH, 6);
     ctx.stroke();
     ctx.restore();
 
-    drawText(btnText, btnX + 30, btnY + 10, hovered ? '#b9ffcc' : '#9ee99a');
+    drawText(btnText, btnX + 28, btnY + 10, hovered ? '#cfffe0' : '#9ee99a');
 
     // MESSAGES
     if (errorMsg && errorTimer > 0) {
-      // flashing red with slight shake requested by you - set jitter
-      const jitter = (errorTimer % 6 < 3) ? Math.random()*4-2 : 0;
+      // flashing red with strong jitter requested by you
+      const jitter = (errorTimer % 6 < 3) ? Math.random()*8-4 : 0;
       ctx.save();
-      ctx.translate(jitter,0);
+      ctx.translate(jitter,Math.random()*2-1);
       drawText(errorMsg, (vw - measure(errorMsg)) / 2, centerY + 160, '#ff6b6b');
       ctx.restore();
       errorTimer--;
@@ -357,7 +360,6 @@
     triggerGlitch(strength = 1.0, duration = 30) {
       glitchStrength = Math.min(1, strength);
       glitchTimer = Math.max(glitchTimer, duration);
-      // overlay will read glitchStrength via shared global
       window.__ADAM_GLITCH = { strength: glitchStrength, timer: glitchTimer };
     },
 
@@ -370,9 +372,7 @@
     if (username === 'qq' && password === 'ww') {
       successMsg = '> ВХОД УСПЕШНЫЙ';
       successTimer = 90;
-      // smooth transition
       setTimeout(() => {
-        // fade out is handled by main app if needed
         window.location.href = 'terminal.html';
       }, 900);
     } else {
@@ -380,21 +380,18 @@
       errorTimer = 60;
       password = '';
       // brutal glitch
-      window.ADAM_UI.triggerGlitch(1.0, 50);
+      window.ADAM_UI.triggerGlitch(1.0, 70);
     }
   }
 
   // expose small keyboard/mouse hooks so users can test without overlay
   document.addEventListener('keydown', (e) => {
-    // if overlay exists it will forward keys — but keep this as fallback
     if (window.__ADAM_OVERLAY_PRESENT) return;
     window.ADAM_UI.handleKey(e);
   });
 
-  // fallback pointer events if overlay not present
   document.addEventListener('pointermove', (e) => {
     if (window.__ADAM_OVERLAY_PRESENT) return;
-    const rect = { left:0, top:0 }; // page coords (we expect full window)
-    window.ADAM_UI.handlePointerMove(e.clientX - rect.left, e.clientY - rect.top);
+    window.ADAM_UI.handlePointerMove(e.clientX, e.clientY);
   });
 })();
