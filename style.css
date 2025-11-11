@@ -1,166 +1,261 @@
-@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
-
 * {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
 }
 
 html, body {
-  height: 100%;
-  overflow: hidden;
+    height: 100%;
 }
 
 body {
-  background: #000;
-  color: #00FF41;
-  font-family: 'Press Start 2P', monospace;
-  cursor: default;
-  position: relative;
+    background-color: #0a0a0a;
+    color: #00FF41;
+    font-family: 'Courier New', monospace;
+    overflow: hidden;
+    cursor: default;
+    position: relative;
 }
 
-/* WebGL фон */
+/* Canvas background */
 #shader-canvas {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 0;
-  pointer-events: none;
-  display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0; /* фон */
+    display: block;
+    pointer-events: none; /* не мешает кликам по интерфейсу */
 }
 
-/* Шум-эффект */
-#glassFX {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  z-index: 1;
-}
-
-/* Главный canvas для index.html */
-#indexCanvas {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 50;
-  pointer-events: auto;
-}
-
-/* Canvas для терминала */
-#terminalCanvas {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 50;
-  pointer-events: auto;
-}
-
-/* Изгиб экрана (главная) */
-#crtOverlayIndex {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 1000;
-  pointer-events: auto;
-}
-
-/* Изгиб экрана (терминал) */
-#crtOverlayCanvas {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 1000;
-  pointer-events: none;
-}
-
-/* Сканлайн-эффект */
-.scanline {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(
-    to bottom,
-    rgba(0, 0, 0, 0) 50%,
-    rgba(0, 255, 65, 0.03) 50%
-  );
-  background-size: 100% 4px;
-  pointer-events: none;
-  z-index: 100;
-}
-
-/* Скрытый класс */
-.hidden {
-  display: none !important;
-}
-
-/* Стили для terminal.html */
+/* Слой контента должен быть выше фона */
+.scanline,
+#start-screen,
+#boot-screen,
+#login-screen,
 #terminal {
-  padding: 20px;
-  height: 100vh;
-  overflow-y: auto;
-  background: rgba(0, 0, 0, 0.9);
-  opacity: 0;
-  pointer-events: auto;
+    position: relative;
+    z-index: 10;
+}
+
+
+.scanline {
+    /* если нужны scanline эффекты — можно добавить */
+}
+
+/* Экран запуска */
+#start-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.9); /* чуть прозрачный, чтобы фон видно было */
+    z-index: 20;
+}
+
+.start-message {
+    text-align: center;
+}
+
+#start-btn {
+    background: black;
+    border: 1px solid #00FF41;
+    color: #00FF41;
+    padding: 15px 30px;
+    margin-top: 30px;
+    cursor: pointer;
+    font-family: 'Courier New', monospace;
+    text-transform: uppercase;
+    font-size: 16px;
+}
+
+#start-btn:hover {
+    background: #00FF41;
+    color: black;
+}
+
+/* Экран загрузки */
+#boot-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.9);
+    z-index: 10;
+}
+
+.boot-message {
+    text-align: left;
+}
+
+.logo pre {
+    font-size: 12px;
+    margin-bottom: 30px;
+    text-align: center;
+}
+
+/* Скрываем текст загрузки изначально и делаем плавное появление */
+#boot-screen .boot-text p {
+    opacity: 0;
+    margin: 10px 0;
+    transition: opacity 0.5s ease-in-out;
+}
+
+/* Экран логина */
+#login-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.9);
+    z-index: 5;
+}
+
+.login-form {
+    text-align: center;
+    border: 1px solid #00FF41;
+    padding: 30px;
+    background: rgba(0, 0, 0, 0.9);
+}
+
+.login-prompt {
+    font-size: 18px;
+    margin-bottom: 20px;
+    text-transform: uppercase;
+}
+
+.input-group {
+    margin: 15px 0;
+    text-align: left;
+}
+
+.input-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-size: 14px;
+}
+
+.input-group input {
+    width: 250px;
+    background: black;
+    border: 1px solid #00FF41;
+    color: #00FF41;
+    padding: 8px;
+    font-family: 'Courier New', monospace;
+    outline: none;
+}
+
+.input-group input:focus {
+    border-color: #00FF41;
+    box-shadow: 0 0 10px #00FF41;
+}
+
+#login-btn {
+    background: black;
+    border: 1px solid #00FF41;
+    color: #00FF41;
+    padding: 10px 20px;
+    margin-top: 15px;
+    cursor: pointer;
+    font-family: 'Courier New', monospace;
+    text-transform: uppercase;
+}
+
+#login-btn:hover {
+    background: #00FF41;
+    color: black;
+}
+
+.error {
+    color: #ff0000;
+    margin-top: 10px;
+    font-size: 14px;
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* Стили терминала (взяты из оригинала) */
+#terminal {
+    padding: 20px;
+    height: 100vh;
+    overflow-y: auto;
+    background: rgba(0, 0, 0, 0.9); /* фон обеспечивает шейдер */
 }
 
 .output {
-  margin: 5px 0;
-  white-space: pre-wrap;
-  line-height: 1.4;
+    margin: 5px 0;
+    white-space: pre-wrap;
+    line-height: 1.4;
 }
 
 .command {
-  color: #FFFFFF;
-  margin: 5px 0;
-  line-height: 1.4;
+    color: #FFFFFF;
+    margin: 5px 0;
+    line-height: 1.4;
 }
 
 .input-line {
-  display: flex;
-  align-items: center;
-  margin: 10px 0;
+    display: flex;
+    align-items: center;
+    margin: 10px 0;
 }
 
 .prompt {
-  color: #00FF41;
+    color: #00FF41;
 }
 
 .cmd {
-  color: #FFFFFF;
+    color: #FFFFFF;
 }
 
 .cursor {
-  animation: blink 1s step-end infinite;
-  background-color: #00FF41;
-  margin-left: 2px;
+    animation: blink 1s step-end infinite;
+    background-color: #00FF41;
+    margin-left: 2px;
 }
 
 @keyframes blink {
-  50% { opacity: 0; }
+    50% { opacity: 0; }
 }
 
-/* Убедимся, что изгиб работает правильно */
-#crtOverlayIndex, #crtOverlayCanvas {
-  z-index: 1000;
-  pointer-events: none;
+#glassFX {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    pointer-events: none;
+    z-index: 5000; /* чуть ниже абсолютного топа */
+    mix-blend-mode: screen;
 }
 
-/* Для главной: pointer-events: auto на overlay */
-#crtOverlayIndex {
-  pointer-events: auto;
+body > canvas#shader-canvas {
+    z-index: 0 !important;
+}
+
+body > canvas#glassFX {
+    z-index: 1 !important;
+}
+
+#start-screen,
+#boot-screen,
+#login-screen,
+#terminal {
+    position: relative;
+    z-index: 2 !important;
 }
