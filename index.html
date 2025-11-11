@@ -3,10 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>A.D.A.M. // ТЕРМИНАЛ12</title>
+  <title>A.D.A.M. // ТЕРМИНАЛ</title>
   <link rel="stylesheet" href="style.css">
   <style>
-    /* минимальные стили чтобы scanline был над оверлеем если нужно */
     .scanline {
       position: fixed;
       inset: 0;
@@ -22,8 +21,6 @@
   </style>
 </head>
 <body>
-  <!-- Невидимый (логический) canvas рисует весь интерфейс и даёт API -->
-  <!-- НЕ подключаем index_canvas.js раньше оверлея — порядок важен -->
   <script src="index_canvas.js"></script>
   <script src="crt_overlay_index_only.js"></script>
   <div class="scanline"></div>
