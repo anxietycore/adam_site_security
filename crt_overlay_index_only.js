@@ -1,27 +1,22 @@
-// crt_overlay_index_only.js — overlay: искажение, шум, и ретрансляция событий на indexCanvas
+// crt_overlay_index_only.js — overlay that samples offscreen index canvas and handles interaction
 (() => {
   const DPR = Math.min(window.devicePixelRatio || 1, 1.5);
-  const DISTORTION = 0.32;
+  const DISTORTION = 0.34;
 
-  // ждём indexCanvas
+  // wait for ADAM_UI to be ready
   let attempts = 0;
   const checkInterval = setInterval(() => {
-    const sourceCanvas = document.getElementById('indexCanvas');
-    if (sourceCanvas) {
+    if (window.ADAM_UI && typeof window.ADAM_UI.getSourceCanvas === 'function') {
       clearInterval(checkInterval);
-      initOverlay(sourceCanvas);
-    } else if (++attempts > 80) {
+      initOverlay(window.ADAM_UI.getSourceCanvas());
+    } else if (++attempts > 60) {
       clearInterval(checkInterval);
-      console.warn('indexCanvas not found after 80 attempts');
+      console.warn('ADAM_UI not ready for overlay');
     }
   }, 80);
 
   function initOverlay(sourceCanvas) {
-    // make sure source canvas is present but invisible
-    sourceCanvas.style.opacity = '0';        // скрываем визуально
-    sourceCanvas.style.pointerEvents = 'none';
-    sourceCanvas.style.visibility = 'hidden'; // keep layout but invisible
-
+    // create visible canvas
     const overlay = document.createElement('canvas');
     overlay.id = 'crtOverlayIndex';
     Object.assign(overlay.style, {
@@ -29,17 +24,15 @@
       left: '0', top: '0',
       width: '100vw', height: '100vh',
       zIndex: '1000',
-      pointerEvents: 'auto' // overlay WILL receive events
+      pointerEvents: 'auto' // overlay captures events
     });
     document.body.appendChild(overlay);
+    window.__ADAM_OVERLAY_PRESENT = true;
 
     const gl = overlay.getContext('webgl', { antialias: false });
-    if (!gl) {
-      console.error('WebGL not available for overlay');
-      return;
-    }
+    if (!gl) { console.warn('WebGL not available'); return; }
 
-    // VERTEX
+    // vertex shader
     const vs = `
       attribute vec2 aPos;
       attribute vec2 aUV;
@@ -49,42 +42,38 @@
         gl_Position = vec4(aPos, 0.0, 1.0);
       }
     `;
-
-    // FRAGMENT with moving noise and brightness damping
+    // fragment shader: distortion + simple horizontal slice glitch using uniform
     const fs = `
       precision mediump float;
       varying vec2 vUV;
       uniform sampler2D uTex;
       uniform float uDist;
       uniform float uTime;
-      float rand(vec2 co){return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453123);}
+      uniform float uGlitch; // 0..1
+      float rand(float x) { return fract(sin(x)*43758.5453); }
       void main() {
-        // remap to [-1,1]
         vec2 uv = vUV * 2.0 - 1.0;
         float r = length(uv);
         vec2 distorted = mix(uv, uv * r, uDist);
+
+        // glitch: shift some horizontal bands randomly
+        float g = uGlitch;
+        if (g > 0.01) {
+          float band = floor(uv.y * 40.0 + uTime * 50.0);
+          float noise = rand(band) * 2.0 - 1.0;
+          float shift = noise * 0.02 * g;
+          distorted.x += shift * (1.0 - smoothstep(0.0, 0.9, abs(uv.y)*1.2));
+        }
+
         vec2 finalUV = (distorted + 1.0) * 0.5;
         finalUV.y = 1.0 - finalUV.y;
-        vec4 base = texture2D(uTex, clamp(finalUV, 0.0, 1.0));
 
-        // moving noise: small high-frequency flicker
-        float n = rand(finalUV * 200.0 + vec2(uTime * 5.0, uTime * 3.0));
-        float n2 = rand(finalUV * 80.0 + vec2(uTime * 12.0, uTime * 7.0));
-        float noise = (n - 0.5) * 0.06 + (n2 - 0.5) * 0.03;
-
-        // slight scanline / banding effect (subtle)
-        float scan = sin((vUV.y + uTime*0.2) * 800.0) * 0.0025;
-
-        // dampen brightness a little to remove "burn" look
-        vec3 color = base.rgb * 0.92;
-        color += noise;
-        color -= scan;
-
-        // clamp & subtle gamma
-        color = clamp(color, 0.0, 1.0);
-        color = pow(color, vec3(0.95));
-
-        gl_FragColor = vec4(color, base.a);
+        // sample with clamp
+        vec4 col = texture2D(uTex, clamp(finalUV, 0.0, 1.0));
+        // tiny vignette/darken edges to feel CRT
+        float vign = 1.0 - 0.25 * pow(length(finalUV - 0.5), 1.5);
+        col.rgb *= vign;
+        gl_FragColor = col;
       }
     `;
 
@@ -93,20 +82,17 @@
       gl.shaderSource(s, src);
       gl.compileShader(s);
       if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
-        console.error('Shader compile error', gl.getShaderInfoLog(s));
+        console.error(gl.getShaderInfoLog(s));
       }
       return s;
     }
 
     const prog = gl.createProgram();
-    const vsS = compile(vs, gl.VERTEX_SHADER);
-    const fsS = compile(fs, gl.FRAGMENT_SHADER);
-    gl.attachShader(prog, vsS);
-    gl.attachShader(prog, fsS);
+    gl.attachShader(prog, compile(vs, gl.VERTEX_SHADER));
+    gl.attachShader(prog, compile(fs, gl.FRAGMENT_SHADER));
     gl.linkProgram(prog);
     if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-      console.error('Program link error', gl.getProgramInfoLog(prog));
-      return;
+      console.error('prog link error', gl.getProgramInfoLog(prog));
     }
     gl.useProgram(prog);
 
@@ -130,6 +116,7 @@
 
     const uDistLoc = gl.getUniformLocation(prog, 'uDist');
     const uTimeLoc = gl.getUniformLocation(prog, 'uTime');
+    const uGlitchLoc = gl.getUniformLocation(prog, 'uGlitch');
 
     gl.uniform1f(uDistLoc, DISTORTION);
 
@@ -150,97 +137,75 @@
     window.addEventListener('resize', resize);
     resize();
 
-    // inverse-distortion mapping: map distorted (screen) -> original uv in [-1,1]
-    // We use the fact that distortion scales vector by scalar s = 1 + k*(r-1)
-    function invertDistort(targetX, targetY) {
-      // targetX/Y: normalized in [0,1] (overlay CSS pixels -> normalized)
-      // return sourceUV in [0,1]
-      const k = DISTORTION;
-      // map to [-1,1]
-      let tx = targetX * 2.0 - 1.0;
-      let ty = targetY * 2.0 - 1.0;
-      const td_mag = Math.sqrt(tx*tx + ty*ty);
-      if (td_mag < 1e-6) {
-        return {u: 0.5, v: 0.5};
-      }
-      // direction
-      const dirx = tx / td_mag;
-      const diry = ty / td_mag;
-      // Solve scalar equation for m: m*(1 + k*(m - 1)) = td_mag
-      // Newton method
-      let m = Math.max(0.0001, td_mag); // initial
-      for (let i=0;i<8;i++){
-        const g = m * (1 + k*(m - 1)) - td_mag;
-        const dg = 1 + k*(2*m - 1);
-        const delta = g / (dg || 1e-6);
-        m -= delta;
-        if (Math.abs(delta) < 1e-6) break;
-        if (m < 0) { m = 0; break; }
-      }
-      // uv in [-1,1]
-      const ux = dirx * m;
-      const uy = diry * m;
-      // back to [0,1]
-      return { u: (ux + 1) * 0.5, v: 1.0 - ((uy + 1) * 0.5) };
-    }
-
-    // map overlay client coords -> sourceCanvas client coords via inverse-distortion
-    function mapOverlayToSourceClient(clientX, clientY) {
-      const rectOverlay = overlay.getBoundingClientRect();
-      const rectSource = sourceCanvas.getBoundingClientRect();
-      const nx = (clientX - rectOverlay.left) / rectOverlay.width;
-      const ny = (clientY - rectOverlay.top) / rectOverlay.height;
-      const uv = invertDistort(nx, ny); // returns u,v in [0..1] with v already flipped
-      // map to source client coords
-      const mappedX = rectSource.left + uv.u * rectSource.width;
-      const mappedY = rectSource.top + uv.v * rectSource.height;
-      return { x: mappedX, y: mappedY };
-    }
-
-    // forward event to sourceCanvas by dispatching synthetic mouse events with mapped coords
-    function forwardMouseEvent(type, origEvent) {
-      const m = mapOverlayToSourceClient(origEvent.clientX, origEvent.clientY);
-      const ev = new MouseEvent(type, {
-        clientX: m.x,
-        clientY: m.y,
-        screenX: m.x,
-        screenY: m.y,
-        bubbles: true,
-        cancelable: true,
-        view: window,
-        button: origEvent.button || 0
-      });
-      sourceCanvas.dispatchEvent(ev);
-    }
-
-    // overlay listeners -> forward mapped events to sourceCanvas
-    overlay.addEventListener('mousemove', (e) => forwardMouseEvent('mousemove', e));
-    overlay.addEventListener('mousedown', (e) => forwardMouseEvent('mousedown', e));
-    overlay.addEventListener('mouseup', (e) => forwardMouseEvent('mouseup', e));
-    overlay.addEventListener('click', (e) => forwardMouseEvent('click', e));
-    // also keyboard passthrough: forward keydown/up to document (index logic listens on document)
-    overlay.addEventListener('keydown', (e) => { /* nothing special */ });
-
-    // Render loop: update texture from sourceCanvas and draw with shader
     let start = performance.now();
+
     function render() {
-      const t = (performance.now() - start) * 0.001;
-      // update texture from source canvas
-      gl.bindTexture(gl.TEXTURE_2D, tex);
-      try {
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, sourceCanvas);
-      } catch (err) {
-        // texImage2D can fail if canvas is cross-origin or zero-size; ignore
+      const src = window.ADAM_UI.getSourceCanvas();
+      if (src) {
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        // give the shader the offscreen canvas
+        try {
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
+        } catch (err) {
+          // some browsers require different sizes — fallback: draw src to temp2 and use that
+        }
       }
-      // uniforms
+
+      const t = (performance.now() - start) * 0.001;
       gl.uniform1f(uTimeLoc, t);
 
-      // clear and draw
-      gl.clearColor(0,0,0,1);
+      // glitch value read from global state set by ADAM_UI
+      const gstate = window.__ADAM_GLITCH || { strength: 0, timer: 0 };
+      const gval = (gstate.timer && gstate.timer > 0) ?  Math.min(1.0, gstate.strength) : 0.0;
+      gl.uniform1f(uGlitchLoc, gval);
+
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       requestAnimationFrame(render);
     }
     render();
+
+    // EVENTS: overlay grabs events and forwards to ADAM_UI in CSS px (0..window.innerWidth)
+    function toLocal(evt) {
+      const rect = overlay.getBoundingClientRect();
+      const x = evt.clientX - rect.left;
+      const y = evt.clientY - rect.top;
+      return { x: x, y: y };
+    }
+
+    overlay.addEventListener('pointermove', (e) => {
+      const p = toLocal(e);
+      window.ADAM_UI.handlePointerMove(p.x, p.y);
+      e.preventDefault();
+    }, { passive: true });
+
+    overlay.addEventListener('pointerdown', (e) => {
+      const p = toLocal(e);
+      window.ADAM_UI.handlePointer('pointerdown', p.x, p.y);
+      e.preventDefault();
+    });
+
+    overlay.addEventListener('click', (e) => {
+      const p = toLocal(e);
+      window.ADAM_UI.handlePointer('click', p.x, p.y);
+      e.preventDefault();
+    });
+
+    // keyboard forward
+    window.addEventListener('keydown', (e) => {
+      window.ADAM_UI.handleKey(e);
+    });
+
+    // also, expose a small API to trigger manual glitch from console
+    window.__ADAM_OVERLAY = { triggerGlitch: (s,d)=>{ window.ADAM_UI.triggerGlitch(s,d);} };
+
+    // keep shared glitch timer updated from ADAM_UI (so shader reads fresh values)
+    // ADAM_UI sets window.__ADAM_GLITCH; here we decrement its timer locally
+    setInterval(() => {
+      if (window.__ADAM_GLITCH && window.__ADAM_GLITCH.timer > 0) {
+        window.__ADAM_GLITCH.timer = Math.max(0, window.__ADAM_GLITCH.timer - 1);
+        if (window.__ADAM_GLITCH.timer === 0) window.__ADAM_GLITCH.strength = 0;
+      }
+    }, 33);
   }
 })();
