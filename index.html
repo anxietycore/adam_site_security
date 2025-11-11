@@ -6,26 +6,19 @@
   <title>A.D.A.M. // ТЕРМИНАЛ</title>
   <link rel="stylesheet" href="style.css">
   <style>
-    /* минимальные стили чтобы scanline был над оверлеем если нужно */
-    .scanline {
-      position: fixed;
-      inset: 0;
-      pointer-events: none;
-      z-index: 2000;
-      mix-blend-mode: overlay;
-      opacity: 0.12;
-      background-image:
-        linear-gradient(rgba(0,0,0,0.04) 50%, rgba(255,255,255,0.01) 50%);
-      background-size: 100% 2px;
-    }
     body { margin:0; background:#000; }
+    /* Оставляем screenGlass.js как источник шума под интерфейсом */
+    /* Не добавляем никаких полос/виньеток здесь — всё контролируется скриптами */
   </style>
 </head>
 <body>
-  <!-- Невидимый (логический) canvas рисует весь интерфейс и даёт API -->
-  <!-- НЕ подключаем index_canvas.js раньше оверлея — порядок важен -->
+  <!-- screenGlass.js — твой идеальный шум. Должен подключаться первым. -->
+  <script src="screenGlass.js"></script>
+
+  <!-- логика UI (рисует во внутренний offscreen canvas и даёт API window.ADAM_UI) -->
   <script src="index_canvas.js"></script>
+
+  <!-- overlay (видимый canvas с изгибом/глитчем, перехватывает события и переводит координаты) -->
   <script src="crt_overlay_index_only.js"></script>
-  <div class="scanline"></div>
 </body>
 </html>
