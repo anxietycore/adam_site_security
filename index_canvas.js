@@ -1,15 +1,26 @@
-// index_canvas.js — теперь рисует на offscreen и даёт API window.ADAM_UI
+// index_canvas.js — canvas UI: правильные хитбоксы (логика остаётся), плавность, фокус и gltich
 (() => {
   const FONT_FAMILY = "'Press Start 2P', monospace";
-  const FONT_SIZE_PX = 14;
+  const FONT_SIZE_PX = 13; // чуть меньше
   const LINE_HEIGHT = Math.round(FONT_SIZE_PX * 1.5);
   const FIELD_PADDING = 12;
   const DPR = Math.min(window.devicePixelRatio || 1, 1.5);
 
-  // OFFSCREEN canvas — visible canvas removed to avoid duplication
+  // canvas
   const canvas = document.createElement('canvas');
-  canvas.id = 'indexCanvasOff'; // not appended
+  canvas.id = 'indexCanvas';
+  Object.assign(canvas.style, {
+    position: 'fixed', left: '0', top: '0',
+    width: '100%', height: '100%',
+    zIndex: '50', pointerEvents: 'auto',
+    userSelect: 'none', display: 'block'
+  });
+  document.body.appendChild(canvas);
   const ctx = canvas.getContext('2d', { alpha: true });
+
+  // offscreen for glitch rendering
+  const off = document.createElement('canvas');
+  const offCtx = off.getContext('2d');
 
   let vw = 0, vh = 0;
   let mouseX = 0, mouseY = 0;
@@ -23,8 +34,10 @@
   let errorMsg = '', errorTimer = 0;
   let successMsg = '', successTimer = 0;
 
-  // Hitboxes in logical coordinate space (CSS px)
-  let clickZones = {};
+  // glitch state
+  let glitchActive = false;
+  let glitchTimer = 0;
+  let glitchSeed = 0;
 
   const logo = `    \\    _ \\    \\     \\  | 
    _ \\   |  |  _ \\   |\\/ | 
@@ -39,14 +52,6 @@
     '> СИСТЕМА ГОТОВА'
   ];
 
-  // GLITCH state (control for overlay)
-  let glitchStrength = 0;
-  let glitchTimer = 0;
-
-  // Noise cache (to keep performance ok)
-  let noiseCanvas = document.createElement('canvas');
-  let noiseCtx = noiseCanvas.getContext('2d');
-
   function resize() {
     vw = window.innerWidth;
     vh = window.innerHeight;
@@ -56,184 +61,153 @@
     canvas.style.height = vh + 'px';
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
 
-    noiseCanvas.width = Math.max(256, Math.floor(vw/2));
-    noiseCanvas.height = Math.max(256, Math.floor(vh/2));
-    generateNoise();
+    off.width = Math.floor(vw);
+    off.height = Math.floor(vh);
+    offCtx.setTransform(1,0,0,1,0,0);
   }
   window.addEventListener('resize', resize);
   resize();
 
-  function generateNoise() {
-    const w = noiseCanvas.width, h = noiseCanvas.height;
-    const id = noiseCtx.createImageData(w, h);
-    for (let i = 0; i < id.data.length; i += 4) {
-      const v = 60 + Math.floor(Math.random() * 60); // keep darker subtle
-      id.data[i] = v;
-      id.data[i+1] = v;
-      id.data[i+2] = v;
-      id.data[i+3] = 18; // low alpha
+  function drawText(ctxRef, text, x, y, color = '#00FF41', opacity = 1, align='left') {
+    ctxRef.save();
+    ctxRef.globalAlpha = opacity;
+    ctxRef.font = `${FONT_SIZE_PX}px ${FONT_FAMILY}`;
+    ctxRef.fillStyle = color;
+    ctxRef.textBaseline = 'top';
+    if (align === 'center') {
+      const lines = text.split('\n');
+      lines.forEach((line, i) => {
+        const w = ctxRef.measureText(line).width;
+        ctxRef.fillText(line, x - w/2, y + i * LINE_HEIGHT);
+      });
+    } else {
+      text.split('\n').forEach((line, i) => ctxRef.fillText(line, x, y + i * LINE_HEIGHT));
     }
-    noiseCtx.putImageData(id, 0, 0);
+    ctxRef.restore();
   }
-
-  function drawNoise() {
-    // tile the small noise canvas
-    const pat = ctx.createPattern(noiseCanvas, 'repeat');
-    ctx.save();
-    ctx.globalAlpha = 0.2; // subtle
-    ctx.fillStyle = pat;
-    ctx.fillRect(0, 0, vw, vh);
-    ctx.restore();
-  }
-
-  function drawText(text, x, y, color = '#9ee99a', opacity = 1) {
-    ctx.save();
-    ctx.globalAlpha = opacity;
-    ctx.font = `${FONT_SIZE_PX}px ${FONT_FAMILY}`;
-    ctx.fillStyle = color;
-    ctx.textBaseline = 'top';
-    text.split('\n').forEach((line, i) => ctx.fillText(line, x, y + i * LINE_HEIGHT));
-    ctx.restore();
-  }
-
   function measure(text) {
     ctx.font = `${FONT_SIZE_PX}px ${FONT_FAMILY}`;
     return ctx.measureText(text).width;
   }
-
   function inRect(px, py, x, y, w, h) {
     return px >= x && px <= x + w && py >= y && py <= y + h;
   }
-
-  function roundRect(ctx_, x, y, w, h, r) {
-    ctx_.beginPath();
-    ctx_.moveTo(x + r, y);
-    ctx_.arcTo(x + w, y, x + w, y + h, r);
-    ctx_.arcTo(x + w, y + h, x, y + h, r);
-    ctx_.arcTo(x, y + h, x, y, r);
-    ctx_.arcTo(x, y, x + w, y, r);
-    ctx_.closePath();
+  function roundRect(ctxRef, x, y, w, h, r) {
+    ctxRef.beginPath();
+    ctxRef.moveTo(x + r, y);
+    ctxRef.arcTo(x + w, y, x + w, y + h, r);
+    ctxRef.arcTo(x + w, y + h, x, y + h, r);
+    ctxRef.arcTo(x, y + h, x, y, r);
+    ctxRef.arcTo(x, y, x + w, y, r);
+    ctxRef.closePath();
   }
 
-  // Smooth alpha helpers
-  function lerp(a,b,t){return a + (b-a)*t;}
-
-  // Drawers
-  let bootFadeProgress = 0; // smooth appear of boot lines
+  // smooth easing for boot lines
+  const bootOpacities = new Array(bootLines.length).fill(0);
 
   function drawStart() {
     ctx.clearRect(0, 0, vw, vh);
-    drawNoise();
 
     const logoW = measure(logo.split('\n')[0]);
     const logoX = (vw - logoW) / 2;
     const logoY = vh * 0.35;
-    drawText(logo, logoX, logoY, '#9ee99a');
+    drawText(ctx, logo, logoX, logoY);
 
     const status = '> СИСТЕМА A.D.A.M. ГОТОВА К ЗАПУСКУ';
-    const statusY = logoY + 90;
-    drawText(status, (vw - measure(status)) / 2, statusY, '#9ee99a');
+    drawText(ctx, status, vw/2, logoY + 90, '#00FF41', 1, 'center');
 
     const btnText = 'ЗАПУСТИТЬ СИСТЕМУ';
-    const btnW = measure(btnText) + 60;
-    const btnH = 45;
+    const btnW = Math.min(420, measure(btnText) + 70);
+    const btnH = 44;
     const btnX = (vw - btnW) / 2;
-    const btnY = statusY + 60;
+    const btnY = logoY + 140;
     const hovered = inRect(mouseX, mouseY, btnX, btnY, btnW, btnH);
 
+    // button fill (darker green, less neon)
     ctx.save();
-    ctx.fillStyle = hovered ? 'rgba(0, 160, 90, 0.07)' : 'rgba(0,120,60,0.04)';
-    roundRect(ctx, btnX, btnY, btnW, btnH, 6);
+    ctx.fillStyle = hovered ? 'rgba(0,140,40,0.95)' : 'rgba(0,110,30,0.85)';
+    roundRect(ctx, btnX, btnY, btnW, btnH, 8);
     ctx.fill();
 
-    ctx.strokeStyle = hovered ? '#b9ffcc' : '#9ee99a';
+    // subtle border glow only inside
+    ctx.strokeStyle = hovered ? 'rgba(120,255,150,0.9)' : 'rgba(70,220,120,0.85)';
     ctx.lineWidth = hovered ? 3 : 2;
-    roundRect(ctx, btnX, btnY, btnW, btnH, 6);
+    roundRect(ctx, btnX, btnY, btnW, btnH, 8);
     ctx.stroke();
     ctx.restore();
 
-    drawText(btnText, btnX + 30, btnY + 12, hovered ? '#b9ffcc' : '#9ee99a');
+    drawText(ctx, btnText, btnX + btnW/2, btnY + 10, hovered ? '#E8FFE8' : '#DFFFE0', 1, 'center');
 
-    clickZones = { startBtn: { x: btnX, y: btnY, w: btnW, h: btnH } };
+    window.__clickZones = { startBtn: { x: btnX, y: btnY, w: btnW, h: btnH } };
   }
 
   function drawBoot() {
     ctx.clearRect(0, 0, vw, vh);
-    drawNoise();
-
     const logoW = measure(logo.split('\n')[0]);
     const logoX = (vw - logoW) / 2;
-    const logoY = vh * 0.3;
-    drawText(logo, logoX, logoY, '#9ee99a');
+    const logoY = vh * 0.30;
+    drawText(ctx, logo, logoX, logoY);
 
-    // progress bootIndex smoothly
+    // increase bootIndex gradually
+    if (bootTimer % 45 === 0 && bootIndex < bootLines.length - 1) bootIndex++;
     bootTimer++;
-    if (bootIndex < bootLines.length - 1 && bootTimer % 40 === 0) {
-      bootIndex++;
-      bootFadeProgress = 0;
-    }
-    bootFadeProgress = Math.min(1, bootFadeProgress + 0.05);
 
-    const contentY = logoY + 80;
+    const startY = logoY + 80;
     bootLines.forEach((line, i) => {
-      if (i <= bootIndex) {
-        // fade latest line smoothly
-        const opacity = (i === bootIndex) ? bootFadeProgress : 1;
-        drawText(line, logoX - 30, contentY + i * (LINE_HEIGHT + 5), '#9ee99a', opacity);
+      // target opacity = 1 if revealed, else 0
+      const target = i <= bootIndex ? 1 : 0;
+      // smooth approach
+      bootOpacities[i] += (target - bootOpacities[i]) * 0.15;
+      if (bootOpacities[i] > 0.001) {
+        drawText(ctx, line, logoX - 30, startY + i * (LINE_HEIGHT + 6), '#00FF41', bootOpacities[i]);
       }
     });
 
-    if (bootIndex >= bootLines.length - 1 && bootTimer > 120) {
-      // smooth transition to login
+    // when done -> to login
+    if (bootIndex >= bootLines.length - 1 && bootTimer > 60) {
       setTimeout(() => {
         currentScreen = screens.LOGIN;
         inputField = 'username';
-      }, 300);
+      }, 500);
     }
   }
 
   function drawLogin() {
     ctx.clearRect(0, 0, vw, vh);
-    drawNoise();
-
     const centerY = vh * 0.45;
     const fieldW = Math.min(420, vw - 100);
     const fieldH = 42;
     const labelDy = -FIELD_PADDING - 5;
 
     const title = 'ДОСТУП К ТЕРМИНАЛУ';
-    drawText(title, (vw - measure(title)) / 2, centerY - 120, '#9ee99a');
+    drawText(ctx, title, vw/2, centerY - 120, '#00FF41', 1, 'center');
 
-    // USERNAME
+    // USERNAME field
     const userX = (vw - fieldW) / 2;
     const userY = centerY - 30;
-    drawText('ИМЯ ПОЛЬЗОВАТЕЛЯ:', userX, userY + labelDy, '#9ee99a', 0.9);
-
+    drawText(ctx, 'ИМЯ ПОЛЬЗОВАТЕЛЯ:', userX, userY + labelDy, '#00FF41', 0.9);
     ctx.save();
-    ctx.fillStyle = inputField === 'username' ? 'rgba(0,160,90,0.06)' : 'rgba(0,120,60,0.04)';
+    ctx.fillStyle = inputField === 'username' ? 'rgba(0,120,40,0.12)' : 'rgba(0,120,40,0.06)';
     roundRect(ctx, userX, userY, fieldW, fieldH, 6);
     ctx.fill();
-
-    ctx.strokeStyle = inputField === 'username' ? '#b9ffcc' : '#9ee99a';
+    ctx.strokeStyle = inputField === 'username' ? '#66ff88' : '#00FF41';
     ctx.lineWidth = inputField === 'username' ? 3 : 2;
     roundRect(ctx, userX, userY, fieldW, fieldH, 6);
     ctx.stroke();
     ctx.restore();
 
     const userText = username + (cursorBlink % 30 < 15 && inputField === 'username' ? '█' : '');
-    drawText(userText, userX + FIELD_PADDING, userY + 10, '#f7f7f7');
+    drawText(ctx, userText, userX + FIELD_PADDING, userY + 10, '#EAFDF0');
 
-    // PASSWORD
-    const passX = (vw - fieldW) / 2;
+    // PASSWORD field
+    const passX = userX;
     const passY = centerY + 40;
-    drawText('ПАРОЛЬ:', passX, passY + labelDy, '#9ee99a', 0.9);
-
+    drawText(ctx, 'ПАРОЛЬ:', passX, passY + labelDy, '#00FF41', 0.9);
     ctx.save();
-    ctx.fillStyle = inputField === 'password' ? 'rgba(0,160,90,0.06)' : 'rgba(0,120,60,0.04)';
+    ctx.fillStyle = inputField === 'password' ? 'rgba(0,120,40,0.12)' : 'rgba(0,120,40,0.06)';
     roundRect(ctx, passX, passY, fieldW, fieldH, 6);
     ctx.fill();
-
-    ctx.strokeStyle = inputField === 'password' ? '#b9ffcc' : '#9ee99a';
+    ctx.strokeStyle = inputField === 'password' ? '#66ff88' : '#00FF41';
     ctx.lineWidth = inputField === 'password' ? 3 : 2;
     roundRect(ctx, passX, passY, fieldW, fieldH, 6);
     ctx.stroke();
@@ -241,160 +215,320 @@
 
     const masked = '*'.repeat(password.length);
     const passText = masked + (cursorBlink % 30 < 15 && inputField === 'password' ? '█' : '');
-    drawText(passText, passX + FIELD_PADDING, passY + 10, '#f7f7f7');
+    drawText(ctx, passText, passX + FIELD_PADDING, passY + 10, '#EAFDF0');
 
-    // BUTTON
+    // AUTH button
     const btnText = 'АУТЕНТИФИКАЦИЯ';
-    const btnW = measure(btnText) + 60;
+    const btnW = Math.min(420, measure(btnText) + 70);
     const btnH = 38;
     const btnX = (vw - btnW) / 2;
     const btnY = centerY + 100;
     const hovered = inRect(mouseX, mouseY, btnX, btnY, btnW, btnH);
 
     ctx.save();
-    ctx.fillStyle = hovered ? 'rgba(0,160,90,0.06)' : 'rgba(0,120,60,0.04)';
+    ctx.fillStyle = hovered ? 'rgba(0,140,40,0.95)' : 'rgba(0,110,30,0.85)';
     roundRect(ctx, btnX, btnY, btnW, btnH, 6);
     ctx.fill();
-
-    ctx.strokeStyle = hovered ? '#b9ffcc' : '#9ee99a';
+    ctx.strokeStyle = hovered ? 'rgba(120,255,150,0.9)' : 'rgba(70,220,120,0.85)';
     ctx.lineWidth = hovered ? 3 : 2;
     roundRect(ctx, btnX, btnY, btnW, btnH, 6);
     ctx.stroke();
     ctx.restore();
 
-    drawText(btnText, btnX + 30, btnY + 10, hovered ? '#b9ffcc' : '#9ee99a');
+    drawText(ctx, btnText, btnX + btnW/2, btnY + 9, '#E8FFE8', 1, 'center');
 
-    // MESSAGES
+    // messages
     if (errorMsg && errorTimer > 0) {
-      // flashing red with slight shake requested by you - set jitter
-      const jitter = (errorTimer % 6 < 3) ? Math.random()*4-2 : 0;
-      ctx.save();
-      ctx.translate(jitter,0);
-      drawText(errorMsg, (vw - measure(errorMsg)) / 2, centerY + 160, '#ff6b6b');
-      ctx.restore();
+      drawText(ctx, errorMsg, vw/2, centerY + 160, '#FF6666', 1, 'center');
       errorTimer--;
     }
     if (successMsg && successTimer > 0) {
-      drawText(successMsg, (vw - measure(successMsg)) / 2, centerY + 160, '#9ee99a');
+      drawText(ctx, successMsg, vw/2, centerY + 160, '#BFFFBF', 1, 'center');
       successTimer--;
     }
 
-    // CLICK ZONES
-    clickZones = {
+    // click zones
+    window.__clickZones = {
       userField: { x: userX, y: userY, w: fieldW, h: fieldH },
       passField: { x: passX, y: passY, w: fieldW, h: fieldH },
       authBtn: { x: btnX, y: btnY, w: btnW, h: btnH }
     };
   }
 
-  function render() {
+  function renderFrame() {
     cursorBlink++;
-    if (glitchTimer > 0) { glitchTimer--; if (glitchTimer === 0) glitchStrength = 0; }
-    switch(currentScreen) {
-      case screens.START: drawStart(); break;
-      case screens.BOOT: drawBoot(); break;
-      case screens.LOGIN: drawLogin(); break;
+    // draw normally into offscreen first
+    offCtx.clearRect(0, 0, off.width, off.height);
+
+    switch (currentScreen) {
+      case screens.START: drawStartTo(offCtx); break;
+      case screens.BOOT: drawBootTo(offCtx); break;
+      case screens.LOGIN: drawLoginTo(offCtx); break;
     }
-    requestAnimationFrame(render);
+
+    // if glitch active -> perform geometric slice effects when copying to main ctx
+    if (glitchActive && glitchTimer > 0) {
+      // parameters
+      const slices = 10 + Math.floor(Math.random() * 10);
+      const maxOffset = 40 + Math.random() * 140;
+      // draw base with small shake
+      ctx.clearRect(0,0,vw,vh);
+      ctx.save();
+      const shakeX = (Math.random() - 0.5) * 6;
+      const shakeY = (Math.random() - 0.5) * 6;
+      ctx.translate(shakeX, shakeY);
+
+      // slice copy
+      for (let i=0;i<slices;i++) {
+        const h = Math.round(off.height / slices);
+        const sy = i * h;
+        const dx = (Math.random() - 0.5) * maxOffset * (glitchTimer/60);
+        ctx.drawImage(off, 0, sy, off.width, h, dx, sy, off.width, h);
+      }
+      // overlay heavy color inversion / channel split
+      ctx.globalCompositeOperation = 'screen';
+      ctx.fillStyle = `rgba(${40 + Math.random()*50},0,${40 + Math.random()*50},${0.03 + Math.random()*0.05})`;
+      ctx.fillRect(0,0,vw,vh);
+      ctx.restore();
+
+      glitchTimer--;
+      if (glitchTimer <= 0) {
+        glitchActive = false;
+      }
+    } else {
+      // normal copy
+      ctx.clearRect(0,0,vw,vh);
+      ctx.drawImage(off, 0, 0, Math.floor(vw), Math.floor(vh));
+    }
+    requestAnimationFrame(renderFrame);
   }
-  render();
 
-  // Public API for overlay:
-  window.ADAM_UI = {
-    // returns the offscreen canvas (overlay will sample from it)
-    getSourceCanvas() { return canvas; },
+  // wrappers so we can reuse existing draw functions but paint into offCtx
+  function drawStartTo(ctxTarget) {
+    // temporarily swap ctx to the target (monkeypatch drawText etc)
+    const oldCtx = ctx;
+    // use local functions that accept ctxTarget
+    // we'll just reimplement small portion to render into offCtx to avoid complexity
+    ctxTarget.save();
+    ctxTarget.clearRect(0, 0, off.width, off.height);
 
-    // called by overlay when mouse moves or clicks (coords in CSS px)
-    handlePointer(type, x, y) {
-      // update mouse for hover etc.
-      mouseX = x; mouseY = y;
-      if (type === 'click' || type === 'pointerdown') {
-        // immediate focus on pointerdown
-        if (currentScreen === screens.START && clickZones.startBtn && inRect(x,y,clickZones.startBtn.x,clickZones.startBtn.y,clickZones.startBtn.w,clickZones.startBtn.h)) {
-          currentScreen = screens.BOOT;
-          bootTimer = 0; bootIndex = -1;
-          return;
-        }
-        if (currentScreen === screens.LOGIN) {
-          if (clickZones.userField && inRect(x,y,clickZones.userField.x,clickZones.userField.y,clickZones.userField.w,clickZones.userField.h)) {
-            inputField = 'username';
-            return;
-          }
-          if (clickZones.passField && inRect(x,y,clickZones.passField.x,clickZones.passField.y,clickZones.passField.w,clickZones.passField.h)) {
-            inputField = 'password';
-            return;
-          }
-          if (clickZones.authBtn && inRect(x,y,clickZones.authBtn.x,clickZones.authBtn.y,clickZones.authBtn.w,clickZones.authBtn.h)) {
-            login();
-            return;
-          }
-          inputField = null;
-        }
+    // same logic as drawStart but using ctxTarget
+    const logoW = measure(logo.split('\n')[0]);
+    const logoX = (off.width - logoW) / 2;
+    const logoY = off.height * 0.35;
+    drawText(ctxTarget, logo, logoX, logoY);
+
+    const status = '> СИСТЕМА A.D.A.M. ГОТОВА К ЗАПУСКУ';
+    drawText(ctxTarget, status, off.width/2, logoY + 90, '#00FF41', 1, 'center');
+
+    const btnText = 'ЗАПУСТИТЬ СИСТЕМУ';
+    const btnW = Math.min(420, measure(btnText) + 70);
+    const btnH = 44;
+    const btnX = (off.width - btnW) / 2;
+    const btnY = logoY + 140;
+    const hovered = inRect(mouseX, mouseY, btnX, btnY, btnW, btnH);
+
+    ctxTarget.save();
+    ctxTarget.fillStyle = hovered ? 'rgba(0,140,40,0.95)' : 'rgba(0,110,30,0.85)';
+    roundRect(ctxTarget, btnX, btnY, btnW, btnH, 8);
+    ctxTarget.fill();
+    ctxTarget.strokeStyle = hovered ? 'rgba(120,255,150,0.9)' : 'rgba(70,220,120,0.85)';
+    ctxTarget.lineWidth = hovered ? 3 : 2;
+    roundRect(ctxTarget, btnX, btnY, btnW, btnH, 8);
+    ctxTarget.stroke();
+    ctxTarget.restore();
+
+    drawText(ctxTarget, btnText, btnX + btnW/2, btnY + 10, hovered ? '#E8FFE8' : '#DFFFE0', 1, 'center');
+
+    ctxTarget.restore();
+  }
+
+  function drawBootTo(ctxTarget) {
+    ctxTarget.save();
+    ctxTarget.clearRect(0, 0, off.width, off.height);
+
+    const logoW = measure(logo.split('\n')[0]);
+    const logoX = (off.width - logoW) / 2;
+    const logoY = off.height * 0.30;
+    drawText(ctxTarget, logo, logoX, logoY);
+
+    // update indices
+    if (bootTimer % 45 === 0 && bootIndex < bootLines.length - 1) bootIndex++;
+    bootTimer++;
+    const startY = logoY + 80;
+    bootLines.forEach((line, i) => {
+      const target = i <= bootIndex ? 1 : 0;
+      bootOpacities[i] += (target - bootOpacities[i]) * 0.15;
+      if (bootOpacities[i] > 0.001) {
+        drawText(ctxTarget, line, logoX - 30, startY + i * (LINE_HEIGHT + 6), '#00FF41', bootOpacities[i]);
       }
-    },
+    });
 
-    handlePointerMove(x,y) {
-      mouseX = x; mouseY = y;
-    },
+    ctxTarget.restore();
 
-    handleKey(ev) {
-      if (currentScreen !== screens.LOGIN || !inputField) return;
-      if (ev.key === 'Enter') { login(); }
-      else if (ev.key === 'Tab') { ev.preventDefault(); inputField = inputField === 'username' ? 'password' : 'username'; cursorBlink = 0; }
-      else if (ev.key === 'Backspace') {
-        if (inputField === 'username') username = username.slice(0,-1);
-        if (inputField === 'password') password = password.slice(0,-1);
-      } else if (ev.key.length === 1 && ev.key !== ' ') {
-        if (inputField === 'username') username += ev.key;
-        if (inputField === 'password') password += ev.key;
+    if (bootIndex >= bootLines.length - 1 && bootTimer > 60) {
+      setTimeout(() => {
+        currentScreen = screens.LOGIN;
+        inputField = 'username';
+      }, 500);
+    }
+  }
+
+  function drawLoginTo(ctxTarget) {
+    ctxTarget.save();
+    ctxTarget.clearRect(0, 0, off.width, off.height);
+
+    const centerY = off.height * 0.45;
+    const fieldW = Math.min(420, off.width - 100);
+    const fieldH = 42;
+    const labelDy = -FIELD_PADDING - 5;
+    drawText(ctxTarget, 'ДОСТУП К ТЕРМИНАЛУ', off.width/2, centerY - 120, '#00FF41', 1, 'center');
+
+    const userX = (off.width - fieldW) / 2;
+    const userY = centerY - 30;
+    drawText(ctxTarget, 'ИМЯ ПОЛЬЗОВАТЕЛЯ:', userX, userY + labelDy, '#00FF41', 0.9);
+    ctxTarget.save();
+    ctxTarget.fillStyle = inputField === 'username' ? 'rgba(0,120,40,0.12)' : 'rgba(0,120,40,0.06)';
+    roundRect(ctxTarget, userX, userY, fieldW, fieldH, 6);
+    ctxTarget.fill();
+    ctxTarget.strokeStyle = inputField === 'username' ? '#66ff88' : '#00FF41';
+    ctxTarget.lineWidth = inputField === 'username' ? 3 : 2;
+    roundRect(ctxTarget, userX, userY, fieldW, fieldH, 6);
+    ctxTarget.stroke();
+    ctxTarget.restore();
+
+    const userText = username + (cursorBlink % 30 < 15 && inputField === 'username' ? '█' : '');
+    drawText(ctxTarget, userText, userX + FIELD_PADDING, userY + 10, '#EAFDF0');
+
+    const passX = userX;
+    const passY = centerY + 40;
+    drawText(ctxTarget, 'ПАРОЛЬ:', passX, passY + labelDy, '#00FF41', 0.9);
+    ctxTarget.save();
+    ctxTarget.fillStyle = inputField === 'password' ? 'rgba(0,120,40,0.12)' : 'rgba(0,120,40,0.06)';
+    roundRect(ctxTarget, passX, passY, fieldW, fieldH, 6);
+    ctxTarget.fill();
+    ctxTarget.strokeStyle = inputField === 'password' ? '#66ff88' : '#00FF41';
+    ctxTarget.lineWidth = inputField === 'password' ? 3 : 2;
+    roundRect(ctxTarget, passX, passY, fieldW, fieldH, 6);
+    ctxTarget.stroke();
+    ctxTarget.restore();
+
+    const masked = '*'.repeat(password.length);
+    const passText = masked + (cursorBlink % 30 < 15 && inputField === 'password' ? '█' : '');
+    drawText(ctxTarget, passText, passX + FIELD_PADDING, passY + 10, '#EAFDF0');
+
+    // auth button
+    const btnText = 'АУТЕНТИФИКАЦИЯ';
+    const btnW = Math.min(420, measure(btnText) + 70);
+    const btnH = 38;
+    const btnX = (off.width - btnW) / 2;
+    const btnY = centerY + 100;
+    const hovered = inRect(mouseX, mouseY, btnX, btnY, btnW, btnH);
+
+    ctxTarget.save();
+    ctxTarget.fillStyle = hovered ? 'rgba(0,140,40,0.95)' : 'rgba(0,110,30,0.85)';
+    roundRect(ctxTarget, btnX, btnY, btnW, btnH, 6);
+    ctxTarget.fill();
+    ctxTarget.strokeStyle = hovered ? 'rgba(120,255,150,0.9)' : 'rgba(70,220,120,0.85)';
+    ctxTarget.lineWidth = hovered ? 3 : 2;
+    roundRect(ctxTarget, btnX, btnY, btnW, btnH, 6);
+    ctxTarget.stroke();
+    ctxTarget.restore();
+
+    drawText(ctxTarget, btnText, btnX + btnW/2, btnY + 9, '#E8FFE8', 1, 'center');
+
+    if (errorMsg && errorTimer > 0) {
+      drawText(ctxTarget, errorMsg, off.width/2, centerY + 160, '#FF6666', 1, 'center');
+      errorTimer--;
+    }
+    if (successMsg && successTimer > 0) {
+      drawText(ctxTarget, successMsg, off.width/2, centerY + 160, '#BFFFBF', 1, 'center');
+      successTimer--;
+    }
+
+    ctxTarget.restore();
+  }
+
+  // event handlers on visible canvas (overlay will map events through to this canvas)
+  canvas.addEventListener('click', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    if (currentScreen === screens.START && window.__clickZones?.startBtn) {
+      const b = window.__clickZones.startBtn;
+      if (inRect(x, y, b.x, b.y, b.w, b.h)) {
+        currentScreen = screens.BOOT;
+        bootTimer = 0; bootIndex = -1;
       }
-    },
+    }
 
-    // diagnostic: get current click zones (in CSS px)
-    getClickZones() { return clickZones; },
+    if (currentScreen === screens.LOGIN && window.__clickZones?.userField) {
+      const z = window.__clickZones;
+      if (inRect(x, y, z.userField.x, z.userField.y, z.userField.w, z.userField.h)) {
+        inputField = 'username';
+      } else if (inRect(x, y, z.passField.x, z.passField.y, z.passField.w, z.passField.h)) {
+        inputField = 'password';
+      } else if (inRect(x, y, z.authBtn.x, z.authBtn.y, z.authBtn.w, z.authBtn.h)) {
+        login();
+      } else {
+        inputField = null;
+      }
+      cursorBlink = 0; // immediate cursor reaction
+    }
+  });
 
-    // force a glitch effect (called when login fails)
-    triggerGlitch(strength = 1.0, duration = 30) {
-      glitchStrength = Math.min(1, strength);
-      glitchTimer = Math.max(glitchTimer, duration);
-      // overlay will read glitchStrength via shared global
-      window.__ADAM_GLITCH = { strength: glitchStrength, timer: glitchTimer };
-    },
+  canvas.addEventListener('mousemove', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    mouseX = e.clientX - rect.left;
+    mouseY = e.clientY - rect.top;
+  });
 
-    // for overlay to read
-    _internal: { getState: () => ({currentScreen, username, password, inputField}) }
-  };
+  document.addEventListener('keydown', (e) => {
+    if (currentScreen !== screens.LOGIN || !inputField) return;
 
-  // local login logic
+    if (e.key === 'Enter') {
+      login();
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      inputField = inputField === 'username' ? 'password' : 'username';
+      cursorBlink = 0;
+    } else if (e.key === 'Backspace') {
+      if (inputField === 'username') username = username.slice(0, -1);
+      if (inputField === 'password') password = password.slice(0, -1);
+    } else if (e.key.length === 1) {
+      // ignore pure spaces
+      if (inputField === 'username') username += e.key;
+      if (inputField === 'password') password += e.key;
+    }
+  });
+
   function login() {
     if (username === 'qq' && password === 'ww') {
       successMsg = '> ВХОД УСПЕШНЫЙ';
       successTimer = 90;
-      // smooth transition
       setTimeout(() => {
-        // fade out is handled by main app if needed
-        window.location.href = 'terminal.html';
-      }, 900);
+        document.body.style.transition = 'opacity 0.8s';
+        document.body.style.opacity = '0';
+        setTimeout(() => window.location.href = 'terminal.html', 800);
+      }, 600);
     } else {
+      // error: trigger heavy glitch
       errorMsg = '> ДОСТУП ЗАПРЕЩЁН';
-      errorTimer = 60;
+      errorTimer = 180;
       password = '';
-      // brutal glitch
-      window.ADAM_UI.triggerGlitch(1.0, 50);
+      triggerPanicGlitch();
     }
   }
 
-  // expose small keyboard/mouse hooks so users can test without overlay
-  document.addEventListener('keydown', (e) => {
-    // if overlay exists it will forward keys — but keep this as fallback
-    if (window.__ADAM_OVERLAY_PRESENT) return;
-    window.ADAM_UI.handleKey(e);
-  });
+  function triggerPanicGlitch() {
+    glitchActive = true;
+    glitchTimer = 50 + Math.floor(Math.random() * 90);
+    glitchSeed = Math.random();
+  }
 
-  // fallback pointer events if overlay not present
-  document.addEventListener('pointermove', (e) => {
-    if (window.__ADAM_OVERLAY_PRESENT) return;
-    const rect = { left:0, top:0 }; // page coords (we expect full window)
-    window.ADAM_UI.handlePointerMove(e.clientX - rect.left, e.clientY - rect.top);
-  });
+  // small utility: immediate focus flag if clicking fields (cursorBlink)
+  // start render
+  renderFrame();
+
 })();
