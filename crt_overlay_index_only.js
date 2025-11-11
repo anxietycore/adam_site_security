@@ -1,7 +1,7 @@
-// crt_overlay_index_only.js — overlay: distortion + event forwarding (with inverse mapping)
+// crt_overlay_index_only.js — overlay that samples offscreen index canvas and handles interaction
 (() => {
   const DPR = Math.min(window.devicePixelRatio || 1, 1.5);
-  const DISTORTION = 0.34; // tweak if you want stronger/weaker bend
+  const DISTORTION = 0.34;
 
   // wait for ADAM_UI to be ready
   let attempts = 0;
@@ -17,6 +17,8 @@
 
   function initOverlay() {
     const sourceCanvas = window.ADAM_UI.getSourceCanvas();
+
+    // create visible canvas
     const overlay = document.createElement('canvas');
     overlay.id = 'crtOverlayIndex';
     Object.assign(overlay.style, {
@@ -48,40 +50,40 @@
       uniform sampler2D uTex;
       uniform float uDist;
       uniform float uTime;
-      uniform float uGlitch;
-      float rand(float x){ return fract(sin(x)*43758.5453); }
+      uniform float uGlitch; // 0..1
+      float rand(float x) { return fract(sin(x)*43758.5453); }
       void main() {
-        vec2 uv = vUV * 2.0 - 1.0; // -1..1
+        vec2 uv = vUV * 2.0 - 1.0;
         float r = length(uv);
         vec2 distorted = mix(uv, uv * r, uDist);
 
-        // glitch bands
+        // glitch: shift horizontal bands
         float g = uGlitch;
         if (g > 0.01) {
-          float band = floor((uv.y + 1.0)*20.0 + uTime * 40.0);
-          float n = rand(band);
-          float shift = (n * 2.0 - 1.0) * 0.03 * g;
-          distorted.x += shift * (1.0 - smoothstep(0.0, 0.9, abs(uv.y)));
+          float band = floor(uv.y * 40.0 + uTime * 50.0);
+          float noise = rand(band) * 2.0 - 1.0;
+          float shift = noise * 0.03 * g;
+          distorted.x += shift * (1.0 - smoothstep(0.0, 0.9, abs(uv.y)*1.2));
         }
 
         vec2 finalUV = (distorted + 1.0) * 0.5;
         finalUV.y = 1.0 - finalUV.y;
 
         vec4 col = texture2D(uTex, clamp(finalUV, 0.0, 1.0));
-
-        // mild vignette so edges are not too bright
-        float vig = 1.0 - 0.18 * pow(length(finalUV - 0.5), 1.6);
-        col.rgb *= vig;
-
+        // vignette
+        float vign = 1.0 - 0.22 * pow(length(finalUV - 0.5), 1.5);
+        col.rgb *= vign;
         gl_FragColor = col;
       }
     `;
 
-    function compile(src, type) {
+    function compile(src,type){
       const s = gl.createShader(type);
-      gl.shaderSource(s, src);
+      gl.shaderSource(s,src);
       gl.compileShader(s);
-      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) console.error(gl.getShaderInfoLog(s));
+      if(!gl.getShaderParameter(s, gl.COMPILE_STATUS)){
+        console.error('shader compile', gl.getShaderInfoLog(s));
+      }
       return s;
     }
 
@@ -89,7 +91,9 @@
     gl.attachShader(prog, compile(vs, gl.VERTEX_SHADER));
     gl.attachShader(prog, compile(fs, gl.FRAGMENT_SHADER));
     gl.linkProgram(prog);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) console.error('prog link error', gl.getProgramInfoLog(prog));
+    if(!gl.getProgramParameter(prog, gl.LINK_STATUS)){
+      console.error('prog link', gl.getProgramInfoLog(prog));
+    }
     gl.useProgram(prog);
 
     const quad = new Float32Array([
@@ -98,6 +102,7 @@
       -1,  1, 0, 1,
        1,  1, 1, 1
     ]);
+
     const buf = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buf);
     gl.bufferData(gl.ARRAY_BUFFER, quad, gl.STATIC_DRAW);
@@ -112,6 +117,7 @@
     const uDistLoc = gl.getUniformLocation(prog, 'uDist');
     const uTimeLoc = gl.getUniformLocation(prog, 'uTime');
     const uGlitchLoc = gl.getUniformLocation(prog, 'uGlitch');
+
     gl.uniform1f(uDistLoc, DISTORTION);
 
     const tex = gl.createTexture();
@@ -132,14 +138,16 @@
     resize();
 
     let start = performance.now();
+
     function render() {
       const src = window.ADAM_UI.getSourceCanvas();
       if (src) {
         gl.bindTexture(gl.TEXTURE_2D, tex);
         try {
+          // sample the offscreen canvas as texture
           gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
         } catch (err) {
-          // ignore
+          // fallback omitted for brevity
         }
       }
 
@@ -147,7 +155,7 @@
       gl.uniform1f(uTimeLoc, t);
 
       const gstate = window.__ADAM_GLITCH || { strength: 0, timer: 0 };
-      const gval = (gstate.timer && gstate.timer > 0) ? Math.min(1.0, gstate.strength) : 0.0;
+      const gval = (gstate.timer && gstate.timer > 0) ?  Math.min(1.0, gstate.strength) : 0.0;
       gl.uniform1f(uGlitchLoc, gval);
 
       gl.clear(gl.COLOR_BUFFER_BIT);
@@ -156,86 +164,66 @@
     }
     render();
 
-    // keep glitch timer ticking down (shared state)
-    setInterval(() => {
-      if (window.__ADAM_GLITCH && window.__ADAM_GLITCH.timer > 0) {
-        window.__ADAM_GLITCH.timer = Math.max(0, window.__ADAM_GLITCH.timer - 1);
-        if (window.__ADAM_GLITCH.timer === 0) window.__ADAM_GLITCH.strength = 0;
-      }
-    }, 33);
+    // ---------- pointer mapping: transform screen coords -> texture sampling coords ----------
+    // Shader sampling uses:
+    //  vUV = screenUV (0..1)
+    //  uv = vUV*2-1
+    //  r = length(uv)
+    //  distorted = mix(uv, uv*r, uDist)
+    //  finalUV = (distorted+1)/2
+    //  finalUV.y = 1 - finalUV.y
+    // So the texture sample coordinate for a screen pixel is finalUV.
+    // We compute same math on CPU and forward finalUV * CSS-size to ADAM_UI.
 
-    // --- CORE: map pointer from screen -> SOURCE coords by INVERTING distortion ---
-    // Shader mapping chain (forward): vUV (0..1) -> uv=(-1..1) -> distorted = mix(uv, uv*r, d)
-    // -> finalUV = (distorted+1)/2 ; finalUV.y = 1 - finalUV.y
-    // So to get sourceUV, we:
-    // 1) take screen vUV = (x/w, y/h)
-    // 2) flip y: s = vec2(vUV.x, 1 - vUV.y)
-    // 3) d = s*2 - 1  (this is the "distorted" target)
-    // 4) find u such that mix(u, u*length(u), dParam) == d  (solve iteratively)
-    // 5) sourceUV = (u + 1) * 0.5
-    function invertDistortion(targetX, targetY, distParam) {
-      // targetX,Y in CSS px relative to viewport
-      const sx = targetX / window.innerWidth;
-      const sy = targetY / window.innerHeight;
-      // flip y to match shader
-      let sX = sx;
-      let sY = 1.0 - sy;
-      // map to -1..1
-      let dX = sX * 2.0 - 1.0;
-      let dY = sY * 2.0 - 1.0;
+    function screenToSourceCoords(screenX, screenY) {
+      // screenX/Y in CSS px (0..window.innerWidth)
+      const vwCSS = window.innerWidth;
+      const vhCSS = window.innerHeight;
+      const vUVx = screenX / vwCSS;
+      const vUVy = screenY / vhCSS;
 
-      // initial guess for u is d
-      let ux = dX;
-      let uy = dY;
+      // compute same as shader
+      let uvx = vUVx * 2.0 - 1.0;
+      let uvy = vUVy * 2.0 - 1.0;
+      const r = Math.hypot(uvx, uvy);
+      // distorted vector = uv * ((1 - d) + d * r)
+      const k = (1.0 - DISTORTION) + DISTORTION * r;
+      const dx = uvx * k;
+      const dy = uvy * k;
+      let finalU = (dx + 1.0) * 0.5;
+      let finalV = (dy + 1.0) * 0.5;
+      finalV = 1.0 - finalV; // Y flip (as in shader)
 
-      // iterative refinement (fixed-point style). Should converge in ~5-8 iters.
-      for (let i = 0; i < 7; i++) {
-        const r = Math.sqrt(Math.max(0.000001, ux*ux + uy*uy));
-        // forward mapping f(u) = mix(u, u*r, dist)
-        const fx = ux * (1.0 - distParam) + (ux * r) * distParam;
-        const fy = uy * (1.0 - distParam) + (uy * r) * distParam;
-        // error
-        const ex = dX - fx;
-        const ey = dY - fy;
-        // relax update (empirically stable)
-        ux += ex * 0.75;
-        uy += ey * 0.75;
-      }
-
-      // convert back to 0..1 texture UV and flip y back
-      const sourceU = (ux + 1.0) * 0.5;
-      const sourceV = 1.0 - ((uy + 1.0) * 0.5);
-      // clamp
-      return {
-        x: Math.max(0, Math.min(1, sourceU)) * window.innerWidth,
-        y: Math.max(0, Math.min(1, sourceV)) * window.innerHeight
-      };
+      // clamp and convert to CSS px coordinates
+      finalU = Math.max(0, Math.min(1, finalU));
+      finalV = Math.max(0, Math.min(1, finalV));
+      const srcX = finalU * vwCSS;
+      const srcY = finalV * vhCSS;
+      return { x: srcX, y: srcY };
     }
 
-    // convert pointer coordinates and forward to ADAM_UI
-    function toLocalCoords(evt) {
+    function toLocal(evt) {
       const rect = overlay.getBoundingClientRect();
       const x = evt.clientX - rect.left;
       const y = evt.clientY - rect.top;
-      // invert distortion to get where in source canvas that pixel came from
-      const mapped = invertDistortion(x, y, DISTORTION);
-      return mapped;
+      // x,y are CSS px on overlay; map them to source canvas CSS px
+      return screenToSourceCoords(x, y);
     }
 
     overlay.addEventListener('pointermove', (e) => {
-      const p = toLocalCoords(e);
+      const p = toLocal(e);
       window.ADAM_UI.handlePointerMove(p.x, p.y);
-      // do not prevent default — allow normal cursor
+      e.preventDefault();
     }, { passive: true });
 
     overlay.addEventListener('pointerdown', (e) => {
-      const p = toLocalCoords(e);
+      const p = toLocal(e);
       window.ADAM_UI.handlePointer('pointerdown', p.x, p.y);
       e.preventDefault();
     });
 
     overlay.addEventListener('click', (e) => {
-      const p = toLocalCoords(e);
+      const p = toLocal(e);
       window.ADAM_UI.handlePointer('click', p.x, p.y);
       e.preventDefault();
     });
@@ -244,7 +232,13 @@
       window.ADAM_UI.handleKey(e);
     });
 
-    // expose console control
-    window.__ADAM_OVERLAY = { triggerGlitch: (s,d)=>{ window.ADAM_UI.triggerGlitch(s,d); } };
+    // expose helper & keep glitch timer in sync
+    window.__ADAM_OVERLAY = { triggerGlitch: (s,d)=>{ window.ADAM_UI.triggerGlitch(s,d);} };
+    setInterval(() => {
+      if (window.__ADAM_GLITCH && window.__ADAM_GLITCH.timer > 0) {
+        window.__ADAM_GLITCH.timer = Math.max(0, window.__ADAM_GLITCH.timer - 1);
+        if (window.__ADAM_GLITCH.timer === 0) window.__ADAM_GLITCH.strength = 0;
+      }
+    }, 33);
   }
 })();
