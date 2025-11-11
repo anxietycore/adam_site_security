@@ -1,8 +1,7 @@
 // crt_overlay_index_only.js — overlay that samples offscreen index canvas and handles interaction
 (() => {
   const DPR = Math.min(window.devicePixelRatio || 1, 1.5);
-  const DISTORTION = 0.34;
-
+  const DISTORTION = 0.34; // можно чуть уменьшить
   // wait for ADAM_UI to be ready
   let attempts = 0;
   const checkInterval = setInterval(() => {
@@ -16,7 +15,6 @@
   }, 80);
 
   function initOverlay(sourceCanvas) {
-    // create visible canvas
     const overlay = document.createElement('canvas');
     overlay.id = 'crtOverlayIndex';
     Object.assign(overlay.style, {
@@ -24,7 +22,7 @@
       left: '0', top: '0',
       width: '100vw', height: '100vh',
       zIndex: '1000',
-      pointerEvents: 'auto' // overlay captures events
+      pointerEvents: 'auto'
     });
     document.body.appendChild(overlay);
     window.__ADAM_OVERLAY_PRESENT = true;
@@ -42,7 +40,7 @@
         gl_Position = vec4(aPos, 0.0, 1.0);
       }
     `;
-    // fragment shader: distortion + simple horizontal slice glitch using uniform
+    // fragment shader: distortion + horizontal band glitch + simple color-split when glitch
     const fs = `
       precision mediump float;
       varying vec2 vUV;
@@ -56,21 +54,31 @@
         float r = length(uv);
         vec2 distorted = mix(uv, uv * r, uDist);
 
-        // glitch: shift some horizontal bands randomly
         float g = uGlitch;
         if (g > 0.01) {
-          float band = floor(uv.y * 40.0 + uTime * 50.0);
+          float band = floor((uv.y + uTime*0.15) * 60.0);
           float noise = rand(band) * 2.0 - 1.0;
-          float shift = noise * 0.02 * g;
+          float shift = noise * 0.04 * g;
           distorted.x += shift * (1.0 - smoothstep(0.0, 0.9, abs(uv.y)*1.2));
         }
 
         vec2 finalUV = (distorted + 1.0) * 0.5;
+        // shader flips vertically before sampling (match original)
         finalUV.y = 1.0 - finalUV.y;
 
-        // sample with clamp
-        vec4 col = texture2D(uTex, clamp(finalUV, 0.0, 1.0));
-        // tiny vignette/darken edges to feel CRT
+        // basic color split under glitch: sample channels separately
+        vec4 col;
+        if (g > 0.02) {
+          float off = 0.004 * g;
+          vec4 rcol = texture2D(uTex, clamp(finalUV + vec2(off,0.0), 0.0,1.0));
+          vec4 gcol = texture2D(uTex, clamp(finalUV, 0.0,1.0));
+          vec4 bcol = texture2D(uTex, clamp(finalUV - vec2(off,0.0), 0.0,1.0));
+          col = vec4(rcol.r, gcol.g, bcol.b, (rcol.a+gcol.a+bcol.a)/3.0);
+        } else {
+          col = texture2D(uTex, clamp(finalUV, 0.0,1.0));
+        }
+
+        // vignette -- subtle
         float vign = 1.0 - 0.25 * pow(length(finalUV - 0.5), 1.5);
         col.rgb *= vign;
         gl_FragColor = col;
@@ -143,18 +151,16 @@
       const src = window.ADAM_UI.getSourceCanvas();
       if (src) {
         gl.bindTexture(gl.TEXTURE_2D, tex);
-        // give the shader the offscreen canvas
         try {
           gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
         } catch (err) {
-          // some browsers require different sizes — fallback: draw src to temp2 and use that
+          // fallback omitted for brevity
         }
       }
 
       const t = (performance.now() - start) * 0.001;
       gl.uniform1f(uTimeLoc, t);
 
-      // glitch value read from global state set by ADAM_UI
       const gstate = window.__ADAM_GLITCH || { strength: 0, timer: 0 };
       const gval = (gstate.timer && gstate.timer > 0) ?  Math.min(1.0, gstate.strength) : 0.0;
       gl.uniform1f(uGlitchLoc, gval);
@@ -170,7 +176,40 @@
       const rect = overlay.getBoundingClientRect();
       const x = evt.clientX - rect.left;
       const y = evt.clientY - rect.top;
-      return { x: x, y: y };
+
+      // compute same mapping as shader (JS-side) to convert screen pointer -> source CSS px
+      // vUV is in 0..1
+      const vux = x / overlay.clientWidth;
+      const vuy = y / overlay.clientHeight;
+      // uv in -1..1
+      let uvx = vux * 2.0 - 1.0;
+      let uvy = vuy * 2.0 - 1.0;
+      // same math as shader: distorted = mix(uv, uv * r, uDist)
+      const rDistorted = Math.hypot(uvx, uvy);
+      // compute rd = length(distorted) which is r * (a + b * r) where a = 1-uDist, b = uDist
+      const a = 1.0 - DISTORTION;
+      const b = DISTORTION;
+      // forward: rd = a*r + b*r*r
+      // we have rd_forward = rDistorted (that's the length after applying simple formula since shader used r = length(uv) and distorted = uv * (a + b*r) so length(distorted) = r*(a + b*r)
+      // BUT here rDistorted is actually length(uv) BEFORE scaling (we computed from vUV). We need to invert the radial scale to find original uv that maps to displayed pixel.
+      // HOWEVER simpler: shader mapping from vUV->sampleUV is: compute uv=vUV*2-1; r=length(uv); distorted = uv*(a + b*r); finalUV=(distorted+1)/2; finalUV.y = 1.0 - finalUV.y
+      // We want finalUV (source sample coordinate) given vUV pointer — that's direct: we can just compute it like shader forward.
+      // So compute r = length(uv); s = a + b*r; distorted = uv * s; finalUV = (distorted + 1)/2; finalUV.y = 1 - finalUV.y
+      const r = rDistorted;
+      const s = a + b * r;
+      const dx = uvx * s;
+      const dy = uvy * s;
+      let finalU = (dx + 1.0) * 0.5;
+      let finalV = (dy + 1.0) * 0.5;
+      finalV = 1.0 - finalV; // shader flips
+      // clamp
+      finalU = Math.min(1, Math.max(0, finalU));
+      finalV = Math.min(1, Math.max(0, finalV));
+      // convert to CSS px of source / ADAM_UI expectation
+      const cssX = finalU * window.innerWidth;
+      const cssY = finalV * window.innerHeight;
+
+      return { x: cssX, y: cssY, rawX: x, rawY: y };
     }
 
     overlay.addEventListener('pointermove', (e) => {
@@ -191,16 +230,12 @@
       e.preventDefault();
     });
 
-    // keyboard forward
     window.addEventListener('keydown', (e) => {
       window.ADAM_UI.handleKey(e);
     });
 
-    // also, expose a small API to trigger manual glitch from console
     window.__ADAM_OVERLAY = { triggerGlitch: (s,d)=>{ window.ADAM_UI.triggerGlitch(s,d);} };
 
-    // keep shared glitch timer updated from ADAM_UI (so shader reads fresh values)
-    // ADAM_UI sets window.__ADAM_GLITCH; here we decrement its timer locally
     setInterval(() => {
       if (window.__ADAM_GLITCH && window.__ADAM_GLITCH.timer > 0) {
         window.__ADAM_GLITCH.timer = Math.max(0, window.__ADAM_GLITCH.timer - 1);
