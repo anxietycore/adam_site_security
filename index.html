@@ -1,36 +1,24 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>A.D.A.M. // ТЕРМИНАЛ</title>
-  <link rel="stylesheet" href="style.css">
   <style>
-    /* Минимальная scanline — поверх всего, тонко */
-    .scanline {
-      position: fixed;
-      inset: 0;
-      pointer-events: none;
-      z-index: 3000;
-      mix-blend-mode: overlay;
-      opacity: 0.08;
-      background-image:
-        linear-gradient(rgba(0,0,0,0.03) 50%, rgba(255,255,255,0.01) 50%);
-      background-size: 100% 2px;
-    }
-    body { margin:0; background:#000; }
+    /* Минимальная стилистика: фон чёрный, без scanlines (ты их не просил) */
+    html,body { height:100%; margin:0; background:#000; }
+    /* если нужно — добавь font-face для Press Start 2P в style.css, здесь запасной monospace */
+    body { font-family: 'Press Start 2P', monospace, monospace; -webkit-font-smoothing:antialiased; }
   </style>
 </head>
 <body>
-  <!-- screenGlass.js — твой уже готовый фон шума (оставляем на месте) -->
+  <!-- 1) шумовой фон (оставляем без изменений) -->
   <script src="screenGlass.js"></script>
 
-  <!-- index_canvas.js — логика интерфейса (рисует на offscreen) -->
+  <!-- 2) UI логика рисует в offscreen canvas и даёт API window.ADAM_UI -->
   <script src="index_canvas.js"></script>
 
-  <!-- crt_overlay_index_only.js — видимый оверлей + искажение + события -->
+  <!-- 3) Видимый WEBGL оверлей, который рисует изгиб, глитч и пробрасывает события -->
   <script src="crt_overlay_index_only.js"></script>
-
-  <div class="scanline"></div>
 </body>
 </html>
