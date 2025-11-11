@@ -1,10 +1,7 @@
-// crt_overlay_index_only.js — умный оверлей: только изгиб, подвижный шум и перенаправление событий
+// crt_overlay_index_only.js — overlay: искажение, шум, и ретрансляция событий на indexCanvas
 (() => {
   const DPR = Math.min(window.devicePixelRatio || 1, 1.5);
-  const DISTORTION = 0.32;        // сила изгиба (можешь подправить)
-  const NOISE_INTENSITY = 0.20;   // шум (0..1)
-  const BRIGHTNESS = 0.85;        // общая яркость (0..1)
-  const SATURATION_GREEN = 0.9;   // уменьшение "ядовитости" зелёного
+  const DISTORTION = 0.32;
 
   // ждём indexCanvas
   let attempts = 0;
@@ -20,8 +17,10 @@
   }, 80);
 
   function initOverlay(sourceCanvas) {
-    // hide original visually (still usable as tex source)
-    sourceCanvas.style.visibility = 'hidden';
+    // make sure source canvas is present but invisible
+    sourceCanvas.style.opacity = '0';        // скрываем визуально
+    sourceCanvas.style.pointerEvents = 'none';
+    sourceCanvas.style.visibility = 'hidden'; // keep layout but invisible
 
     const overlay = document.createElement('canvas');
     overlay.id = 'crtOverlayIndex';
@@ -30,17 +29,17 @@
       left: '0', top: '0',
       width: '100vw', height: '100vh',
       zIndex: '1000',
-      pointerEvents: 'auto', // overlay will handle events
-      display: 'block'
+      pointerEvents: 'auto' // overlay WILL receive events
     });
     document.body.appendChild(overlay);
 
-    const gl = overlay.getContext('webgl', { antialias: true }) || overlay.getContext('experimental-webgl');
+    const gl = overlay.getContext('webgl', { antialias: false });
     if (!gl) {
-      console.error('WebGL is not available');
+      console.error('WebGL not available for overlay');
       return;
     }
 
+    // VERTEX
     const vs = `
       attribute vec2 aPos;
       attribute vec2 aUV;
@@ -51,68 +50,41 @@
       }
     `;
 
-    // fragment: samples source texture with radial distortion, overlays animated noise,
-    // reduces brightness & green saturation slightly.
+    // FRAGMENT with moving noise and brightness damping
     const fs = `
       precision mediump float;
       varying vec2 vUV;
       uniform sampler2D uTex;
       uniform float uDist;
       uniform float uTime;
-      uniform float uNoise;
-      uniform float uBrightness;
-      uniform float uSatG;
-
-      // simple hash / noise
-      float hash(vec2 p) {
-        p = mod(p, 12345.678);
-        return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453);
-      }
-      float noise(vec2 p) {
-        vec2 i = floor(p);
-        vec2 f = fract(p);
-        float a = hash(i);
-        float b = hash(i + vec2(1.0, 0.0));
-        float c = hash(i + vec2(0.0, 1.0));
-        float d = hash(i + vec2(1.0, 1.0));
-        vec2 u = f*f*(3.0-2.0*f);
-        return mix(a, b, u.x) + (c - a)*u.y*(1.0 - u.x) + (d - b)*u.x*u.y;
-      }
-
+      float rand(vec2 co){return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453123);}
       void main() {
-        // convert to -1..1
+        // remap to [-1,1]
         vec2 uv = vUV * 2.0 - 1.0;
         float r = length(uv);
         vec2 distorted = mix(uv, uv * r, uDist);
         vec2 finalUV = (distorted + 1.0) * 0.5;
-        // shader used flipped Y:
         finalUV.y = 1.0 - finalUV.y;
+        vec4 base = texture2D(uTex, clamp(finalUV, 0.0, 1.0));
 
-        // sample source
-        vec4 col = texture2D(uTex, clamp(finalUV, 0.0, 1.0));
+        // moving noise: small high-frequency flicker
+        float n = rand(finalUV * 200.0 + vec2(uTime * 5.0, uTime * 3.0));
+        float n2 = rand(finalUV * 80.0 + vec2(uTime * 12.0, uTime * 7.0));
+        float noise = (n - 0.5) * 0.06 + (n2 - 0.5) * 0.03;
 
-        // apply mild color grading: reduce green saturation to avoid acid-green
-        float g = col.g * uSatG;
-        col.g = mix(col.g, g, 0.6);
+        // slight scanline / banding effect (subtle)
+        float scan = sin((vUV.y + uTime*0.2) * 800.0) * 0.0025;
 
-        // brightness clamp
-        col.rgb *= uBrightness;
+        // dampen brightness a little to remove "burn" look
+        vec3 color = base.rgb * 0.92;
+        color += noise;
+        color -= scan;
 
-        // moving fine noise (scale & speed tuned)
-        float n = noise(finalUV * vec2(800.0, 400.0) + vec2(uTime * 0.4, uTime * 0.1));
-        // vertical subtle scanline banding
-        float scan = sin((vUV.y + uTime*0.2) * 800.0) * 0.02;
-        float combinedNoise = (n - 0.5) * uNoise + scan;
+        // clamp & subtle gamma
+        color = clamp(color, 0.0, 1.0);
+        color = pow(color, vec3(0.95));
 
-        col.rgb += vec3(combinedNoise);
-
-        // slight vignette
-        float vig = smoothstep(0.8, 0.2, r);
-        col.rgb *= vig;
-
-        // gamma / clamp
-        col = clamp(col, 0.0, 1.0);
-        gl_FragColor = col;
+        gl_FragColor = vec4(color, base.a);
       }
     `;
 
@@ -121,27 +93,30 @@
       gl.shaderSource(s, src);
       gl.compileShader(s);
       if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
-        console.error('Shader compile error:', gl.getShaderInfoLog(s));
+        console.error('Shader compile error', gl.getShaderInfoLog(s));
       }
       return s;
     }
 
     const prog = gl.createProgram();
-    gl.attachShader(prog, compile(vs, gl.VERTEX_SHADER));
-    gl.attachShader(prog, compile(fs, gl.FRAGMENT_SHADER));
+    const vsS = compile(vs, gl.VERTEX_SHADER);
+    const fsS = compile(fs, gl.FRAGMENT_SHADER);
+    gl.attachShader(prog, vsS);
+    gl.attachShader(prog, fsS);
     gl.linkProgram(prog);
     if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-      console.error('Program link error:', gl.getProgramInfoLog(prog));
+      console.error('Program link error', gl.getProgramInfoLog(prog));
+      return;
     }
     gl.useProgram(prog);
 
-    // quad
     const quad = new Float32Array([
       -1, -1, 0, 0,
        1, -1, 1, 0,
       -1,  1, 0, 1,
        1,  1, 1, 1
     ]);
+
     const buf = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buf);
     gl.bufferData(gl.ARRAY_BUFFER, quad, gl.STATIC_DRAW);
@@ -155,18 +130,10 @@
 
     const uDistLoc = gl.getUniformLocation(prog, 'uDist');
     const uTimeLoc = gl.getUniformLocation(prog, 'uTime');
-    const uNoiseLoc = gl.getUniformLocation(prog, 'uNoise');
-    const uBrightLoc = gl.getUniformLocation(prog, 'uBrightness');
-    const uSatGLoc = gl.getUniformLocation(prog, 'uSatG');
 
     gl.uniform1f(uDistLoc, DISTORTION);
-    gl.uniform1f(uNoiseLoc, NOISE_INTENSITY);
-    gl.uniform1f(uBrightLoc, BRIGHTNESS);
-    gl.uniform1f(uSatGLoc, SATURATION_GREEN);
 
-    // texture
     const tex = gl.createTexture();
-    gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, tex);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
@@ -183,115 +150,97 @@
     window.addEventListener('resize', resize);
     resize();
 
-    let start = performance.now();
+    // inverse-distortion mapping: map distorted (screen) -> original uv in [-1,1]
+    // We use the fact that distortion scales vector by scalar s = 1 + k*(r-1)
+    function invertDistort(targetX, targetY) {
+      // targetX/Y: normalized in [0,1] (overlay CSS pixels -> normalized)
+      // return sourceUV in [0,1]
+      const k = DISTORTION;
+      // map to [-1,1]
+      let tx = targetX * 2.0 - 1.0;
+      let ty = targetY * 2.0 - 1.0;
+      const td_mag = Math.sqrt(tx*tx + ty*ty);
+      if (td_mag < 1e-6) {
+        return {u: 0.5, v: 0.5};
+      }
+      // direction
+      const dirx = tx / td_mag;
+      const diry = ty / td_mag;
+      // Solve scalar equation for m: m*(1 + k*(m - 1)) = td_mag
+      // Newton method
+      let m = Math.max(0.0001, td_mag); // initial
+      for (let i=0;i<8;i++){
+        const g = m * (1 + k*(m - 1)) - td_mag;
+        const dg = 1 + k*(2*m - 1);
+        const delta = g / (dg || 1e-6);
+        m -= delta;
+        if (Math.abs(delta) < 1e-6) break;
+        if (m < 0) { m = 0; break; }
+      }
+      // uv in [-1,1]
+      const ux = dirx * m;
+      const uy = diry * m;
+      // back to [0,1]
+      return { u: (ux + 1) * 0.5, v: 1.0 - ((uy + 1) * 0.5) };
+    }
 
+    // map overlay client coords -> sourceCanvas client coords via inverse-distortion
+    function mapOverlayToSourceClient(clientX, clientY) {
+      const rectOverlay = overlay.getBoundingClientRect();
+      const rectSource = sourceCanvas.getBoundingClientRect();
+      const nx = (clientX - rectOverlay.left) / rectOverlay.width;
+      const ny = (clientY - rectOverlay.top) / rectOverlay.height;
+      const uv = invertDistort(nx, ny); // returns u,v in [0..1] with v already flipped
+      // map to source client coords
+      const mappedX = rectSource.left + uv.u * rectSource.width;
+      const mappedY = rectSource.top + uv.v * rectSource.height;
+      return { x: mappedX, y: mappedY };
+    }
+
+    // forward event to sourceCanvas by dispatching synthetic mouse events with mapped coords
+    function forwardMouseEvent(type, origEvent) {
+      const m = mapOverlayToSourceClient(origEvent.clientX, origEvent.clientY);
+      const ev = new MouseEvent(type, {
+        clientX: m.x,
+        clientY: m.y,
+        screenX: m.x,
+        screenY: m.y,
+        bubbles: true,
+        cancelable: true,
+        view: window,
+        button: origEvent.button || 0
+      });
+      sourceCanvas.dispatchEvent(ev);
+    }
+
+    // overlay listeners -> forward mapped events to sourceCanvas
+    overlay.addEventListener('mousemove', (e) => forwardMouseEvent('mousemove', e));
+    overlay.addEventListener('mousedown', (e) => forwardMouseEvent('mousedown', e));
+    overlay.addEventListener('mouseup', (e) => forwardMouseEvent('mouseup', e));
+    overlay.addEventListener('click', (e) => forwardMouseEvent('click', e));
+    // also keyboard passthrough: forward keydown/up to document (index logic listens on document)
+    overlay.addEventListener('keydown', (e) => { /* nothing special */ });
+
+    // Render loop: update texture from sourceCanvas and draw with shader
+    let start = performance.now();
     function render() {
       const t = (performance.now() - start) * 0.001;
-      gl.uniform1f(uTimeLoc, t);
-
-      // update source texture from hidden sourceCanvas
+      // update texture from source canvas
       gl.bindTexture(gl.TEXTURE_2D, tex);
       try {
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, sourceCanvas);
       } catch (err) {
-        // some browsers require texImage2D with pixels instead; ignore if fails
+        // texImage2D can fail if canvas is cross-origin or zero-size; ignore
       }
+      // uniforms
+      gl.uniform1f(uTimeLoc, t);
 
+      // clear and draw
       gl.clearColor(0,0,0,1);
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       requestAnimationFrame(render);
     }
     render();
-
-    // ---------------------
-    // Event mapping: overlay receives pointer events; we compute the sampled sourceUV (same math as shader)
-    // and dispatch MouseEvent to sourceCanvas at corresponding client coords.
-    // ---------------------
-
-    function overlayToSourceClient(e) {
-      // overlay client coords
-      const rect = overlay.getBoundingClientRect();
-      const ox = (e.clientX - rect.left);
-      const oy = (e.clientY - rect.top);
-      const vw = rect.width;
-      const vh = rect.height;
-      // normalized vUV (0..1)
-      let vux = ox / vw;
-      let vuy = oy / vh;
-      // shader maps: uv = vUV*2 -1; distorted = mix(uv, uv * r, uDist) ...
-      let uvx = vux * 2.0 - 1.0;
-      let uvy = vuy * 2.0 - 1.0;
-      // compute distorted exactly as shader (we need finalUV)
-      let r = Math.hypot(uvx, uvy);
-      let s = 1.0 - DISTORTION + DISTORTION * r;
-      let dx = uvx * s;
-      let dy = uvy * s;
-      let finalX = (dx + 1.0) * 0.5;
-      let finalY = (dy + 1.0) * 0.5;
-      finalY = 1.0 - finalY; // shader flip
-
-      // convert finalUV to client coords in sourceCanvas space
-      const srcRect = sourceCanvas.getBoundingClientRect();
-      const clientX = srcRect.left + finalX * srcRect.width;
-      const clientY = srcRect.top  + finalY * srcRect.height;
-      return { clientX, clientY, srcRect, finalX, finalY };
-    }
-
-    function makeMouseEvent(type, originalEvent, clientX, clientY) {
-      const ev = new MouseEvent(type, {
-        bubbles: true,
-        cancelable: true,
-        view: window,
-        clientX: Math.round(clientX),
-        clientY: Math.round(clientY),
-        screenX: Math.round(window.screenX + clientX),
-        screenY: Math.round(window.screenY + clientY),
-        button: originalEvent.button,
-        buttons: originalEvent.buttons,
-        ctrlKey: originalEvent.ctrlKey,
-        shiftKey: originalEvent.shiftKey,
-        altKey: originalEvent.altKey,
-        metaKey: originalEvent.metaKey
-      });
-      return ev;
-    }
-
-    ['pointerdown','pointerup','pointermove','click','dblclick','contextmenu'].forEach(evtName => {
-      overlay.addEventListener(evtName, (ev) => {
-        // compute mapped position and dispatch equivalent mouse event on sourceCanvas
-        const mapped = overlayToSourceClient(ev);
-        const me = makeMouseEvent(evtName === 'pointermove' ? 'mousemove' : evtName, ev, mapped.clientX, mapped.clientY);
-        sourceCanvas.dispatchEvent(me);
-        // prevent default so page doesn't also use these
-        ev.preventDefault();
-        ev.stopPropagation();
-      }, { passive: false });
-    });
-
-    // also forward wheel
-    overlay.addEventListener('wheel', (ev) => {
-      const mapped = overlayToSourceClient(ev);
-      const we = new WheelEvent('wheel', {
-        bubbles: true, cancelable: true, deltaX: ev.deltaX, deltaY: ev.deltaY,
-        clientX: Math.round(mapped.clientX), clientY: Math.round(mapped.clientY)
-      });
-      sourceCanvas.dispatchEvent(we);
-      ev.preventDefault();
-      ev.stopPropagation();
-    }, { passive: false });
-
-    // focus: when overlay clicked, try to focus underlying canvas (so keyboard can be used if code expects focus)
-    overlay.addEventListener('pointerdown', (ev) => {
-      try { sourceCanvas.focus(); } catch (e) {}
-    });
-
-    // expose some tuning via window for quick adjustments in dev console
-    window.__CRTOverlay = {
-      setDist: v => { gl.uniform1f(uDistLoc, v); },
-      setNoise: v => { gl.uniform1f(uNoiseLoc, v); },
-      setBrightness: v => { gl.uniform1f(uBrightLoc, v); },
-      setSatG: v => { gl.uniform1f(uSatGLoc, v); }
-    };
   }
 })();
