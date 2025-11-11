@@ -5,20 +5,18 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>A.D.A.M. // ТЕРМИНАЛ</title>
   <style>
-    /* Минимальная стилистика: фон чёрный, без scanlines (ты их не просил) */
-    html,body { height:100%; margin:0; background:#000; }
-    /* если нужно — добавь font-face для Press Start 2P в style.css, здесь запасной monospace */
+    html,body { height:100%; margin:0; background:#000; overflow:hidden; }
     body { font-family: 'Press Start 2P', monospace, monospace; -webkit-font-smoothing:antialiased; }
   </style>
 </head>
 <body>
-  <!-- 1) шумовой фон (оставляем без изменений) -->
+  <!-- Шумовой фон (базовый слой) — подключаем первым -->
   <script src="screenGlass.js"></script>
-
-  <!-- 2) UI логика рисует в offscreen canvas и даёт API window.ADAM_UI -->
+  
+  <!-- UI-логика (offscreen canvas) -->
   <script src="index_canvas.js"></script>
-
-  <!-- 3) Видимый WEBGL оверлей, который рисует изгиб, глитч и пробрасывает события -->
+  
+  <!-- Визуальный оверлей с искажением и смешиванием слоёв -->
   <script src="crt_overlay_index_only.js"></script>
 </body>
 </html>
