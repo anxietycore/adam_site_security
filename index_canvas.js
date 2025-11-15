@@ -1,4 +1,4 @@
-// index_canvas.js — финальная версия с улучшенным UI и двойным глитчем
+// index_canvas.js — финальная версия с двойным глитчем и выровненным UI
 (() => {
   const FONT_FAMILY = "'Press Start 2P', monospace";
   const FONT_SIZE = 12;
@@ -9,8 +9,8 @@
   // === АНИМИРОВАННЫЙ ШУМ ===
   const noiseFrames = [];
   let noiseTick = 0;
-  let glitchIntensity = 0;
-  let localGlitchIntensity = 0; // Новый: локальный глитч для UI-элементов
+  let glitchIntensity = 0;        // [0..1] ГЛОБАЛЬНЫЙ глитч (весь экран)
+  let localGlitchIntensity = 0;   // [0..1] ЛОКАЛЬНЫЙ глитч (только UI-элементы)
   let exitFade = 0;
 
   function generateNoiseFrames() {
@@ -55,7 +55,7 @@
   let secretCode = '';
   let codeInputFocused = false;
   let showErrorMessage = false;
-  let showSuccessMessage = false; // Новый флаг
+  let showSuccessMessage = false;
   let messageTimer = 0;
   let cursorBlink = 0;
   let currentText = '';
@@ -93,20 +93,20 @@
     ctx.font = `${FONT_SIZE}px ${FONT_FAMILY}`;
     ctx.textBaseline = 'top';
     
-    // Локальный глитч: RGB сдвиг
+    // ГЛИТЧ: RGB-сдвиг для UI-элементов (только если glitchOffset > 0)
     if (glitchOffset > 0) {
-      // Красный канал смещён влево
+      // Красный канал (слева)
       ctx.fillStyle = 'rgba(255,0,0,0.8)';
       ctx.fillText(text, x - glitchOffset, y);
-      // Зелёный канал смещён вправо
+      // Зелёный канал (справа)
       ctx.fillStyle = 'rgba(0,255,0,0.8)';
       ctx.fillText(text, x + glitchOffset, y);
-      // Синий канал смещён вверх
+      // Синий канал (вверх)
       ctx.fillStyle = 'rgba(0,0,255,0.8)';
       ctx.fillText(text, x, y - glitchOffset);
     }
     
-    // Основной текст
+    // Обычный текст
     ctx.fillStyle = color;
     text.split('\n').forEach((line, i) => ctx.fillText(line, x, y + i * LINE_HEIGHT));
     ctx.restore();
@@ -125,6 +125,7 @@
     bootTimer = 0;
   }
 
+  // ГЛОБАЛЬНЫЙ глитч (весь экран)
   function triggerGlobalGlitch() {
     glitchIntensity = 1.0;
     showErrorMessage = true;
@@ -137,7 +138,7 @@
     setTimeout(fadeOut, 150);
   }
 
-  // Новая функция: локальный глитч для UI-элементов
+  // ЛОКАЛЬНЫЙ глитч (только UI-элементы)
   function triggerLocalGlitch() {
     localGlitchIntensity = 1.0;
     const fadeOut = () => {
@@ -210,7 +211,7 @@
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, vw, vh);
 
-    // === ГЛОБАЛЬНЫЙ ГЛИТЧ ===
+    // === ГЛОБАЛЬНЫЙ глитч (весь экран) ===
     if (glitchIntensity > 0) {
       ctx.save();
       ctx.globalAlpha = glitchIntensity * 0.3;
@@ -237,34 +238,30 @@
     ctx.drawImage(frame, 0, 0, vw, vh);
     ctx.restore();
 
-    // === ВЫРОВНЕННЫЙ ЗАГОЛОВОК ===
+    // === ВЫРОВНЕННЫЙ ЗАГОЛОВОК (по центру поля) ===
     const title = 'ВХОД В ТЕРМИНАЛ';
-    // Выравниваем по центру поля ввода (200px ширина)
     const titleX = (vw - measureText(title)) / 2;
-    drawText(title, titleX, vh / 2 - 60, '#00FF41', 1, localGlitchIntensity);
+    // Локальный глитч: передаём glitchOffset=localGlitchIntensity*2
+    drawText(title, titleX, vh / 2 - 60, '#00FF41', 1, localGlitchIntensity * 2);
 
-    // === ПОЛЕ ВВОДА ===
+    // === ПОЛЕ ВВОДА (строго по центру) ===
     const codeFieldX = (vw - 200) / 2;
     const codeFieldY = vh / 2 - 20;
-    const codeFieldW = 200;
-    const codeFieldH = 30;
     
-    // Мерцание поля при глитче
     const fieldColor = glitchIntensity > 0.5 ? '#FF0044' : (codeInputFocused ? '#00FF88' : '#00FF41');
     ctx.strokeStyle = fieldColor;
     ctx.lineWidth = codeInputFocused ? 2 : 1;
-    ctx.strokeRect(codeFieldX, codeFieldY, codeFieldW, codeFieldH);
+    ctx.strokeRect(codeFieldX, codeFieldY, 200, 30);
     
     // === ВЫРОВНЕННАЯ ПОДПИСЬ ===
     const labelText = 'СЕКРЕТНЫЙ КОД:';
-    // Центрируем над полем ввода
-    const labelX = codeFieldX + (codeFieldW - measureText(labelText)) / 2;
-    drawText(labelText, labelX, codeFieldY - LINE_HEIGHT - 5, '#00FF41', 0.85, localGlitchIntensity);
+    const labelX = codeFieldX + (200 - measureText(labelText)) / 2; // Центр над полем
+    drawText(labelText, labelX, codeFieldY - LINE_HEIGHT - 5, '#00FF41', 0.85, localGlitchIntensity * 2);
     
-    // Код с курсором
+    // === КОД С КУРСОРОМ ===
     const blinkSpeed = glitchIntensity > 0 ? 8 : 15;
     const codeFieldText = secretCode + (cursorBlink % blinkSpeed < blinkSpeed/2 ? '█' : '');
-    drawText(codeFieldText, codeFieldX + 5, codeFieldY + 6, '#FFFFFF', 1, localGlitchIntensity);
+    drawText(codeFieldText, codeFieldX + 5, codeFieldY + 6, '#FFFFFF', 1, localGlitchIntensity * 2);
 
     // === СООБЩЕНИЯ ===
     if (showErrorMessage && messageTimer > 0) {
@@ -273,7 +270,7 @@
       messageTimer--;
     }
 
-    // === НОВОЕ: СООБЩЕНИЕ ОБ УСПЕХЕ ===
+    // === УСПЕШНЫЙ ВХОД ===
     if (showSuccessMessage) {
       const successMsg = '> УСПЕШНЫЙ ВХОД';
       drawText(successMsg, (vw - measureText(successMsg)) / 2, vh / 2 + 60, '#00FF41', 1);
@@ -345,13 +342,11 @@
     } else if (currentScreen === 'code' && codeInputFocused) {
       if (e.key === 'Enter') {
         if (secretCode === 'test') {
-          // Запускаем локальный глитч для UI-элементов
+          // Локальный глитч для UI
           triggerLocalGlitch();
-          
-          // Показываем сообщение об успехе
           showSuccessMessage = true;
           
-          // Плавный переход через 1.5 секунды
+          // Плавный переход
           setTimeout(() => {
             document.body.style.transition = 'opacity 0.8s ease-in-out';
             document.body.style.opacity = '0';
@@ -361,8 +356,9 @@
             window.location.href = 'terminal.html';
           }, 1600);
         } else {
+          // ДВА глитча: глобальный + локальный
           triggerGlobalGlitch();
-          triggerLocalGlitch(); // Дополнительный локальный глитч
+          triggerLocalGlitch(); // <-- ЭТОТ вызов добавляет эффект на текст/поле
           secretCode = '';
         }
       } else if (e.key === 'Backspace') {
