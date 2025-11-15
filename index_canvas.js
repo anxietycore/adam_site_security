@@ -1,15 +1,17 @@
-// index_canvas.js — простая версия без зависаний
+// index_canvas.js — финальная версия с эффектами и работающим выходом
 (() => {
   const FONT_FAMILY = "'Press Start 2P', monospace";
   const FONT_SIZE = 12;
   const LINE_HEIGHT = Math.round(FONT_SIZE * 1.45);
   const DPR = Math.min(window.devicePixelRatio || 1, 1.5);
-  const NOISE_OPACITY_BASE = 0.0336; // 0.28 × 0.12
+  const NOISE_OPACITY_BASE = 0.0336;
 
   // === АНИМИРОВАННЫЙ ШУМ ===
   const noiseFrames = [];
   let noiseTick = 0;
-  
+  let glitchIntensity = 0; // 0..1 для глитча
+  let exitFade = 0; // 0..1 для выхода
+
   function generateNoiseFrames() {
     const fw = Math.max(256, Math.floor(vw * 0.8));
     const fh = Math.max(256, Math.floor(vh * 0.8));
@@ -47,7 +49,7 @@
 
   let vw = 0, vh = 0;
   let mouseX = 0, mouseY = 0;
-  let currentScreen = 'confirm'; // confirm, boot, code
+  let currentScreen = 'confirm';
   let bootTextIndex = 0;
   let bootTimer = 0;
   let secretCode = '';
@@ -107,14 +109,26 @@
     bootTimer = 0;
   }
 
+  function triggerGlitch() {
+    glitchIntensity = 1.0;
+    showErrorMessage = true;
+    messageTimer = 60;
+    
+    // Импульсный эффект: быстрое затухание
+    const fadeOut = () => {
+      glitchIntensity = Math.max(0, glitchIntensity - 0.08);
+      if (glitchIntensity > 0) requestAnimationFrame(fadeOut);
+    };
+    setTimeout(fadeOut, 150);
+  }
+
   function drawConfirmScreen() {
-    // Фон
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, vw, vh);
 
-    // Шум (без пульсации!)
+    // Шум
     ctx.save();
-    ctx.globalAlpha = NOISE_OPACITY_BASE;
+    ctx.globalAlpha = NOISE_OPACITY_BASE * (1 - exitFade);
     const frame = noiseFrames[noiseTick % noiseFrames.length];
     ctx.drawImage(frame, 0, 0, vw, vh);
     ctx.restore();
@@ -127,25 +141,30 @@
     const logoWidth = measureText(logoText.split('\n')[0]);
     const logoX = (vw - logoWidth) / 2;
     const logoY = vh / 2 - 90;
-    drawText(logoText, logoX, logoY, '#00FF41', 1);
+    drawText(logoText, logoX, logoY, '#00FF41', 1 - exitFade);
 
     // Приглашение
     const promptText = 'ИНИЦИАЛИЗАЦИЯ СИСТЕМЫ';
     const promptX = (vw - measureText(promptText)) / 2;
-    drawText(promptText, promptX, logoY + 70, '#00FF41', 0.9);
+    drawText(promptText, promptX, logoY + 70, '#00FF41', 0.9 * (1 - exitFade));
 
     // Инструкция
     const instruction = '[Y/Н] - ПОДТВЕРДИТЬ | [N/Т] - ОТМЕНА';
     const instructionX = (vw - measureText(instruction)) / 2;
-    drawText(instruction, instructionX, logoY + 100, '#00FF41', 0.8);
+    drawText(instruction, instructionX, logoY + 100, '#00FF41', 0.8 * (1 - exitFade));
+
+    // Финальное сообщение при выходе
+    if (exitFade > 0.5) {
+      const exitMsg = '> ДОСТУП ЗАПРЕЩЁН';
+      drawText(exitMsg, (vw - measureText(exitMsg)) / 2, vh / 2, '#FF0000', (exitFade - 0.5) * 2);
+    }
   }
 
   function drawBootScreen() {
-    // Фон
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, vw, vh);
 
-    // Шум (без пульсации)
+    // Шум
     ctx.save();
     ctx.globalAlpha = NOISE_OPACITY_BASE;
     const frame = noiseFrames[noiseTick % noiseFrames.length];
@@ -171,13 +190,38 @@
   }
 
   function drawCodeScreen() {
-    // Фон
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, vw, vh);
 
-    // Шум (без пульсации)
+    // === ГЛИТЧ ЭФФЕКТ ===
+    if (glitchIntensity > 0) {
+      // RGB сдвиг
+      ctx.save();
+      ctx.globalAlpha = glitchIntensity * 0.3;
+      const offset = glitchIntensity * 3;
+      
+      // Красный канал смещён влево
+      ctx.fillStyle = 'rgba(255,0,0,0.5)';
+      ctx.fillRect(0, 0, vw, vh);
+      
+      // Зелёный канал смещён вверх
+      ctx.globalAlpha = glitchIntensity * 0.2;
+      const frame = noiseFrames[noiseTick % noiseFrames.length];
+      ctx.drawImage(frame, -offset, -offset, vw, vh);
+      ctx.drawImage(frame, offset, offset, vw, vh);
+      ctx.restore();
+      
+      // Интенсивный шум
+      ctx.save();
+      ctx.globalAlpha = glitchIntensity * 0.6;
+      const noiseFrame = noiseFrames[(noiseTick * 3) % noiseFrames.length];
+      ctx.drawImage(noiseFrame, 0, 0, vw, vh);
+      ctx.restore();
+    }
+
+    // Обычный шум
     ctx.save();
-    ctx.globalAlpha = NOISE_OPACITY_BASE;
+    ctx.globalAlpha = NOISE_OPACITY_BASE * (1 + glitchIntensity);
     const frame = noiseFrames[noiseTick % noiseFrames.length];
     ctx.drawImage(frame, 0, 0, vw, vh);
     ctx.restore();
@@ -192,20 +236,23 @@
     const codeFieldW = 200;
     const codeFieldH = 30;
     
-    ctx.strokeStyle = codeInputFocused ? '#00FF88' : '#00FF41';
+    // Мерцание поля при глитче
+    const fieldColor = glitchIntensity > 0.5 ? '#FF0044' : (codeInputFocused ? '#00FF88' : '#00FF41');
+    ctx.strokeStyle = fieldColor;
     ctx.lineWidth = codeInputFocused ? 2 : 1;
     ctx.strokeRect(codeFieldX, codeFieldY, codeFieldW, codeFieldH);
     
     drawText('СЕКРЕТНЫЙ КОД:', codeFieldX, codeFieldY - LINE_HEIGHT - 5, '#00FF41', 0.85);
     
-    // Код с курсором
-    const codeFieldText = secretCode + (cursorBlink % 30 < 15 ? '█' : '');
+    // Код с курсором (мерцает быстрее при глитче)
+    const blinkSpeed = glitchIntensity > 0 ? 8 : 15;
+    const codeFieldText = secretCode + (cursorBlink % blinkSpeed < blinkSpeed/2 ? '█' : '');
     drawText(codeFieldText, codeFieldX + 5, codeFieldY + 6, '#FFFFFF');
 
     // Сообщение об ошибке
     if (showErrorMessage && messageTimer > 0) {
       const msg = '> ДОСТУП ЗАПРЕЩЁН';
-      drawText(msg, (vw - measureText(msg)) / 2, vh / 2 + 60, '#FF0000', 0.9);
+      drawText(msg, (vw - measureText(msg)) / 2, vh / 2 + 60, '#FF0000', 0.9 + glitchIntensity * 0.1);
       messageTimer--;
     }
   }
@@ -216,23 +263,19 @@
     const targetText = bootTexts[bootTextIndex];
     
     if (bootTimer % 2 === 0 && currentCharIndex < targetText.length) {
-      // Рандомный символ перед правильным
       if (Math.random() > 0.5) {
         const randomChar = randomChars.charAt(Math.floor(Math.random() * randomChars.length));
         currentText = targetText.substring(0, currentCharIndex) + randomChar;
       }
-      // Правильный символ (в 5 раз быстрее)
       currentText = targetText.substring(0, currentCharIndex + 1);
       currentCharIndex++;
     }
     
     if (currentCharIndex >= targetText.length && bootTimer % 35 === 0) {
-      // Переход к следующей строке
       bootTextIndex++;
       currentCharIndex = 0;
       currentText = '';
       
-      // Если все строки отображены - переход к коду
       if (bootTextIndex >= bootTexts.length) {
         setTimeout(() => {
           currentScreen = 'code';
@@ -248,10 +291,8 @@
     cursorBlink++;
     noiseTick++;
     
-    // Обновление анимации загрузки
     updateBootAnimation();
     
-    // Отрисовка текущего экрана
     switch(currentScreen) {
       case 'confirm': drawConfirmScreen(); break;
       case 'boot': drawBootScreen(); break;
@@ -266,19 +307,28 @@
       if (e.key.toLowerCase() === 'y' || e.key.toLowerCase() === 'н') {
         startBootSequence();
       } else if (e.key.toLowerCase() === 'n' || e.key.toLowerCase() === 'т') {
-        try { window.close(); } catch (err) { location.reload(); }
+        // Плавное затухание вместо window.close()
+        const fadeOut = () => {
+          exitFade += 0.04;
+          if (exitFade < 1) {
+            requestAnimationFrame(fadeOut);
+          } else {
+            // Через 2 секунды перенаправляем на about:blank
+            setTimeout(() => {
+              window.location.href = 'about:blank';
+            }, 2000);
+          }
+        };
+        fadeOut();
       }
     } else if (currentScreen === 'code' && codeInputFocused) {
       if (e.key === 'Enter') {
-        // Проверка кода
         if (secretCode === 'test') {
           document.body.style.transition = 'opacity 0.8s ease-in-out';
           document.body.style.opacity = '0';
           setTimeout(() => window.location.href = 'terminal.html', 800);
         } else {
-          // Простой глитч при ошибке
-          showErrorMessage = true;
-          messageTimer = 60;
+          triggerGlitch();
           secretCode = '';
         }
       } else if (e.key === 'Backspace') {
@@ -289,6 +339,5 @@
     }
   });
 
-  // Начало анимации
   render();
 })();
