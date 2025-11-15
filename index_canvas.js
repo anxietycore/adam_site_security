@@ -1,17 +1,17 @@
-// index_canvas.js — финальная версия с изолированным UI-глитчем
+// index_canvas.js — финальная версия с ОБЕИМИ функциями
 (() => {
   const FONT_FAMILY = "'Press Start 2P', monospace";
   const FONT_SIZE = 12;
   const LINE_HEIGHT = Math.round(FONT_SIZE * 1.45);
   const DPR = Math.min(window.devicePixelRatio || 1, 1.5);
   const NOISE_OPACITY_BASE = 0.0336;
-  const MAX_CODE_LENGTH = 12; // Ограничение длины кода
+  const MAX_CODE_LENGTH = 12;
 
   // === АНИМИРОВАННЫЙ ШУМ ===
   const noiseFrames = [];
   let noiseTick = 0;
-  let glitchIntensity = 0;        // Глобальный глитч
-  let localGlitchIntensity = 0;   // ЛОКАЛЬНЫЙ глитч для UI
+  let glitchIntensity = 0;
+  let localGlitchIntensity = 0;
   let exitFade = 0;
 
   function generateNoiseFrames() {
@@ -88,7 +88,18 @@
     '> ФИНАЛИЗАЦИЯ ПАРАМЕТРОВ ДОСТУПА...'
   ];
 
-  // === ОТДЕЛЬНАЯ функция для UI-текста с эффектом ===
+  // === БАЗОВАЯ функция рисования (для обычного текста) ===
+  function drawText(text, x, y, color = '#00FF41', opacity = 1) {
+    ctx.save();
+    ctx.globalAlpha = opacity;
+    ctx.font = `${FONT_SIZE}px ${FONT_FAMILY}`;
+    ctx.fillStyle = color;
+    ctx.textBaseline = 'top';
+    text.split('\n').forEach((line, i) => ctx.fillText(line, x, y + i * LINE_HEIGHT));
+    ctx.restore();
+  }
+
+  // === ГЛИТЧ-функция для UI-элементов (отдельный эффект) ===
   function drawGlitchText(text, x, y, color = '#00FF41', opacity = 1, intensity = 0) {
     ctx.save();
     ctx.globalAlpha = opacity;
@@ -96,23 +107,19 @@
     ctx.textBaseline = 'top';
     
     if (intensity > 0) {
-      // АГРЕССИВНЫЙ RGB-сдвиг
+      // RGB-сдвиг с дрожанием
       const offset = intensity * 2.5;
       
-      // Красный канал с дрожанием
       ctx.fillStyle = 'rgba(255,0,0,0.9)';
       ctx.fillText(text, x - offset + Math.random()*2, y + Math.random()*2);
       
-      // Зелёный канал с дрожанием
       ctx.fillStyle = 'rgba(0,255,0,0.9)';
       ctx.fillText(text, x + offset + Math.random()*2, y - Math.random()*2);
       
-      // Синий канал с дрожанием
       ctx.fillStyle = 'rgba(0,100,255,0.9)';
       ctx.fillText(text, x + Math.random()*2, y - offset);
     }
     
-    // Основной текст (поверх всего)
     ctx.fillStyle = color;
     ctx.fillText(text, x, y);
     ctx.restore();
@@ -131,7 +138,6 @@
     bootTimer = 0;
   }
 
-  // Глобальный глитч (весь экран)
   function triggerGlobalGlitch() {
     glitchIntensity = 1.0;
     showErrorMessage = true;
@@ -144,7 +150,6 @@
     setTimeout(fadeOut, 150);
   }
 
-  // ЛОКАЛЬНЫЙ глитч (только UI-элементы)
   function triggerLocalGlitch() {
     localGlitchIntensity = 1.0;
     const fadeOut = () => {
@@ -158,8 +163,7 @@
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, vw, vh);
 
-    // Очищаем слой перед отрисовкой (фикс наложения)
-    ctx.clearRect(0, 0, vw, vh);
+    ctx.clearRect(0, 0, vw, vh); // Фикс наложения
     
     ctx.save();
     ctx.globalAlpha = NOISE_OPACITY_BASE * (1 - exitFade);
@@ -184,7 +188,6 @@
     const instructionX = (vw - measureText(instruction)) / 2;
     drawText(instruction, instructionX, logoY + 100, '#00FF41', 0.8 * (1 - exitFade));
 
-    // Финальное сообщение при выходе
     if (exitFade > 0.5) {
       const exitMsg = '> ДОСТУП ЗАПРЕЩЁН';
       drawText(exitMsg, (vw - measureText(exitMsg)) / 2, vh / 2, '#FF0000', (exitFade - 0.5) * 2);
@@ -221,7 +224,7 @@
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, vw, vh);
 
-    // Глобальный глитч (фоновый шум)
+    // Глобальный глитч
     if (glitchIntensity > 0) {
       ctx.save();
       ctx.globalAlpha = glitchIntensity * 0.3;
@@ -248,42 +251,40 @@
     ctx.drawImage(frame, 0, 0, vw, vh);
     ctx.restore();
 
-    // === КООРДИНАТЫ UI-ЭЛЕМЕНТОВ ===
+    // === UI-ЭЛЕМЕНТЫ с ЛОКАЛЬНЫМ ГЛИТЧЕМ ===
     const fieldWidth = 200;
     const fieldX = (vw - fieldWidth) / 2;
     const fieldY = vh / 2 - 20;
 
-    // Заголовок (строго по центру поля)
+    // Заголовок (глитч)
     const title = 'ВХОД В ТЕРМИНАЛ';
     const titleX = (vw - measureText(title)) / 2;
-    // Рисуем с ЛОКАЛЬНЫМ глитчем
     drawGlitchText(title, titleX, fieldY - 60, '#00FF41', 1, localGlitchIntensity);
 
-    // Подпись "СЕКРЕТНЫЙ КОД:" (центр над полем)
+    // Подпись (глитч)
     const labelText = 'СЕКРЕТНЫЙ КОД:';
     const labelX = fieldX + (fieldWidth - measureText(labelText)) / 2;
     drawGlitchText(labelText, labelX, fieldY - LINE_HEIGHT - 8, '#00FF41', 0.85, localGlitchIntensity);
 
-    // === ПОЛЕ ВВОДА ===
+    // Поле
     const fieldColor = glitchIntensity > 0.5 ? '#FF0044' : (codeInputFocused ? '#00FF88' : '#00FF41');
     ctx.strokeStyle = fieldColor;
     ctx.lineWidth = codeInputFocused ? 2 : 1;
     ctx.strokeRect(fieldX, fieldY, fieldWidth, 30);
 
-    // ОГРАНИЧЕННЫЙ текст в поле (не выходит за границы)
-    const displayCode = secretCode.slice(-MAX_CODE_LENGTH); // Берём только последние N символов
+    // Текст в поле (ограниченный, с глитчем)
+    const displayCode = secretCode.slice(-MAX_CODE_LENGTH);
     const blinkSpeed = glitchIntensity > 0 ? 8 : 15;
     const codeWithCursor = displayCode + (cursorBlink % blinkSpeed < blinkSpeed/2 ? '█' : '');
     drawGlitchText(codeWithCursor, fieldX + 5, fieldY + 6, '#FFFFFF', 1, localGlitchIntensity);
 
-    // === СООБЩЕНИЯ ===
+    // Сообщения
     if (showErrorMessage && messageTimer > 0) {
       const msg = '> ДОСТУП ЗАПРЕЩЁН';
       drawText(msg, (vw - measureText(msg)) / 2, fieldY + 50, '#FF0000', 0.9 + glitchIntensity * 0.1);
       messageTimer--;
     }
 
-    // УСПЕШНЫЙ ВХОД
     if (showSuccessMessage) {
       const successMsg = '> УСПЕШНЫЙ ВХОД';
       drawText(successMsg, (vw - measureText(successMsg)) / 2, fieldY + 50, '#00FF41', 1);
@@ -368,13 +369,12 @@
           }, 1600);
         } else {
           triggerGlobalGlitch();
-          triggerLocalGlitch(); // <-- ЗАПУСКАЕМ ЛОКАЛЬНЫЙ ГЛИТЧ
+          triggerLocalGlitch(); // <-- ВОТ ЭТОТ ВЫЗОВ ДЛЯ UI-ГЛИТЧА
           secretCode = '';
         }
       } else if (e.key === 'Backspace') {
         secretCode = secretCode.slice(0, -1);
       } else if (e.key.length === 1 && /^[a-zA-Z0-9]$/.test(e.key)) {
-        // Ограничиваем длину кода
         if (secretCode.length < MAX_CODE_LENGTH) {
           secretCode += e.key;
         }
