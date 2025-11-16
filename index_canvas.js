@@ -146,7 +146,8 @@ const AudioManager = {
   let glitchIntensity = 0;
   let localGlitchIntensity = 0;
   let exitFade = 0;
-
+  let isExiting = false;
+  
   function generateNoiseFrames() {
     const fw = Math.max(256, Math.floor(vw * 0.8));
     const fh = Math.max(256, Math.floor(vh * 0.8));
@@ -477,6 +478,7 @@ const AudioManager = {
 
   // === KEYBOARD HANDLER (БЕЗ ЗВУКА ПЕЧАТИ) ===
   document.addEventListener('keydown', (e) => {
+    if (isExiting) return;
     // Инициализация AudioContext при первом взаимодействии
     if (!AudioManager.isInitialized) {
       AudioManager.init();
@@ -488,6 +490,7 @@ const AudioManager = {
         startBootSequence();
       } else if (e.key.toLowerCase() === 'n' || e.key.toLowerCase() === 'т') {
         AudioManager.playSound('reject', 0.3);
+        isExiting = true;
         const fadeOut = () => {
           exitFade += 0.04;
           if (exitFade < 1) {
