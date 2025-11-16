@@ -435,12 +435,11 @@
     ctx.fillStyle = color;
     ctx.fillRect(barX, barY, Math.round(barW * (degradation.level / 100)), barH);
 
-    ctx.fillStyle = color;
-    ctx.font = `12px ${FONT_FAMILY}`;
-    // clamp text inside box: if width overflows, use smaller font (simple fallback)
-    let label = 'ДЕГРАДАЦИЯ СИСТЕМЫ';
-    ctx.fillText(label, x + 10, y + 6);
-    ctx.fillText(degradation.level + '%', x + wBox - 46, y + 6);
+ctx.fillStyle = color;
+ctx.font = `12px ${FONT_FAMILY}`;
+let label = 'ДЕГРАДАЦИЯ СИСТЕМЫ';
+ctx.fillText(label, x + 10, y + 16);         // ✅ НОВОЕ - отступ 16px сверху
+ctx.fillText(degradation.level + '%', x + wBox - 46, y + 16);  // ✅ НОВОЕ
 
     ctx.restore();
   }
