@@ -7,116 +7,138 @@
   const NOISE_OPACITY_BASE = 0.0336;
   const MAX_CODE_LENGTH = 12;
 
-  // === УЛУЧШЕННАЯ ЗВУКОВАЯ СИСТЕМА С ПРЕДЗАГРУЗКОЙ ===
-  const AudioManager = {
-    context: null,
-    sounds: {},
-    ambient: null,
-    isInitialized: false,
-    loadedCount: 0,
-    totalSounds: 5,
+  // === УЛУЧШЕННАЯ ЗВУКОВАЯ СИСТЕМА С БЕСШОВНЫМ АМБИЕНТОМ ===
+const AudioManager = {
+  context: null,
+  sounds: {}, // для коротких звуков (HTML Audio)
+  ambientBuffer: null, // для бесшовного ambient
+  ambientSource: null,
+  isInitialized: false,
+  loadedCount: 0,
+  totalSounds: 6, // теперь 6
 
-    init() {
-      if (this.isInitialized) return;
-      
-      // Проверяем поддержку аудио
-      if (typeof Audio === 'undefined') {
-        console.warn('Веб-аудио не поддерживается в этом браузере');
-        return;
-      }
-
-      this.context = new (window.AudioContext || window.webkitAudioContext)();
-      this.isInitialized = true;
-      
-      // Предзагрузка ВСЕХ звуков
-      this.loadSound('confirm', 'sounds/confirm.mp3');
-      this.loadSound('reject', 'sounds/reject.mp3');
-      this.loadSound('glitch_error', 'sounds/glitch_error.mp3');
-      this.loadSound('success', 'sounds/success.mp3');
-      this.loadSound('boot', 'sounds/boot_sequence.mp3'); // Добавили звук загрузки
-      this.loadSound('ambient_terminal', 'sounds/ambient_terminal.mp3');
-      console.log('[Звук] Менеджер инициализирован');
-    },
-
-    loadSound(name, url) {
-      console.log(`[Звук] Загрузка: ${name} из ${url}`);
-      
-      this.sounds[name] = new Audio();
-      this.sounds[name].preload = 'auto';
-      this.sounds[name].volume = 0.3; // Базовая громкость
-      
-      // Слушаем события загрузки
-      this.sounds[name].addEventListener('canplaythrough', () => {
-        this.loadedCount++;
-        console.log(`[Звук] ✅ Загружен: ${name} (${this.loadedCount}/${this.totalSounds})`);
-      });
-      
-      this.sounds[name].addEventListener('error', (e) => {
-        console.error(`[Звук] ❌ Ошибка загрузки ${name}:`, e);
-        this.loadedCount++; // Считаем как загруженный, чтобы не зависать
-      });
-      
-      // Устанавливаем источник
-      this.sounds[name].src = url;
-
-        // ⭐ ИЗМЕНИ ЭТУ ЧАСТЬ:
-      if (name === 'ambient_terminal') {
-        this.sounds[name].loop = true; // только ambient_terminal циклится
-      }
-    },
-
-    playSound(name, volume = 1) {
-      if (!this.isInitialized) {
-        console.warn('[Звук] Менеджер не инициализирован');
-        return;
-      }
-      
-      const sound = this.sounds[name];
-      if (!sound) {
-        console.error(`[Звук] Звук "${name}" не найден!`);
-        return;
-      }
-
-      // Ждём загрузки
-      if (sound.readyState < 2) {
-        console.warn(`[Звук] Звук "${name}" ещё не загружен (readyState: ${sound.readyState})`);
-        sound.addEventListener('canplaythrough', () => {
-          this.playSound(name, volume);
-        }, { once: true });
-        return;
-      }
-
-      try {
-        sound.currentTime = 0;
-        sound.volume = Math.max(0, Math.min(1, volume));
-        
-        // Останавливаем старый ambient при переключении
-       if (name === 'boot' || name === 'ambient_terminal') {
-          this.ambient = sound;
-        }
-        
-        const playPromise = sound.play();
-        if (playPromise !== undefined) {
-          playPromise.catch(err => {
-            console.error(`[Звук] Ошибка воспроизведения ${name}:`, err);
-          });
-        }
-        
-        console.log(`[Звук] ▶️ Воспроизведение: ${name} (volume: ${sound.volume})`);
-      } catch (error) {
-        console.error(`[Звук] Критическая ошибка ${name}:`, error);
-      }
-    },
-
-    stopAmbient() {
-      if (this.ambient && !this.ambient.paused) {
-        console.log('[Звук] Остановка ambient');
-        this.ambient.pause();
-        this.ambient.currentTime = 0;
-        this.ambient = null;
-      }
+  init() {
+    if (this.isInitialized) return;
+    
+    if (typeof Audio === 'undefined') {
+      console.warn('Веб-аудио не поддерживается');
+      return;
     }
-  };
+
+    this.context = new (window.AudioContext || window.webkitAudioContext)();
+    this.isInitialized = true;
+    
+    // Обычные звуки
+    this.loadSound('confirm', 'sounds/confirm.mp3');
+    this.loadSound('reject', 'sounds/reject.mp3');
+    this.loadSound('glitch_error', 'sounds/glitch_error.mp3');
+    this.loadSound('success', 'sounds/success.mp3');
+    this.loadSound('boot', 'sounds/boot_sequence.mp3');
+    
+    // Ambient через Web Audio API
+    this.loadAmbientSound('ambient_terminal', 'sounds/ambient_terminal.mp3');
+    
+    console.log('[Звук] Менеджер инициализирован');
+  },
+
+  // Загрузка коротких звуков (HTML Audio)
+  loadSound(name, url) {
+    console.log(`[Звук] Загрузка: ${name} из ${url}`);
+    this.sounds[name] = new Audio();
+    this.sounds[name].preload = 'auto';
+    this.sounds[name].volume = 0.3;
+    
+    this.sounds[name].addEventListener('canplaythrough', () => {
+      this.loadedCount++;
+      console.log(`✅ Загружен: ${name} (${this.loadedCount}/${this.totalSounds})`);
+    });
+    
+    this.sounds[name].addEventListener('error', (e) => {
+      console.error(`❌ Ошибка ${name}:`, e);
+      this.loadedCount++;
+    });
+    
+    this.sounds[name].src = url;
+  },
+
+  // Загрузка ambient через fetch + AudioBuffer
+  loadAmbientSound(name, url) {
+    console.log(`[Звук] Загрузка ambient: ${name}`);
+    
+    fetch(url)
+      .then(r => r.arrayBuffer())
+      .then(data => this.context.decodeAudioData(data))
+      .then(buffer => {
+        this.ambientBuffer = buffer;
+        this.loadedCount++;
+        console.log(`✅ Загружен ambient: ${name} (${this.loadedCount}/${this.totalSounds})`);
+      })
+      .catch(err => {
+        console.error(`❌ Ошибка ambient ${name}:`, err);
+        this.loadedCount++;
+      });
+  },
+
+  // Воспроизведение коротких звуков
+  playSound(name, volume = 1) {
+    if (!this.isInitialized) return;
+    
+    const sound = this.sounds[name];
+    if (!sound) return;
+
+    if (sound.readyState < 2) {
+      sound.addEventListener('canplaythrough', () => this.playSound(name, volume), { once: true });
+      return;
+    }
+
+    try {
+      sound.currentTime = 0;
+      sound.volume = Math.max(0, Math.min(1, volume));
+      sound.play().catch(err => console.error(`❌ Воспроизведение ${name}:`, err));
+      console.log(`▶️ ${name} (volume: ${sound.volume})`);
+    } catch (e) {
+      console.error(`❌ Критическая ошибка ${name}:`, e);
+    }
+  },
+
+  // Бесшовное воспроизведение ambient
+  playAmbient(volume = 0.15) {
+    if (!this.isInitialized || !this.ambientBuffer) {
+      console.warn('[Звук] Ambient не готов');
+      return;
+    }
+
+    this.stopAmbient(); // Остановить предыдущий
+
+    try {
+      this.ambientSource = this.context.createBufferSource();
+      this.ambientSource.buffer = this.ambientBuffer;
+      this.ambientSource.loop = true; // БЕСШОВНЫЙ ЦИКЛ!
+      
+      const gain = this.context.createGain();
+      gain.gain.value = Math.max(0, Math.min(1, volume));
+      
+      this.ambientSource.connect(gain);
+      gain.connect(this.context.destination);
+      
+      this.ambientSource.start(0);
+      console.log(`▶️ Ambient looping (volume: ${volume})`);
+    } catch (e) {
+      console.error('❌ Ошибка ambient:', e);
+    }
+  },
+
+  stopAmbient() {
+    if (this.ambientSource) {
+      try {
+        this.ambientSource.stop();
+        this.ambientSource.disconnect();
+      } catch (e) {}
+      this.ambientSource = null;
+      console.log('⏹️ Остановка ambient');
+    }
+  }
+};
 
   // === ВИЗУАЛЬНЫЙ ШУМ ===
   const noiseFrames = [];
@@ -424,15 +446,15 @@
       currentCharIndex = 0;
       currentText = '';
       
-      if (bootTextIndex >= bootTexts.length) {
-        // Останавливаем звук загрузки
-        AudioManager.stopAmbient();
-        AudioManager.playSound('ambient_terminal', 0.15);
-        setTimeout(() => {
-          currentScreen = 'code';
-          codeInputFocused = true;
-        }, 300);
-      }
+     if (bootTextIndex >= bootTexts.length) {
+  AudioManager.stopAmbient();
+  AudioManager.playAmbient(0.15); // ⭐ новый метод!
+  
+  setTimeout(() => {
+    currentScreen = 'code';
+    codeInputFocused = true;
+  }, 300);
+}
     }
     
     bootTimer++;
