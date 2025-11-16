@@ -34,7 +34,7 @@
       this.loadSound('glitch_error', 'sounds/glitch_error.mp3');
       this.loadSound('success', 'sounds/success.mp3');
       this.loadSound('boot', 'sounds/boot_sequence.mp3'); // Добавили звук загрузки
-      
+      this.loadSound('ambient_terminal', 'sounds/ambient_terminal.mp3');
       console.log('[Звук] Менеджер инициализирован');
     },
 
@@ -58,10 +58,10 @@
       
       // Устанавливаем источник
       this.sounds[name].src = url;
-      
-      // Для ambient особые настройки
-      if (name === 'boot') {
-        this.sounds[name].loop = true;
+
+        // ⭐ ИЗМЕНИ ЭТУ ЧАСТЬ:
+      if (name === 'ambient_terminal') {
+        this.sounds[name].loop = true; // только ambient_terminal циклится
       }
     },
 
@@ -91,8 +91,8 @@
         sound.volume = Math.max(0, Math.min(1, volume));
         
         // Останавливаем старый ambient при переключении
-        if (name !== 'boot' && this.ambient && !this.ambient.paused) {
-          this.ambient.pause();
+       if (name === 'boot' || name === 'ambient_terminal') {
+          this.ambient = sound;
         }
         
         const playPromise = sound.play();
@@ -427,6 +427,7 @@
       if (bootTextIndex >= bootTexts.length) {
         // Останавливаем звук загрузки
         AudioManager.stopAmbient();
+        AudioManager.playSound('ambient_terminal', 0.15);
         setTimeout(() => {
           currentScreen = 'code';
           codeInputFocused = true;
