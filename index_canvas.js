@@ -147,6 +147,10 @@ const AudioManager = {
   let localGlitchIntensity = 0;
   let exitFade = 0;
   let isExiting = false;
+history.pushState(null, null, location.href);
+window.onpopstate = function () {
+  history.go(1); // Возвращаем пользователя обратно на нашу страницу
+};
   
   function generateNoiseFrames() {
     const fw = Math.max(256, Math.floor(vw * 0.8));
