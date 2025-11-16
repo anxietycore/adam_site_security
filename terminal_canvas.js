@@ -438,8 +438,8 @@
 ctx.fillStyle = color;
 ctx.font = `12px ${FONT_FAMILY}`;
 let label = 'ДЕГРАДАЦИЯ СИСТЕМЫ';
-ctx.fillText(label, x + 10, y + 16);         // ✅ НОВОЕ - отступ 16px сверху
-ctx.fillText(degradation.level + '%', x + wBox - 46, y + 16);  // ✅ НОВОЕ
+ctx.fillText(label, x + 10, y + 18);         // ✅ НОВОЕ - отступ 16px сверху
+ctx.fillText(degradation.level + '%', x + wBox - 46, y + 18);  // ✅ НОВОЕ
 
     ctx.restore();
   }
