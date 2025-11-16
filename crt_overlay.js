@@ -4,7 +4,7 @@
 
 (() => {
   const DPR = Math.min(window.devicePixelRatio || 1, 2);
-  const DISTORTION = 0.32; // tweak: 0 = no warp, 0.25..0.45 typical CRT look
+  const DISTORTION = 0.28; // tweak: 0 = no warp, 0.25..0.45 typical CRT look
   const FPS = 30;
 
   const src = document.getElementById('terminalCanvas');
