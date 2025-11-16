@@ -1,4 +1,4 @@
-// index_canvas.js — с ПОЛНОЙ звуковой системой
+// index_canvas.js — звуковая система с предзагрузкой и отладкой
 (() => {
   const FONT_FAMILY = "'Press Start 2P', monospace";
   const FONT_SIZE = 12;
@@ -7,94 +7,118 @@
   const NOISE_OPACITY_BASE = 0.0336;
   const MAX_CODE_LENGTH = 12;
 
-  // === ЗВУКОВАЯ СИСТЕМА ===
+  // === УЛУЧШЕННАЯ ЗВУКОВАЯ СИСТЕМА С ПРЕДЗАГРУЗКОЙ ===
   const AudioManager = {
     context: null,
     sounds: {},
     ambient: null,
     isInitialized: false,
+    loadedCount: 0,
+    totalSounds: 5,
 
     init() {
       if (this.isInitialized) return;
+      
+      // Проверяем поддержку аудио
+      if (typeof Audio === 'undefined') {
+        console.warn('Веб-аудио не поддерживается в этом браузере');
+        return;
+      }
+
       this.context = new (window.AudioContext || window.webkitAudioContext)();
       this.isInitialized = true;
       
-      // Генерируем звук печати на лету
-      this.generateTypingSound();
+      // Предзагрузка ВСЕХ звуков
+      this.loadSound('confirm', 'sounds/confirm.mp3');
+      this.loadSound('reject', 'sounds/reject.mp3');
+      this.loadSound('glitch_error', 'sounds/glitch_error.mp3');
+      this.loadSound('success', 'sounds/success.mp3');
+      this.loadSound('boot', 'sounds/boot_sequence.mp3'); // Добавили звук загрузки
+      
+      console.log('[Звук] Менеджер инициализирован');
     },
 
-    // Загрузка и воспроизведение файлов
     loadSound(name, url) {
-      this.sounds[name] = new Audio(url);
+      console.log(`[Звук] Загрузка: ${name} из ${url}`);
+      
+      this.sounds[name] = new Audio();
       this.sounds[name].preload = 'auto';
+      this.sounds[name].volume = 0.3; // Базовая громкость
+      
+      // Слушаем события загрузки
+      this.sounds[name].addEventListener('canplaythrough', () => {
+        this.loadedCount++;
+        console.log(`[Звук] ✅ Загружен: ${name} (${this.loadedCount}/${this.totalSounds})`);
+      });
+      
+      this.sounds[name].addEventListener('error', (e) => {
+        console.error(`[Звук] ❌ Ошибка загрузки ${name}:`, e);
+        this.loadedCount++; // Считаем как загруженный, чтобы не зависать
+      });
+      
+      // Устанавливаем источник
+      this.sounds[name].src = url;
+      
+      // Для ambient особые настройки
+      if (name === 'boot') {
+        this.sounds[name].loop = true;
+      }
     },
 
     playSound(name, volume = 1) {
-      if (!this.isInitialized) return;
+      if (!this.isInitialized) {
+        console.warn('[Звук] Менеджер не инициализирован');
+        return;
+      }
+      
       const sound = this.sounds[name];
-      if (sound) {
-        sound.currentTime = 0;
-        sound.volume = volume;
-        sound.play().catch(() => {}); // Игнорируем ошибки autoplay
+      if (!sound) {
+        console.error(`[Звук] Звук "${name}" не найден!`);
+        return;
       }
-    },
 
-    // Фоновый шум (зацикленный)
-    startAmbient(url, volume = 0.2) {
-      if (!this.isInitialized) return;
-      if (this.ambient) {
-        this.ambient.pause();
+      // Ждём загрузки
+      if (sound.readyState < 2) {
+        console.warn(`[Звук] Звук "${name}" ещё не загружен (readyState: ${sound.readyState})`);
+        sound.addEventListener('canplaythrough', () => {
+          this.playSound(name, volume);
+        }, { once: true });
+        return;
       }
-      this.ambient = new Audio(url);
-      this.ambient.loop = true;
-      this.ambient.volume = volume;
-      this.ambient.play().catch(() => {});
+
+      try {
+        sound.currentTime = 0;
+        sound.volume = Math.max(0, Math.min(1, volume));
+        
+        // Останавливаем старый ambient при переключении
+        if (name !== 'boot' && this.ambient && !this.ambient.paused) {
+          this.ambient.pause();
+        }
+        
+        const playPromise = sound.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(err => {
+            console.error(`[Звук] Ошибка воспроизведения ${name}:`, err);
+          });
+        }
+        
+        console.log(`[Звук] ▶️ Воспроизведение: ${name} (volume: ${sound.volume})`);
+      } catch (error) {
+        console.error(`[Звук] Критическая ошибка ${name}:`, error);
+      }
     },
 
     stopAmbient() {
-      if (this.ambient) {
+      if (this.ambient && !this.ambient.paused) {
+        console.log('[Звук] Остановка ambient');
         this.ambient.pause();
+        this.ambient.currentTime = 0;
         this.ambient = null;
       }
-    },
-
-    // Синтовый звук печати (Web Audio API)
-    generateTypingSound() {
-      if (!this.context) return;
-      
-      const osc = this.context.createOscillator();
-      const gain = this.context.createGain();
-      
-      osc.type = 'square';
-      osc.frequency.value = 800;
-      gain.gain.value = 0.08;
-      gain.gain.exponentialRampToValueAtTime(0.01, this.context.currentTime + 0.02);
-      
-      osc.connect(gain);
-      gain.connect(this.context.destination);
-      
-      // Сохраняем как шаблон
-      this.sounds['typing'] = {
-        play: () => {
-          const osc2 = this.context.createOscillator();
-          const gain2 = this.context.createGain();
-          
-          osc2.type = 'square';
-          osc2.frequency.value = 800 + Math.random() * 200;
-          gain2.gain.value = 0.08;
-          gain2.gain.exponentialRampToValueAtTime(0.01, this.context.currentTime + 0.02);
-          
-          osc2.connect(gain2);
-          gain2.connect(this.context.destination);
-          
-          osc2.start();
-          osc2.stop(this.context.currentTime + 0.02);
-        }
-      };
     }
   };
 
-  // === АНИМИРОВАННЫЙ ШУМ (визуальный) ===
+  // === ВИЗУАЛЬНЫЙ ШУМ ===
   const noiseFrames = [];
   let noiseTick = 0;
   let glitchIntensity = 0;
@@ -149,7 +173,6 @@
   let currentText = '';
   let currentCharIndex = 0;
   let randomChars = '01#$%&*+-=?@[]{}<>~^';
-  let bootSoundStarted = false; // Начали ли проигрывать звук загрузки
 
   function resize() {
     vw = Math.max(320, window.innerWidth);
@@ -223,9 +246,8 @@
     currentCharIndex = 0;
     bootTimer = 0;
     
-    // СТАРТУЕМ ФОНОВЫЙ ШУМ
-    AudioManager.startAmbient('sounds/ambient_terminal.mp3', 0.15);
-    bootSoundStarted = true;
+    // Запускаем фоновый шум загрузки
+    AudioManager.playSound('boot', 0.15);
   }
 
   function triggerGlobalGlitch() {
@@ -233,7 +255,7 @@
     showErrorMessage = true;
     messageTimer = 60;
     
-    AudioManager.playSound('sounds/glitch_error.mp3', 0.5);
+    AudioManager.playSound('glitch_error', 0.5);
     
     const fadeOut = () => {
       glitchIntensity = Math.max(0, glitchIntensity - 0.08);
@@ -244,7 +266,6 @@
 
   function triggerLocalGlitch() {
     localGlitchIntensity = 1.0;
-    // Локальный глитч без звука (визуальный только)
     const fadeOut = () => {
       localGlitchIntensity = Math.max(0, localGlitchIntensity - 0.15);
       if (localGlitchIntensity > 0) requestAnimationFrame(fadeOut);
@@ -404,6 +425,8 @@
       currentText = '';
       
       if (bootTextIndex >= bootTexts.length) {
+        // Останавливаем звук загрузки
+        AudioManager.stopAmbient();
         setTimeout(() => {
           currentScreen = 'code';
           codeInputFocused = true;
@@ -429,7 +452,7 @@
     requestAnimationFrame(render);
   }
 
-  // === KEYBOARD HANDLER со звуками ===
+  // === KEYBOARD HANDLER (БЕЗ ЗВУКА ПЕЧАТИ) ===
   document.addEventListener('keydown', (e) => {
     // Инициализация AudioContext при первом взаимодействии
     if (!AudioManager.isInitialized) {
@@ -438,10 +461,10 @@
 
     if (currentScreen === 'confirm') {
       if (e.key.toLowerCase() === 'y' || e.key.toLowerCase() === 'н') {
-        AudioManager.playSound('sounds/confirm.mp3', 0.3);
+        AudioManager.playSound('confirm', 0.3);
         startBootSequence();
       } else if (e.key.toLowerCase() === 'n' || e.key.toLowerCase() === 'т') {
-        AudioManager.playSound('sounds/reject.mp3', 0.3);
+        AudioManager.playSound('reject', 0.3);
         const fadeOut = () => {
           exitFade += 0.04;
           if (exitFade < 1) {
@@ -457,7 +480,7 @@
     } else if (currentScreen === 'code' && codeInputFocused) {
       if (e.key === 'Enter') {
         if (secretCode === 'test') {
-          AudioManager.playSound('sounds/success.mp3', 0.4);
+          AudioManager.playSound('success', 0.4);
           triggerLocalGlitch();
           showSuccessMessage = true;
           
@@ -470,19 +493,17 @@
             window.location.href = 'terminal.html';
           }, 1600);
         } else {
-          AudioManager.playSound('sounds/glitch_error.mp3', 0.5);
+          AudioManager.playSound('glitch_error', 0.5);
           triggerGlobalGlitch();
           triggerLocalGlitch();
           secretCode = '';
         }
       } else if (e.key === 'Backspace') {
-        if (secretCode.length > 0) {
-          AudioManager.sounds.typing?.play();
-          secretCode = secretCode.slice(0, -1);
-        }
+        // УБРАЛИ ЗВУК ПЕЧАТИ
+        secretCode = secretCode.slice(0, -1);
       } else if (e.key.length === 1 && /^[a-zA-Z0-9]$/.test(e.key)) {
+        // УБРАЛИ ЗВУК ПЕЧАТИ
         if (secretCode.length < MAX_CODE_LENGTH) {
-          AudioManager.sounds.typing?.play();
           secretCode += e.key;
         }
       }
