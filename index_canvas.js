@@ -1,4 +1,4 @@
-// index_canvas.js — финальная версия с ОБЕИМИ функциями
+// index_canvas.js — с ПОЛНОЙ звуковой системой
 (() => {
   const FONT_FAMILY = "'Press Start 2P', monospace";
   const FONT_SIZE = 12;
@@ -7,7 +7,94 @@
   const NOISE_OPACITY_BASE = 0.0336;
   const MAX_CODE_LENGTH = 12;
 
-  // === АНИМИРОВАННЫЙ ШУМ ===
+  // === ЗВУКОВАЯ СИСТЕМА ===
+  const AudioManager = {
+    context: null,
+    sounds: {},
+    ambient: null,
+    isInitialized: false,
+
+    init() {
+      if (this.isInitialized) return;
+      this.context = new (window.AudioContext || window.webkitAudioContext)();
+      this.isInitialized = true;
+      
+      // Генерируем звук печати на лету
+      this.generateTypingSound();
+    },
+
+    // Загрузка и воспроизведение файлов
+    loadSound(name, url) {
+      this.sounds[name] = new Audio(url);
+      this.sounds[name].preload = 'auto';
+    },
+
+    playSound(name, volume = 1) {
+      if (!this.isInitialized) return;
+      const sound = this.sounds[name];
+      if (sound) {
+        sound.currentTime = 0;
+        sound.volume = volume;
+        sound.play().catch(() => {}); // Игнорируем ошибки autoplay
+      }
+    },
+
+    // Фоновый шум (зацикленный)
+    startAmbient(url, volume = 0.2) {
+      if (!this.isInitialized) return;
+      if (this.ambient) {
+        this.ambient.pause();
+      }
+      this.ambient = new Audio(url);
+      this.ambient.loop = true;
+      this.ambient.volume = volume;
+      this.ambient.play().catch(() => {});
+    },
+
+    stopAmbient() {
+      if (this.ambient) {
+        this.ambient.pause();
+        this.ambient = null;
+      }
+    },
+
+    // Синтовый звук печати (Web Audio API)
+    generateTypingSound() {
+      if (!this.context) return;
+      
+      const osc = this.context.createOscillator();
+      const gain = this.context.createGain();
+      
+      osc.type = 'square';
+      osc.frequency.value = 800;
+      gain.gain.value = 0.08;
+      gain.gain.exponentialRampToValueAtTime(0.01, this.context.currentTime + 0.02);
+      
+      osc.connect(gain);
+      gain.connect(this.context.destination);
+      
+      // Сохраняем как шаблон
+      this.sounds['typing'] = {
+        play: () => {
+          const osc2 = this.context.createOscillator();
+          const gain2 = this.context.createGain();
+          
+          osc2.type = 'square';
+          osc2.frequency.value = 800 + Math.random() * 200;
+          gain2.gain.value = 0.08;
+          gain2.gain.exponentialRampToValueAtTime(0.01, this.context.currentTime + 0.02);
+          
+          osc2.connect(gain2);
+          gain2.connect(this.context.destination);
+          
+          osc2.start();
+          osc2.stop(this.context.currentTime + 0.02);
+        }
+      };
+    }
+  };
+
+  // === АНИМИРОВАННЫЙ ШУМ (визуальный) ===
   const noiseFrames = [];
   let noiseTick = 0;
   let glitchIntensity = 0;
@@ -62,6 +149,7 @@
   let currentText = '';
   let currentCharIndex = 0;
   let randomChars = '01#$%&*+-=?@[]{}<>~^';
+  let bootSoundStarted = false; // Начали ли проигрывать звук загрузки
 
   function resize() {
     vw = Math.max(320, window.innerWidth);
@@ -88,7 +176,7 @@
     '> ФИНАЛИЗАЦИЯ ПАРАМЕТРОВ ДОСТУПА...'
   ];
 
-  // === БАЗОВАЯ функция рисования (для обычного текста) ===
+  // === РИСОВАНИЕ ТЕКСТА ===
   function drawText(text, x, y, color = '#00FF41', opacity = 1) {
     ctx.save();
     ctx.globalAlpha = opacity;
@@ -99,7 +187,6 @@
     ctx.restore();
   }
 
-  // === ГЛИТЧ-функция для UI-элементов (отдельный эффект) ===
   function drawGlitchText(text, x, y, color = '#00FF41', opacity = 1, intensity = 0) {
     ctx.save();
     ctx.globalAlpha = opacity;
@@ -107,7 +194,6 @@
     ctx.textBaseline = 'top';
     
     if (intensity > 0) {
-      // RGB-сдвиг с дрожанием
       const offset = intensity * 2.5;
       
       ctx.fillStyle = 'rgba(255,0,0,0.9)';
@@ -136,12 +222,18 @@
     currentText = '';
     currentCharIndex = 0;
     bootTimer = 0;
+    
+    // СТАРТУЕМ ФОНОВЫЙ ШУМ
+    AudioManager.startAmbient('sounds/ambient_terminal.mp3', 0.15);
+    bootSoundStarted = true;
   }
 
   function triggerGlobalGlitch() {
     glitchIntensity = 1.0;
     showErrorMessage = true;
     messageTimer = 60;
+    
+    AudioManager.playSound('sounds/glitch_error.mp3', 0.5);
     
     const fadeOut = () => {
       glitchIntensity = Math.max(0, glitchIntensity - 0.08);
@@ -152,6 +244,7 @@
 
   function triggerLocalGlitch() {
     localGlitchIntensity = 1.0;
+    // Локальный глитч без звука (визуальный только)
     const fadeOut = () => {
       localGlitchIntensity = Math.max(0, localGlitchIntensity - 0.15);
       if (localGlitchIntensity > 0) requestAnimationFrame(fadeOut);
@@ -159,11 +252,11 @@
     setTimeout(fadeOut, 100);
   }
 
+  // === ЭКРАНЫ ===
   function drawConfirmScreen() {
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, vw, vh);
-
-    ctx.clearRect(0, 0, vw, vh); // Фикс наложения
+    ctx.clearRect(0, 0, vw, vh);
     
     ctx.save();
     ctx.globalAlpha = NOISE_OPACITY_BASE * (1 - exitFade);
@@ -336,11 +429,19 @@
     requestAnimationFrame(render);
   }
 
+  // === KEYBOARD HANDLER со звуками ===
   document.addEventListener('keydown', (e) => {
+    // Инициализация AudioContext при первом взаимодействии
+    if (!AudioManager.isInitialized) {
+      AudioManager.init();
+    }
+
     if (currentScreen === 'confirm') {
       if (e.key.toLowerCase() === 'y' || e.key.toLowerCase() === 'н') {
+        AudioManager.playSound('sounds/confirm.mp3', 0.3);
         startBootSequence();
       } else if (e.key.toLowerCase() === 'n' || e.key.toLowerCase() === 'т') {
+        AudioManager.playSound('sounds/reject.mp3', 0.3);
         const fadeOut = () => {
           exitFade += 0.04;
           if (exitFade < 1) {
@@ -356,6 +457,7 @@
     } else if (currentScreen === 'code' && codeInputFocused) {
       if (e.key === 'Enter') {
         if (secretCode === 'test') {
+          AudioManager.playSound('sounds/success.mp3', 0.4);
           triggerLocalGlitch();
           showSuccessMessage = true;
           
@@ -368,14 +470,19 @@
             window.location.href = 'terminal.html';
           }, 1600);
         } else {
+          AudioManager.playSound('sounds/glitch_error.mp3', 0.5);
           triggerGlobalGlitch();
-          triggerLocalGlitch(); // <-- ВОТ ЭТОТ ВЫЗОВ ДЛЯ UI-ГЛИТЧА
+          triggerLocalGlitch();
           secretCode = '';
         }
       } else if (e.key === 'Backspace') {
-        secretCode = secretCode.slice(0, -1);
+        if (secretCode.length > 0) {
+          AudioManager.sounds.typing?.play();
+          secretCode = secretCode.slice(0, -1);
+        }
       } else if (e.key.length === 1 && /^[a-zA-Z0-9]$/.test(e.key)) {
         if (secretCode.length < MAX_CODE_LENGTH) {
+          AudioManager.sounds.typing?.play();
           secretCode += e.key;
         }
       }
