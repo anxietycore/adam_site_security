@@ -16,23 +16,25 @@
     const NODE_COUNT = 10;
     const AUTONOMOUS_MOVE_COOLDOWN = 800; // ms before picking next target
 // ⭐ ДОЛЖЕН СОВПАДАТЬ С crt_overlay.js
-const CRT_DISTORTION = 0.32; 
+const CRT_DISTORTION = 0.28; 
 
 // ----- HELPERS: Inverse CRT Transform -----
 function applyInverseCRT(px, py, w, h, distortion) {
+  // Нормализуем координаты
   const x = (px / w) * 2 - 1;
   const y = (py / h) * 2 - 1;
   
-  let r = Math.sqrt(x*x + y*y);
+  const r = Math.sqrt(x*x + y*y);
   if (r === 0) return { x: px, y: py };
   
-  // Итеративное решение: r = r_d / (1 + distortion * (r - 1))
-  for (let i = 0; i < 4; i++) {
-    const r_distorted = r * (1 + distortion * (r - 1));
-    r = r * (r / r_distorted); // Корректируем
-  }
+  // ⭐ ПРАВИЛЬНАЯ ОБРАТНАЯ ТРАНСФОРМАЦИЯ для твоего шейдера
+  // Шейдер делает: uv' = uv * (1 + distortion * (r - 1))
+  // Обратная: uv = uv' / (1 + distortion * (r - 1))
   
-  const factor = r / Math.sqrt(x*x + y*y);
+  const factor = 1 / (1 + distortion * (r - 1));
+  
+  // Защита от экстремальных значений
+  if (!isFinite(factor)) return { x: px, y: py };
   
   return {
     x: (x * factor + 1) * 0.5 * w,
