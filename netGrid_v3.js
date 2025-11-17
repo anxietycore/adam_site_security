@@ -262,35 +262,58 @@
       return { x, y };
     }
 
-    mapCanvas.addEventListener('mousedown', (ev) => {
-      const m = getMousePosOnCanvas(ev);
-      mouse.down = true;
-      mouse.x = m.x; mouse.y = m.y;
-      // find nearest node under mouse (within radius)
-      let found = null;
-      for (let i=nodes.length-1;i>=0;i--){
-        const n = nodes[i];
-        const d = Math.hypot(m.x - n.x, m.y - n.y);
-        if (d < 12 * DPR) { found = n; break; }
-      }
-      if (found) {
-        draggingNode = found;
-        draggingNode.drag = true;
-        // set selection
-        if (selectedNode && selectedNode !== found) selectedNode.selected = false;
-        selectedNode = found;
-        selectedNode.selected = true;
-      } else {
-        // clicking empty space clears selection
-        if (selectedNode) { selectedNode.selected = false; selectedNode = null; }
-      }
-    });
+mapCanvas.addEventListener('mousedown', (ev) => {
+  const m = getMousePosOnCanvas(ev);
+  mouse.down = true;
+  mouse.x = m.x; mouse.y = m.y;
+  let found = null;
+  for (let i = nodes.length - 1; i >= 0; i--) {
+    const n = nodes[i];
+    const d = Math.hypot(m.x - n.x, m.y - n.y);
+    if (d < 12 * DPR) { found = n; break; }
+  }
+  if (found) {
+    // ⭐ НЕ трогаем, если заблокирована
+    if (found.locked) {
+      if (selectedNode && selectedNode !== found) selectedNode.selected = false;
+      selectedNode = found;
+      selectedNode.selected = true;
+      return; // прекращаем, не начинаем dragging
+    }
+    
+    draggingNode = found;
+    draggingNode.drag = true;
+    if (selectedNode && selectedNode !== found) selectedNode.selected = false;
+    selectedNode = found;
+    selectedNode.selected = true;
+  } else {
+    if (selectedNode) { selectedNode.selected = false; selectedNode = null; }
+  }
+});
 
 window.addEventListener('mousemove', (ev) => {
   const m = getMousePosOnCanvas(ev);
   mouse.x = m.x; mouse.y = m.y;
+  
+  // ⭐ Проверяем, над locked node ли мышь
+  let hoveredNode = null;
+  for (const n of nodes) {
+    if (Math.hypot(m.x - n.x, m.y - n.y) < 12 * DPR) {
+      hoveredNode = n; break;
+    }
+  }
+  
+  // ⭐ Меняем курсор (визуальный фидбэк)
+  mapCanvas.style.cursor = (hoveredNode && hoveredNode.locked) ? 'not-allowed' : 
+                           (hoveredNode) ? 'pointer' : 'default';
+  
+  // ⭐ Если вдруг тащим заблокированную точку — сбрасываем
+  if (draggingNode && draggingNode.locked) {
+    draggingNode.drag = false;
+    draggingNode = null;
+  }
+  
   if (draggingNode) {
-    // теперь узел следует за мышкой, но только по ближайшим линиям
     const nearest = nearestIntersection(mouse.x, mouse.y);
     draggingNode.gx = nearest.col;
     draggingNode.gy = nearest.row;
