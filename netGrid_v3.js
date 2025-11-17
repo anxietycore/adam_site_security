@@ -1,102 +1,104 @@
 // netGrid_v4.js — VIGIL NET GRID v4 (interactive grid, nodes move only on grid-lines)
-// Включает: live-drag (node следует за мышкой), snap-on-release, Q/Й lock toggle,
-// locked nodes become red, кнопки "ПРОВЕРИТЬ ПРИКОЛ" и "⟳" (reset)
 (() => {
   try {
     // ----- CONFIG -----
     const DPR = Math.min(window.devicePixelRatio || 1, 1.5);
-    const SIZE_CSS = 300; // размер панели в CSS px
+    const SIZE_CSS = 300;
     const COLOR = { r: 6, g: 160, b: 118 };
     const MAP_Z = 40;
     const STATUS_Z = 45;
-
-    // Grid params
-    const CELL_COUNT = 6; // 6x6 клеток => 7x7 перекрестков
+    const CELL_COUNT = 6;
     const INTER_COUNT = CELL_COUNT + 1;
     const NODE_COUNT = 10;
-    const AUTONOMOUS_MOVE_COOLDOWN = 800; // ms before picking next target
-// ⭐ ДОЛЖЕН СОВПАДАТЬ С crt_overlay.js
-const CRT_DISTORTION = 0.28; 
+    const AUTONOMOUS_MOVE_COOLDOWN = 800;
+    
+    // ⭐ ДОЛЖЕН СОВПАДАТЬ С crt_overlay.js
+    const CRT_DISTORTION = 0.28;
 
-// ----- HELPERS: Inverse CRT Transform -----
-// ⭐ ЛУКАП-ТАБЛИЦА (кэш обратного преобразования)
-// ⭐ ЛУКАП-ТАБЛИЦА (кэш обратного преобразования)
-let inverseLUT = null;
-let lutSize = { w: 0, h: 0 };
+    // ----- ПРАВИЛЬНАЯ ОБРАТНАЯ ТРАНСФОРМАЦИЯ -----
+    // Lookup table для 100% точности
+    let inverseLUT = null;
+    let lutSize = { w: 0, h: 0 };
 
-function buildInverseLUT(canvasWidth, canvasHeight) {
-  // Используем шаг 1px для МАКСИМАЛЬНОЙ точности
-  const step = 1;
-  const cols = Math.ceil(canvasWidth / step);
-  const rows = Math.ceil(canvasHeight / step);
-  
-  lutSize.w = canvasWidth;
-  lutSize.h = canvasHeight;
-  
-  inverseLUT = new Array(rows);
-  for (let y = 0; y < rows; y++) {
-    inverseLUT[y] = new Array(cols);
-    for (let x = 0; x < cols; x++) {
-      const px = x * step;
-      const py = y * step;
+    function buildInverseLUT(canvasWidth, canvasHeight) {
+      const step = 2; // шаг 2px для баланса точности/производительности
+      const cols = Math.ceil(canvasWidth / step);
+      const rows = Math.ceil(canvasHeight / step);
       
-      // Нормализуем координаты
-      const xn = (px / canvasWidth) * 2 - 1;
-      const yn = (py / canvasHeight) * 2 - 1;
+      lutSize.w = canvasWidth;
+      lutSize.h = canvasHeight;
       
-      // ⭐ ПРАВИЛЬНАЯ ОБРАТНАЯ ФОРМУЛА для шейдера
-      // Шейдер: d = uv * (1 + distortion * (r - 1))
-      // Обратная: uv = d / (1 + distortion * (r - 1))
-      // НО! r — это длина ИСХОДНОГО uv, а не d!
-      
-      // Решаем численно (4 итерации Ньютона = 99.99% точность)
-      let r = Math.sqrt(xn*xn + yn*yn);
-      if (r > 0) {
-        for (let i = 0; i < 4; i++) {
-          const f = r * (1 + CRT_DISTORTION * (r - 1));
-          const df = 1 + CRT_DISTORTION * (2 * r - 1);
-          r = r - (f - r) / df; // Ньютон
+      inverseLUT = new Array(rows);
+      for (let y = 0; y < rows; y++) {
+        inverseLUT[y] = new Array(cols);
+        for (let x = 0; x < cols; x++) {
+          const px = x * step;
+          const py = y * step;
+          
+          // Нормализуем координаты (дистортированные)
+          const xd = (px / canvasWidth) * 2 - 1;
+          const yd = (py / canvasHeight) * 2 - 1;
+          
+          // Радиус дистортированной точки
+          const rd = Math.sqrt(xd*xd + yd*yd);
+          
+          // ⭐ АНАЛИТИЧЕСКОЕ РЕШЕНИЕ: k*r² + (1-k)*r - rd = 0
+          const k = CRT_DISTORTION;
+          let r = 0;
+          
+          if (k === 0 || rd === 0) {
+            r = rd;
+          } else {
+            const discriminant = (1 - k) * (1 - k) + 4 * k * rd;
+            if (discriminant >= 0) {
+              r = (-(1 - k) + Math.sqrt(discriminant)) / (2 * k);
+            }
+          }
+          
+          // Обратный фактор
+          const factor = (r > 0) ? 1 / (1 + k * (r - 1)) : 1;
+          
+          // Исходные координаты
+          const xn = xd * factor;
+          const yn = yd * factor;
+          
+          inverseLUT[y][x] = {
+            x: (xn + 1) * 0.5 * canvasWidth,
+            y: (yn + 1) * 0.5 * canvasHeight
+          };
         }
       }
+    }
+
+    function applyInverseCRT(px, py) {
+      if (!inverseLUT || lutSize.w !== w || lutSize.h !== h) {
+        buildInverseLUT(w, h);
+      }
       
-      const factor = (r > 0) ? 1 / (1 + CRT_DISTORTION * (r - 1)) : 1;
+      const step = 2; // должен совпадать с buildInverseLUT
+      const col = Math.floor(px / step);
+      const row = Math.floor(py / step);
       
-      inverseLUT[y][x] = {
-        x: (xn * factor + 1) * 0.5 * canvasWidth,
-        y: (yn * factor + 1) * 0.5 * canvasHeight
+      // Граничные проверки
+      if (row < 0 || row >= inverseLUT.length || col < 0 || col >= inverseLUT[0].length) {
+        return { x: px, y: py };
+      }
+      
+      // Билинейная интерполяция
+      const x1 = inverseLUT[row][col].x;
+      const x2 = inverseLUT[row][Math.min(col + 1, inverseLUT[0].length - 1)].x;
+      const y1 = inverseLUT[row][col].y;
+      const y2 = inverseLUT[Math.min(row + 1, inverseLUT.length - 1)][col].y;
+      
+      const fracX = (px % step) / step;
+      const fracY = (py % step) / step;
+      
+      return {
+        x: x1 * (1 - fracX) + x2 * fracX,
+        y: y1 * (1 - fracY) + y2 * fracY
       };
     }
-  }
-}
 
-function applyInverseCRT(px, py) {
-  if (!inverseLUT || lutSize.w !== w || lutSize.h !== h) {
-    buildInverseLUT(w, h);
-  }
-  
-  const step = 1; // должен совпадать с buildInverseLUT
-  const col = Math.floor(px / step);
-  const row = Math.floor(py / step);
-  
-  // Граничные проверки
-  if (row < 0 || row >= inverseLUT.length || col < 0 || col >= inverseLUT[0].length) {
-    return { x: px, y: py };
-  }
-  
-  // Билинейная интерполяция для сглаживания
-  const x1 = inverseLUT[row][col].x;
-  const x2 = inverseLUT[row][Math.min(col + 1, inverseLUT[0].length - 1)].x;
-  const y1 = inverseLUT[row][col].y;
-  const y2 = inverseLUT[Math.min(row + 1, inverseLUT.length - 1)][col].y;
-  
-  const fracX = (px % step);
-  const fracY = (py % step);
-  
-  return {
-    x: x1 * (1 - fracX) + x2 * fracX,
-    y: y1 * (1 - fracY) + y2 * fracY
-  };
-}
     // ----- DOM: canvas + status + victory + controls -----
     const mapCanvas = document.createElement('canvas');
     Object.assign(mapCanvas.style, {
@@ -115,7 +117,6 @@ function applyInverseCRT(px, py) {
     document.body.appendChild(mapCanvas);
     const mctx = mapCanvas.getContext('2d');
 
-    // status element (bottom-left style in original, but we place near map)
     const statusEl = document.createElement('div');
     Object.assign(statusEl.style, {
       position: 'fixed',
@@ -134,7 +135,6 @@ function applyInverseCRT(px, py) {
     });
     document.body.appendChild(statusEl);
 
-    // victory message
     const victoryEl = document.createElement('div');
     Object.assign(victoryEl.style, {
       pointerEvents: 'none',
@@ -156,12 +156,11 @@ function applyInverseCRT(px, py) {
     victoryEl.textContent = 'Ура, победил!';
     document.body.appendChild(victoryEl);
 
-    // controls container (above the map, right-aligned)
     const controls = document.createElement('div');
     Object.assign(controls.style, {
       position: 'fixed',
       right: '20px',
-      bottom: `${20 + SIZE_CSS + 12}px`, // над картой
+      bottom: `${20 + SIZE_CSS + 12}px`,
       display: 'flex',
       gap: '8px',
       zIndex: MAP_Z + 1,
@@ -200,19 +199,17 @@ function applyInverseCRT(px, py) {
 
     // ----- internal state -----
     let w = 0, h = 0;
-    let gridPoints = []; // массив {x,y} по пикселям для каждой интерсекции [row][col]
-    let nodes = []; // Node objects
+    let gridPoints = [];
+    let nodes = [];
     let raf = null;
     let tick = 0;
 
-    // Selected / dragging
     let selectedNode = null;
     let draggingNode = null;
     let mouse = { x: 0, y: 0, down: false };
 
-    // Victory targets (заглушки)
     const SYMBOLS = {
-      V: [  // буква V — относительные координаты на интерсециях (row,col)
+      V: [
         [0,0],[1,1],[2,2],[3,3],[4,4],[5,5],[6,6],
         [6,0],[5,1],[4,2]
       ],
@@ -228,26 +225,25 @@ function applyInverseCRT(px, py) {
     const currentTargetName = symbolNames[Math.floor(Math.random()*symbolNames.length)];
     const currentTarget = SYMBOLS[currentTargetName];
 
-    // show target in status
     statusEl.textContent = `TARGET: ${currentTargetName}  |  Q/Й = lock/unlock selected node`;
 
     // ----- helpers -----
     function glowColor(a=1){ return `rgba(${COLOR.r},${COLOR.g},${COLOR.b},${a})`; }
     function redColor(a=1){ return `rgba(255,60,60,${a})`; }
 
-function resize() {
-  const cssW = SIZE_CSS, cssH = SIZE_CSS;
-  mapCanvas.style.width = cssW + 'px';
-  mapCanvas.style.height = cssH + 'px';
-  w = mapCanvas.width = Math.max(120, Math.floor(cssW * DPR));
-  h = mapCanvas.height = Math.max(120, Math.floor(cssH * DPR));
-  
-  buildInverseLUT(w, h); // ⭐ ПЕРЕСТРАИВАЕМ ТАБЛИЦУ
-  
-  buildGrid();
-  resetNodesIfNeeded();
-  controls.style.bottom = `${20 + SIZE_CSS + 12}px`;
-}
+    function resize() {
+      const cssW = SIZE_CSS, cssH = SIZE_CSS;
+      mapCanvas.style.width = cssW + 'px';
+      mapCanvas.style.height = cssH + 'px';
+      w = mapCanvas.width = Math.max(120, Math.floor(cssW * DPR));
+      h = mapCanvas.height = Math.max(120, Math.floor(cssH * DPR));
+      
+      buildInverseLUT(w, h); // ⭐ ПЕРЕСТРАИВАЕМ ТАБЛИЦУ
+      
+      buildGrid();
+      resetNodesIfNeeded();
+      controls.style.bottom = `${20 + SIZE_CSS + 12}px`;
+    }
 
     function buildGrid() {
       gridPoints = [];
@@ -266,11 +262,9 @@ function resize() {
     }
 
     function resetNodesIfNeeded() {
-      // create nodes if not exist, or if count changed
       if (nodes.length === 0) {
         respawnNodes();
       } else {
-        // adjust positions to new grid if size changed
         for (const n of nodes) {
           n.x = gridPoints[n.gy][n.gx].x;
           n.y = gridPoints[n.gy][n.gx].y;
@@ -279,13 +273,11 @@ function resize() {
       }
     }
 
-    // respawn: random unique intersections for nodes
     function respawnNodes() {
       const positions = [];
       for (let r=0;r<INTER_COUNT;r++){
         for (let c=0;c<INTER_COUNT;c++) positions.push([r,c]);
       }
-      // shuffle
       for (let i=positions.length-1;i>0;i--){
         const j = Math.floor(Math.random()*(i+1));
         [positions[i],positions[j]] = [positions[j],positions[i]];
@@ -296,24 +288,22 @@ function resize() {
         const p = gridPoints[r][c];
         return {
           id: idx,
-          gx: c, gy: r,             // grid indices (col, row)
-          x: p.x, y: p.y,          // real position (for smooth movement)
+          gx: c, gy: r,
+          x: p.x, y: p.y,
           targetGx: c, targetGy: r,
-          speed: 0.002 + Math.random()*0.004, // lerp speed
+          speed: 0.002 + Math.random()*0.004,
           locked: false,
           lastMoveAt: performance.now() - Math.random()*1000,
           drag: false,
           selected: false
         };
       });
-      // clear selection / dragging
       selectedNode = null;
       draggingNode = null;
       victoryEl.style.display = 'none';
       victoryShown = false;
     }
 
-    // Get nearest intersection indices for a pixel position
     function nearestIntersection(px, py){
       let best = { r:0, c:0, d: Infinity };
       for (let r=0;r<INTER_COUNT;r++){
@@ -326,7 +316,6 @@ function resize() {
       return { row: best.r, col: best.c, dist: best.d };
     }
 
-    // choose a random neighbor for autonomous move (up/down/left/right), stays inside grid
     function pickNeighbor(gx, gy) {
       const candidates = [];
       if (gy > 0) candidates.push({gx,gy:gy-1});
@@ -337,83 +326,76 @@ function resize() {
       return candidates[Math.floor(Math.random()*candidates.length)];
     }
 
-function getMousePosOnCanvas(ev) {
-  const rect = mapCanvas.getBoundingClientRect();
-  const rawX = (ev.clientX - rect.left) * (mapCanvas.width / rect.width);
-  const rawY = (ev.clientY - rect.top) * (mapCanvas.height / rect.height);
-  
-  return applyInverseCRT(rawX, rawY); // убрал параметры, они теперь глобальные
-}
-
-mapCanvas.addEventListener('mousedown', (ev) => {
-  const m = getMousePosOnCanvas(ev);
-  mouse.down = true;
-  mouse.x = m.x; mouse.y = m.y;
-  let found = null;
-  for (let i = nodes.length - 1; i >= 0; i--) {
-    const n = nodes[i];
-    const d = Math.hypot(m.x - n.x, m.y - n.y);
-    if (d < 12 * DPR) { found = n; break; }
-  }
-  if (found) {
-    // ⭐ НЕ трогаем, если заблокирована
-    if (found.locked) {
-      if (selectedNode && selectedNode !== found) selectedNode.selected = false;
-      selectedNode = found;
-      selectedNode.selected = true;
-      return; // прекращаем, не начинаем dragging
+    function getMousePosOnCanvas(ev) {
+      const rect = mapCanvas.getBoundingClientRect();
+      const rawX = (ev.clientX - rect.left) * (mapCanvas.width / rect.width);
+      const rawY = (ev.clientY - rect.top) * (mapCanvas.height / rect.height);
+      
+      return applyInverseCRT(rawX, rawY);
     }
-    
-    draggingNode = found;
-    draggingNode.drag = true;
-    if (selectedNode && selectedNode !== found) selectedNode.selected = false;
-    selectedNode = found;
-    selectedNode.selected = true;
-  } else {
-    if (selectedNode) { selectedNode.selected = false; selectedNode = null; }
-  }
-});
 
-window.addEventListener('mousemove', (ev) => {
-  const m = getMousePosOnCanvas(ev);
-  mouse.x = m.x; mouse.y = m.y;
-  
-  // Остальной код проверки hover остается тем же
-  let hoveredNode = null;
-  for (const n of nodes) {
-    if (Math.hypot(m.x - n.x, m.y - n.y) < 12 * DPR) {
-      hoveredNode = n; break;
-    }
-  }
-  
-  // Визуальный фидбэк курсора
-  mapCanvas.style.cursor = (hoveredNode && hoveredNode.locked) ? 'not-allowed' : 
-                           (hoveredNode) ? 'pointer' : 'default';
-  
-  if (draggingNode && draggingNode.locked) {
-    draggingNode.drag = false;
-    draggingNode = null;
-  }
-  
-  if (draggingNode) {
-    const nearest = nearestIntersection(mouse.x, mouse.y);
-    draggingNode.gx = nearest.col;
-    draggingNode.gy = nearest.row;
-    draggingNode.targetGx = nearest.col;
-    draggingNode.targetGy = nearest.row;
-    const p = gridPoints[nearest.row][nearest.col];
-    draggingNode.x = p.x;
-    draggingNode.y = p.y;
-  }
-});
+    mapCanvas.addEventListener('mousedown', (ev) => {
+      const m = getMousePosOnCanvas(ev);
+      mouse.down = true;
+      mouse.x = m.x; mouse.y = m.y;
+      let found = null;
+      for (let i = nodes.length - 1; i >= 0; i--) {
+        const n = nodes[i];
+        const d = Math.hypot(m.x - n.x, m.y - n.y);
+        if (d < 12 * DPR) { found = n; break; }
+      }
+      if (found) {
+        if (found.locked) {
+          if (selectedNode && selectedNode !== found) selectedNode.selected = false;
+          selectedNode = found;
+          selectedNode.selected = true;
+          return;
+        }
+        draggingNode = found;
+        draggingNode.drag = true;
+        if (selectedNode && selectedNode !== found) selectedNode.selected = false;
+        selectedNode = found;
+        selectedNode.selected = true;
+      } else {
+        if (selectedNode) { selectedNode.selected = false; selectedNode = null; }
+      }
+    });
 
+    window.addEventListener('mousemove', (ev) => {
+      const m = getMousePosOnCanvas(ev);
+      mouse.x = m.x; mouse.y = m.y;
+      
+      let hoveredNode = null;
+      for (const n of nodes) {
+        if (Math.hypot(m.x - n.x, m.y - n.y) < 12 * DPR) {
+          hoveredNode = n; break;
+        }
+      }
+      
+      mapCanvas.style.cursor = (hoveredNode && hoveredNode.locked) ? 'not-allowed' : 
+                               (hoveredNode) ? 'pointer' : 'default';
+      
+      if (draggingNode && draggingNode.locked) {
+        draggingNode.drag = false;
+        draggingNode = null;
+      }
+      
+      if (draggingNode) {
+        const nearest = nearestIntersection(mouse.x, mouse.y);
+        draggingNode.gx = nearest.col;
+        draggingNode.gy = nearest.row;
+        draggingNode.targetGx = nearest.col;
+        draggingNode.targetGy = nearest.row;
+        const p = gridPoints[nearest.row][nearest.col];
+        draggingNode.x = p.x;
+        draggingNode.y = p.y;
+      }
+    });
 
     window.addEventListener('mouseup', (ev) => {
       mouse.down = false;
       if (draggingNode) {
-        // on release, ensure the node snaps exactly to the target intersection
         const n = draggingNode;
-        // find nearest intersection for final snap
         const nearest = nearestIntersection(n.x, n.y);
         n.gx = nearest.col; n.gy = nearest.row;
         const p = gridPoints[n.gy][n.gx];
@@ -423,58 +405,47 @@ window.addEventListener('mousemove', (ev) => {
       }
     });
 
-// keyboard Q toggles lock for selected node (snap to nearest intersection)
-window.addEventListener('keydown', (ev) => {
-  // accept both 'q' and russian 'й'
-  if (ev.key && (ev.key.toLowerCase() === 'q' || ev.key.toLowerCase() === 'й')) {
-    const n = selectedNode || draggingNode;
-    if (!n) return;
+    window.addEventListener('keydown', (ev) => {
+      if (ev.key && (ev.key.toLowerCase() === 'q' || ev.key.toLowerCase() === 'й')) {
+        const n = selectedNode || draggingNode;
+        if (!n) return;
 
-    // snap to nearest intersection
-    const nearest = nearestIntersection(n.x, n.y);
+        const nearest = nearestIntersection(n.x, n.y);
 
-    // check if that grid cell already has a locked node
-    const isOccupied = nodes.some(other => 
-      other !== n &&
-      other.locked &&
-      other.gx === nearest.col &&
-      other.gy === nearest.row
-    );
+        const isOccupied = nodes.some(other => 
+          other !== n &&
+          other.locked &&
+          other.gx === nearest.col &&
+          other.gy === nearest.row
+        );
 
-    if (isOccupied) {
-      // just small feedback in status
-      statusEl.textContent = `⚠ Место занято другим узлом`;
-      setTimeout(()=> statusEl.textContent = `TARGET: ${currentTargetName}  |  Q/Й = lock/unlock selected node`, 1500);
-      return; // don't lock here
-    }
+        if (isOccupied) {
+          statusEl.textContent = `⚠ Место занято другим узлом`;
+          setTimeout(()=> statusEl.textContent = `TARGET: ${currentTargetName}  |  Q/Й = lock/unlock selected node`, 1500);
+          return;
+        }
 
-    // otherwise proceed normally
-    n.gx = nearest.col;
-    n.gy = nearest.row;
-    n.targetGx = n.gx;
-    n.targetGy = n.gy;
-    n.locked = !n.locked;
-    n.lastMoveAt = performance.now();
+        n.gx = nearest.col;
+        n.gy = nearest.row;
+        n.targetGx = n.gx;
+        n.targetGy = n.gy;
+        n.locked = !n.locked;
+        n.lastMoveAt = performance.now();
 
-    // if locked - snap to exact grid point
-    if (n.locked) {
-      const p = gridPoints[n.gy][n.gx];
-      n.x = p.x;
-      n.y = p.y;
-    }
+        if (n.locked) {
+          const p = gridPoints[n.gy][n.gx];
+          n.x = p.x;
+          n.y = p.y;
+        }
 
-    statusEl.textContent = `TARGET: ${currentTargetName}  |  Node ${n.id} ${n.locked ? 'locked' : 'unlocked'}`;
-    setTimeout(()=> statusEl.textContent = `TARGET: ${currentTargetName}  |  Q/Й = lock/unlock selected node`, 1200);
-  }
-});
+        statusEl.textContent = `TARGET: ${currentTargetName}  |  Node ${n.id} ${n.locked ? 'locked' : 'unlocked'}`;
+        setTimeout(()=> statusEl.textContent = `TARGET: ${currentTargetName}  |  Q/Й = lock/unlock selected node`, 1200);
+      }
+    });
 
-
-    // ----- victory check -----
     let victoryShown = false;
     function checkVictory() {
-      // build a set of occupied intersections by nodes
       const set = new Set(nodes.map(n => `${n.gy},${n.gx}`));
-      // check if all required points are present
       const allPresent = currentTarget.every(([r,c]) => set.has(`${r},${c}`));
       if (allPresent) {
         victoryShown = true;
@@ -486,45 +457,35 @@ window.addEventListener('keydown', (ev) => {
       }
     }
 
-    // wire check button: manual check
     checkBtn.addEventListener('click', () => {
       const ok = checkVictory();
       if (!ok) {
-        // temporary negative feedback
         statusEl.textContent = `TARGET: ${currentTargetName}  |  ПРИКОЛ НЕ СОБРАН`;
         setTimeout(()=> statusEl.textContent = `TARGET: ${currentTargetName}  |  Q/Й = lock/unlock selected node`, 1400);
       }
     });
 
-    // wire reset button: unlock all and respawn
     resetBtn.addEventListener('click', () => {
-      // unlock all
       for (const n of nodes) { n.locked = false; n.selected = false; n.drag = false; }
       selectedNode = null; draggingNode = null;
       respawnNodes();
     });
 
-    // ----- rendering & update loop -----
     function update(dt) {
       tick++;
       const now = performance.now();
-      // autonomous movement: for each unlocked node, if reached target, maybe pick neighbor after cooldown
       for (const n of nodes) {
-        // if node is being dragged, skip autonomous position picking
         if (n.drag) continue;
-        if (n.locked) { // locked nodes stay exactly on their grid point
+        if (n.locked) {
           const pLock = gridPoints[n.gy][n.gx];
           n.x = pLock.x; n.y = pLock.y;
           n.targetGx = n.gx; n.targetGy = n.gy;
           continue;
         }
-        // if node is near its target pixel, consider picking a new neighbor after cooldown
         const targetP = gridPoints[n.targetGy][n.targetGx];
         const dist = Math.hypot(n.x - targetP.x, n.y - targetP.y);
         if (dist < 1.4 * DPR) {
-          // snap to target
           n.gx = n.targetGx; n.gy = n.targetGy;
-          // pick next target after cooldown
           if (now - n.lastMoveAt > AUTONOMOUS_MOVE_COOLDOWN + Math.random()*1200) {
             const nb = pickNeighbor(n.gx, n.gy);
             n.targetGx = nb.gx;
@@ -532,7 +493,6 @@ window.addEventListener('keydown', (ev) => {
             n.lastMoveAt = now;
           }
         } else {
-          // move toward target by lerp (smooth)
           const p = targetP;
           const t = Math.min(1, n.speed * (dt/16) * (1 + Math.random()*0.6));
           n.x += (p.x - n.x) * t;
@@ -542,22 +502,17 @@ window.addEventListener('keydown', (ev) => {
     }
 
     function draw() {
-      // clear
       mctx.clearRect(0,0,w,h);
-
-      // background rounded rect
       mctx.fillStyle = 'rgba(2,18,12,0.66)';
       roundRect(mctx, 0, 0, w, h, 8*DPR);
       mctx.fill();
 
-      // vignette
       const vig = mctx.createRadialGradient(w/2, h/2, Math.min(w,h)*0.06, w/2, h/2, Math.max(w,h)*0.9);
       vig.addColorStop(0, 'rgba(0,0,0,0)');
       vig.addColorStop(1, 'rgba(0,0,0,0.14)');
       mctx.fillStyle = vig;
       mctx.fillRect(0,0,w,h);
 
-      // grid lines
       mctx.strokeStyle = `rgba(${COLOR.r},${COLOR.g},${COLOR.b},0.10)`;
       mctx.lineWidth = 1 * DPR;
       mctx.beginPath();
@@ -573,7 +528,6 @@ window.addEventListener('keydown', (ev) => {
       }
       mctx.stroke();
 
-      // draw connections (simple straight lines between nodes that are close enough)
       mctx.save();
       mctx.lineCap = 'round';
       for (let i=0;i<nodes.length;i++){
@@ -596,9 +550,7 @@ window.addEventListener('keydown', (ev) => {
       }
       mctx.restore();
 
-      // draw nodes
       for (const n of nodes) {
-        // glow
         const pulse = 0.5 + 0.5 * Math.sin((n.id + tick*0.02) * 1.2);
         const intensity = n.selected ? 1.4 : (n.locked ? 1.2 : 1.0);
         const glowR = (6 * DPR + pulse*3*DPR) * intensity;
@@ -611,14 +563,12 @@ window.addEventListener('keydown', (ev) => {
         mctx.fillStyle = grd;
         mctx.fillRect(n.x - glowR, n.y - glowR, glowR*2, glowR*2);
 
-        // core
         mctx.beginPath();
         const coreR = 2.2 * DPR + (n.selected ? 1.6*DPR : 0);
         mctx.fillStyle = n.locked ? redColor(1) : glowColor(1);
         mctx.arc(n.x, n.y, coreR, 0, Math.PI*2);
         mctx.fill();
 
-        // stroke
         mctx.beginPath();
         mctx.lineWidth = 1 * DPR;
         mctx.strokeStyle = n.locked ? redColor(0.92) : glowColor(0.92);
@@ -626,7 +576,6 @@ window.addEventListener('keydown', (ev) => {
         mctx.stroke();
       }
 
-      // draw label
       mctx.save();
       mctx.font = `${10 * DPR}px monospace`;
       mctx.fillStyle = glowColor(0.95);
@@ -655,12 +604,10 @@ window.addEventListener('keydown', (ev) => {
       raf = requestAnimationFrame(loop);
     }
 
-    // ----- startup -----
     window.addEventListener('resize', resize);
     resize();
     raf = requestAnimationFrame(loop);
 
-    // ----- debug / API -----
     window.netGrid = window.netGrid || {};
     window.netGrid.nodes = nodes;
     window.netGrid.lockAll = function() {
