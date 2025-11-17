@@ -19,34 +19,68 @@
 const CRT_DISTORTION = 0.28; 
 
 // ----- HELPERS: Inverse CRT Transform -----
-function applyInverseCRT(px, py, w, h, distortion) {
-  // Нормализуем координаты к [-1, 1]
-  const x = (px / w) * 2 - 1;
-  const y = (py / h) * 2 - 1;
+// ⭐ ЛУКАП-ТАБЛИЦА (кэш обратного преобразования)
+let inverseLUT = null;
+let lutSize = { w: 0, h: 0 };
+
+function buildInverseLUT(canvasWidth, canvasHeight) {
+  const cols = Math.ceil(canvasWidth / 4); // шаг 4px для баланса точности/памяти
+  const rows = Math.ceil(canvasHeight / 4);
+  lutSize.w = canvasWidth;
+  lutSize.h = canvasHeight;
   
-  let r = Math.sqrt(x*x + y*y);
-  if (r === 0) return { x: px, y: py };
-  
-  // ⭐ ИТЕРАТИВНАЯ КОРРЕКЦИЯ (4 итерации = идеальная точность)
-  for (let i = 0; i < 4; i++) {
-    // Текущее искажение для этой точки
-    const currentDistortion = 1 + distortion * (r - 1);
-    
-    // Корректируем радиус, приближаясь к истинному значению
-    const r_corrected = r / currentDistortion;
-    
-    // Пересчитываем для следующей итерации
-    r = r_corrected;
+  inverseLUT = new Array(rows);
+  for (let y = 0; y < rows; y++) {
+    inverseLUT[y] = new Array(cols);
+    for (let x = 0; x < cols; x++) {
+      const px = x * 4;
+      const py = y * 4;
+      const xn = (px / canvasWidth) * 2 - 1;
+      const yn = (py / canvasHeight) * 2 - 1;
+      
+      // Симуляция шейдера: uv' = uv * (1 + distortion * (length(uv) - 1))
+      const r = Math.sqrt(xn*xn + yn*yn);
+      const factor = 1 + CRT_DISTORTION * (r - 1);
+      
+      // Обратное преобразование: uv = uv' / factor
+      const ux = xn / factor;
+      const uy = yn / factor;
+      
+      inverseLUT[y][x] = {
+        x: (ux + 1) * 0.5 * canvasWidth,
+        y: (uy + 1) * 0.5 * canvasHeight
+      };
+    }
+  }
+}
+
+function applyInverseCRT(px, py) {
+  // Проверяем, что таблица актуальна
+  if (!inverseLUT || lutSize.w !== w || lutSize.h !== h) {
+    buildInverseLUT(w, h);
   }
   
-  // Защита от экстремальных значений (на всякий случай)
-  if (!isFinite(r)) return { x: px, y: py };
+  // Индекс в таблице
+  const col = Math.floor(px / 4);
+  const row = Math.floor(py / 4);
   
-  const factor = r / Math.sqrt(x*x + y*y);
+  // Границы проверки
+  if (row < 0 || row >= inverseLUT.length || col < 0 || col >= inverseLUT[0].length) {
+    return { x: px, y: py };
+  }
+  
+  // Билинейная интерполяция для сглаживания
+  const x1 = inverseLUT[row][col].x;
+  const x2 = inverseLUT[row][Math.min(col + 1, inverseLUT[0].length - 1)].x;
+  const y1 = inverseLUT[row][col].y;
+  const y2 = inverseLUT[Math.min(row + 1, inverseLUT.length - 1)][col].y;
+  
+  const fracX = (px % 4) / 4;
+  const fracY = (py % 4) / 4;
   
   return {
-    x: (x * factor + 1) * 0.5 * w,
-    y: (y * factor + 1) * 0.5 * h
+    x: x1 * (1 - fracX) + x2 * fracX,
+    y: y1 * (1 - fracY) + y2 * fracY
   };
 }
     // ----- DOM: canvas + status + victory + controls -----
@@ -187,17 +221,19 @@ function applyInverseCRT(px, py, w, h, distortion) {
     function glowColor(a=1){ return `rgba(${COLOR.r},${COLOR.g},${COLOR.b},${a})`; }
     function redColor(a=1){ return `rgba(255,60,60,${a})`; }
 
-    function resize() {
-      const cssW = SIZE_CSS, cssH = SIZE_CSS;
-      mapCanvas.style.width = cssW + 'px';
-      mapCanvas.style.height = cssH + 'px';
-      w = mapCanvas.width = Math.max(120, Math.floor(cssW * DPR));
-      h = mapCanvas.height = Math.max(120, Math.floor(cssH * DPR));
-      buildGrid();
-      resetNodesIfNeeded();
-      // reposition controls (in case SIZE_CSS changed)
-      controls.style.bottom = `${20 + SIZE_CSS + 12}px`;
-    }
+function resize() {
+  const cssW = SIZE_CSS, cssH = SIZE_CSS;
+  mapCanvas.style.width = cssW + 'px';
+  mapCanvas.style.height = cssH + 'px';
+  w = mapCanvas.width = Math.max(120, Math.floor(cssW * DPR));
+  h = mapCanvas.height = Math.max(120, Math.floor(cssH * DPR));
+  
+  buildInverseLUT(w, h); // ⭐ ПЕРЕСТРАИВАЕМ ТАБЛИЦУ
+  
+  buildGrid();
+  resetNodesIfNeeded();
+  controls.style.bottom = `${20 + SIZE_CSS + 12}px`;
+}
 
     function buildGrid() {
       gridPoints = [];
@@ -293,7 +329,7 @@ function getMousePosOnCanvas(ev) {
   const rawY = (ev.clientY - rect.top) * (mapCanvas.height / rect.height);
   
   // ⭐ РАЗГИБАЕМ координаты мыши
-  return applyInverseCRT(rawX, rawY, w, h, CRT_DISTORTION);
+return applyInverseCRT(rawX, rawY);
 }
 
 mapCanvas.addEventListener('mousedown', (ev) => {
