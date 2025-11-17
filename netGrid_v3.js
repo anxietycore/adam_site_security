@@ -15,7 +15,27 @@
     const INTER_COUNT = CELL_COUNT + 1;
     const NODE_COUNT = 10;
     const AUTONOMOUS_MOVE_COOLDOWN = 800; // ms before picking next target
+// ⭐ ДОЛЖЕН СОВПАДАТЬ С crt_overlay.js
+const CRT_DISTORTION = 0.32; 
 
+// ----- HELPERS: Inverse CRT Transform -----
+function applyInverseCRT(px, py, w, h, distortion) {
+  // Нормализуем координаты к -1..1
+  const x = (px / w) * 2 - 1;
+  const y = (py / h) * 2 - 1;
+  
+  const r = Math.sqrt(x*x + y*y);
+  if (r === 0) return { x: px, y: py };
+  
+  // Обратная формула: undistort
+  const rUndistorted = Math.sqrt(r);
+  const factor = rUndistorted / r;
+  
+  return {
+    x: (x * factor + 1) * 0.5 * w,
+    y: (y * factor + 1) * 0.5 * h
+  };
+}
     // ----- DOM: canvas + status + victory + controls -----
     const mapCanvas = document.createElement('canvas');
     Object.assign(mapCanvas.style, {
@@ -254,13 +274,14 @@
       return candidates[Math.floor(Math.random()*candidates.length)];
     }
 
-    // ----- input handlers -----
-    function getMousePosOnCanvas(ev) {
-      const rect = mapCanvas.getBoundingClientRect();
-      const x = (ev.clientX - rect.left) * (mapCanvas.width / rect.width);
-      const y = (ev.clientY - rect.top) * (mapCanvas.height / rect.height);
-      return { x, y };
-    }
+function getMousePosOnCanvas(ev) {
+  const rect = mapCanvas.getBoundingClientRect();
+  const rawX = (ev.clientX - rect.left) * (mapCanvas.width / rect.width);
+  const rawY = (ev.clientY - rect.top) * (mapCanvas.height / rect.height);
+  
+  // ⭐ РАЗГИБАЕМ координаты мыши
+  return applyInverseCRT(rawX, rawY, w, h, CRT_DISTORTION);
+}
 
 mapCanvas.addEventListener('mousedown', (ev) => {
   const m = getMousePosOnCanvas(ev);
@@ -295,7 +316,7 @@ window.addEventListener('mousemove', (ev) => {
   const m = getMousePosOnCanvas(ev);
   mouse.x = m.x; mouse.y = m.y;
   
-  // ⭐ Проверяем, над locked node ли мышь
+  // Остальной код проверки hover остается тем же
   let hoveredNode = null;
   for (const n of nodes) {
     if (Math.hypot(m.x - n.x, m.y - n.y) < 12 * DPR) {
@@ -303,11 +324,10 @@ window.addEventListener('mousemove', (ev) => {
     }
   }
   
-  // ⭐ Меняем курсор (визуальный фидбэк)
+  // Визуальный фидбэк курсора
   mapCanvas.style.cursor = (hoveredNode && hoveredNode.locked) ? 'not-allowed' : 
                            (hoveredNode) ? 'pointer' : 'default';
   
-  // ⭐ Если вдруг тащим заблокированную точку — сбрасываем
   if (draggingNode && draggingNode.locked) {
     draggingNode.drag = false;
     draggingNode = null;
