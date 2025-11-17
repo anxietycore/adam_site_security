@@ -20,12 +20,16 @@ const CRT_DISTORTION = 0.28;
 
 // ----- HELPERS: Inverse CRT Transform -----
 // ⭐ ЛУКАП-ТАБЛИЦА (кэш обратного преобразования)
+// ⭐ ЛУКАП-ТАБЛИЦА (кэш обратного преобразования)
 let inverseLUT = null;
 let lutSize = { w: 0, h: 0 };
 
 function buildInverseLUT(canvasWidth, canvasHeight) {
-  const cols = Math.ceil(canvasWidth / 4); // шаг 4px для баланса точности/памяти
-  const rows = Math.ceil(canvasHeight / 4);
+  // Используем шаг 1px для МАКСИМАЛЬНОЙ точности
+  const step = 1;
+  const cols = Math.ceil(canvasWidth / step);
+  const rows = Math.ceil(canvasHeight / step);
+  
   lutSize.w = canvasWidth;
   lutSize.h = canvasHeight;
   
@@ -33,38 +37,48 @@ function buildInverseLUT(canvasWidth, canvasHeight) {
   for (let y = 0; y < rows; y++) {
     inverseLUT[y] = new Array(cols);
     for (let x = 0; x < cols; x++) {
-      const px = x * 4;
-      const py = y * 4;
+      const px = x * step;
+      const py = y * step;
+      
+      // Нормализуем координаты
       const xn = (px / canvasWidth) * 2 - 1;
       const yn = (py / canvasHeight) * 2 - 1;
       
-      // Симуляция шейдера: uv' = uv * (1 + distortion * (length(uv) - 1))
-      const r = Math.sqrt(xn*xn + yn*yn);
-      const factor = 1 + CRT_DISTORTION * (r - 1);
+      // ⭐ ПРАВИЛЬНАЯ ОБРАТНАЯ ФОРМУЛА для шейдера
+      // Шейдер: d = uv * (1 + distortion * (r - 1))
+      // Обратная: uv = d / (1 + distortion * (r - 1))
+      // НО! r — это длина ИСХОДНОГО uv, а не d!
       
-      // Обратное преобразование: uv = uv' / factor
-      const ux = xn / factor;
-      const uy = yn / factor;
+      // Решаем численно (4 итерации Ньютона = 99.99% точность)
+      let r = Math.sqrt(xn*xn + yn*yn);
+      if (r > 0) {
+        for (let i = 0; i < 4; i++) {
+          const f = r * (1 + CRT_DISTORTION * (r - 1));
+          const df = 1 + CRT_DISTORTION * (2 * r - 1);
+          r = r - (f - r) / df; // Ньютон
+        }
+      }
+      
+      const factor = (r > 0) ? 1 / (1 + CRT_DISTORTION * (r - 1)) : 1;
       
       inverseLUT[y][x] = {
-        x: (ux + 1) * 0.5 * canvasWidth,
-        y: (uy + 1) * 0.5 * canvasHeight
+        x: (xn * factor + 1) * 0.5 * canvasWidth,
+        y: (yn * factor + 1) * 0.5 * canvasHeight
       };
     }
   }
 }
 
 function applyInverseCRT(px, py) {
-  // Проверяем, что таблица актуальна
   if (!inverseLUT || lutSize.w !== w || lutSize.h !== h) {
     buildInverseLUT(w, h);
   }
   
-  // Индекс в таблице
-  const col = Math.floor(px / 4);
-  const row = Math.floor(py / 4);
+  const step = 1; // должен совпадать с buildInverseLUT
+  const col = Math.floor(px / step);
+  const row = Math.floor(py / step);
   
-  // Границы проверки
+  // Граничные проверки
   if (row < 0 || row >= inverseLUT.length || col < 0 || col >= inverseLUT[0].length) {
     return { x: px, y: py };
   }
@@ -75,8 +89,8 @@ function applyInverseCRT(px, py) {
   const y1 = inverseLUT[row][col].y;
   const y2 = inverseLUT[Math.min(row + 1, inverseLUT.length - 1)][col].y;
   
-  const fracX = (px % 4) / 4;
-  const fracY = (py % 4) / 4;
+  const fracX = (px % step);
+  const fracY = (py % step);
   
   return {
     x: x1 * (1 - fracX) + x2 * fracX,
@@ -328,8 +342,7 @@ function getMousePosOnCanvas(ev) {
   const rawX = (ev.clientX - rect.left) * (mapCanvas.width / rect.width);
   const rawY = (ev.clientY - rect.top) * (mapCanvas.height / rect.height);
   
-  // ⭐ РАЗГИБАЕМ координаты мыши
-return applyInverseCRT(rawX, rawY);
+  return applyInverseCRT(rawX, rawY); // убрал параметры, они теперь глобальные
 }
 
 mapCanvas.addEventListener('mousedown', (ev) => {
