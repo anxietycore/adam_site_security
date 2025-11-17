@@ -20,21 +20,19 @@ const CRT_DISTORTION = 0.32;
 
 // ----- HELPERS: Inverse CRT Transform -----
 function applyInverseCRT(px, py, w, h, distortion) {
-  // Нормализуем координаты
   const x = (px / w) * 2 - 1;
   const y = (py / h) * 2 - 1;
   
-  const r = Math.sqrt(x*x + y*y);
+  let r = Math.sqrt(x*x + y*y);
   if (r === 0) return { x: px, y: py };
   
-  // ⭐ ПРАВИЛЬНАЯ ОБРАТНАЯ ТРАНСФОРМАЦИЯ для твоего шейдера
-  // Шейдер делает: uv' = uv * (1 + distortion * (r - 1))
-  // Обратная: uv = uv' / (1 + distortion * (r - 1))
+  // Итеративное решение: r = r_d / (1 + distortion * (r - 1))
+  for (let i = 0; i < 4; i++) {
+    const r_distorted = r * (1 + distortion * (r - 1));
+    r = r * (r / r_distorted); // Корректируем
+  }
   
-  const factor = 1 / (1 + distortion * (r - 1));
-  
-  // Защита от экстремальных значений
-  if (!isFinite(factor)) return { x: px, y: py };
+  const factor = r / Math.sqrt(x*x + y*y);
   
   return {
     x: (x * factor + 1) * 0.5 * w,
