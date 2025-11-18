@@ -1,4 +1,4 @@
-// netGrid_v3-DEBUG.js — ОТЛАДОЧНАЯ ВЕРСИЯ
+// netGrid_v3-FINAL.js — ИСПРАВЛЕННАЯ ВЕРСИЯ
 (() => {
   try {
     // ----- CONFIG -----
@@ -12,11 +12,7 @@
     const NODE_COUNT = 10;
     const AUTONOMOUS_MOVE_COOLDOWN = 800;
     const CRT_DISTORTION = 0.28;
-    
-    // ----- ОТЛАДОЧНЫЕ ПЕРЕМЕННЫЕ -----
-    let DEBUG_MODE = true; // ✅ Включите/выключите отладку
-    let debugMousePos = { x: 0, y: 0, undistortedX: 0, undistortedY: 0 };
-    let debugNearestNode = null;
+    const HIT_RADIUS = 30 * DPR; // ✅ УВЕЛИЧЕНО для теста
 
     // ----- ОБРАТНАЯ ТРАНСФОРМАЦИЯ -----
     let inverseLUT = null;
@@ -98,6 +94,16 @@
       return { x: finalX, y: finalY };
     }
 
+    // ✅ ДОБАВЛЕНА ОТСУТСТВУЮЩАЯ ФУНКЦИЯ
+    function pickNeighbor(gx, gy) {
+      const candidates = [];
+      if (gy > 0) candidates.push({gx, gy: gy-1});
+      if (gy < INTER_COUNT-1) candidates.push({gx, gy: gy+1});
+      if (gx > 0) candidates.push({gx: gx-1, gy});
+      if (gx < INTER_COUNT-1) candidates.push({gx: gx+1, gy});
+      return candidates[Math.floor(Math.random() * candidates.length)] || {gx, gy};
+    }
+
     // ----- DOM-элементы -----
     const mapCanvas = document.createElement('canvas');
     Object.assign(mapCanvas.style, {
@@ -116,6 +122,90 @@
     document.body.appendChild(mapCanvas);
     const mctx = mapCanvas.getContext('2d');
 
+    // ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: установка размеров ДО первого resize
+    mapCanvas.width = Math.floor(SIZE_CSS * DPR);
+    mapCanvas.height = Math.floor(SIZE_CSS * DPR);
+
+    const statusEl = document.createElement('div');
+    Object.assign(statusEl.style, {
+      position: 'fixed',
+      left: '18px',
+      bottom: '12px',
+      fontFamily: 'Courier, monospace',
+      fontSize: '13px',
+      color: `rgba(${COLOR.r}, ${COLOR.g}, ${COLOR.b}, 1)`,
+      textShadow: `0 0 10px rgba(${COLOR.r}, ${COLOR.g}, ${COLOR.b}, 0.9)`,
+      zIndex: STATUS_Z,
+      pointerEvents: 'none',
+      userSelect: 'none',
+      letterSpacing: '0.6px',
+      fontWeight: '700',
+      opacity: '1',
+    });
+    document.body.appendChild(statusEl);
+
+    const victoryEl = document.createElement('div');
+    Object.assign(victoryEl.style, {
+      pointerEvents: 'none',
+      position: 'fixed',
+      left: '50%',
+      top: '50%',
+      transform: 'translate(-50%,-50%)',
+      color: `rgba(${COLOR.r}, ${COLOR.g}, ${COLOR.b}, 1)`,
+      fontSize: '36px',
+      fontWeight: '900',
+      textShadow: `0 0 18px rgba(${COLOR.r}, ${COLOR.g}, ${COLOR.b}, 0.85)`,
+      zIndex: 80,
+      display: 'none',
+      textAlign: 'center',
+      padding: '10px 20px',
+      borderRadius: '8px',
+      background: 'rgba(0,0,0,0.35)'
+    });
+    victoryEl.textContent = 'Ура, победил!';
+    document.body.appendChild(victoryEl);
+
+    const controls = document.createElement('div');
+    Object.assign(controls.style, {
+      position: 'fixed',
+      right: '20px',
+      bottom: `${20 + SIZE_CSS + 12}px`,
+      display: 'flex',
+      gap: '8px',
+      zIndex: MAP_Z + 1,
+      alignItems: 'center'
+    });
+    document.body.appendChild(controls);
+
+    const checkBtn = document.createElement('button');
+    checkBtn.textContent = 'ПРОВЕРИТЬ ПРИКОЛ';
+    Object.assign(checkBtn.style, {
+      padding: '8px 18px',
+      borderRadius: '6px',
+      border: `2px solid rgba(${COLOR.r},${COLOR.g},${COLOR.b},0.95)`,
+      background: 'rgba(0,0,0,0.5)',
+      color: `rgba(${COLOR.r},${COLOR.g},${COLOR.b},1)`,
+      fontFamily: 'Courier, monospace',
+      cursor: 'pointer',
+      fontWeight: '700',
+      letterSpacing: '1px'
+    });
+    controls.appendChild(checkBtn);
+
+    const resetBtn = document.createElement('button');
+    resetBtn.textContent = '⟳';
+    Object.assign(resetBtn.style, {
+      padding: '8px 12px',
+      borderRadius: '6px',
+      border: `2px solid rgba(${COLOR.r},${COLOR.g},${COLOR.b},0.95)`,
+      background: 'rgba(0,0,0,0.5)',
+      color: `rgba(${COLOR.r},${COLOR.g},${COLOR.b},1)`,
+      fontFamily: 'Courier, monospace',
+      cursor: 'pointer',
+      fontWeight: '700'
+    });
+    controls.appendChild(resetBtn);
+
     // ----- Внутреннее состояние -----
     let w = 0, h = 0;
     let gridPoints = [];
@@ -126,17 +216,10 @@
     let draggingNode = null;
     let mouse = { x: 0, y: 0, down: false };
 
-    const HIT_RADIUS = 20 * DPR; // ✅ Увеличен для отладки
-
-    // ----- Символы -----
-    const SYMBOLS = {
-      V: [[0,0],[1,1],[2,2],[3,3],[4,4],[5,5],[6,6],[6,0],[5,1],[4,2]],
-      I: [[0,3],[1,3],[2,3],[3,3],[4,3],[5,3],[6,3]],
-      X: [[0,0],[1,1],[2,2],[3,3],[4,4],[5,5],[6,6],[0,6],[1,5],[2,4],[4,2],[5,1],[6,0]]
-    };
-    const symbolNames = Object.keys(SYMBOLS);
-    const currentTargetName = symbolNames[Math.floor(Math.random()*symbolNames.length)];
+    const currentTargetName = 'V'; // Для теста фиксируем символ
     const currentTarget = SYMBOLS[currentTargetName];
+
+    statusEl.textContent = `TARGET: ${currentTargetName}  |  Q/Й = lock/unlock selected node`;
 
     // ----- Вспомогательные функции -----
     function glowColor(a=1){ return `rgba(${COLOR.r},${COLOR.g},${COLOR.b},${a})`; }
@@ -146,8 +229,10 @@
       const cssW = SIZE_CSS, cssH = SIZE_CSS;
       mapCanvas.style.width = cssW + 'px';
       mapCanvas.style.height = cssH + 'px';
-      w = mapCanvas.width = Math.max(120, Math.floor(cssW * DPR));
-      h = mapCanvas.height = Math.max(120, Math.floor(cssH * DPR));
+      
+      // ✅ КРИТИЧЕСКОЕ: устанавливаем размеры canvas в пикселях
+      w = mapCanvas.width = Math.floor(cssW * DPR);
+      h = mapCanvas.height = Math.floor(cssH * DPR);
       
       console.log(`[DEBUG] Resize: canvas ${w}x${h}, CSS ${cssW}x${cssH}, DPR ${DPR}`);
       
@@ -214,50 +299,27 @@
       console.log(`[DEBUG] Nodes respawned: ${nodes.length} nodes`);
     }
 
+    function nearestIntersection(px, py){
+      let best = { r:0, c:0, d: Infinity };
+      for (let r=0;r<INTER_COUNT;r++){
+        for (let c=0;c<INTER_COUNT;c++){
+          const p = gridPoints[r][c];
+          const d = Math.hypot(px - p.x, py - p.y);
+          if (d < best.d) { best = {r, c, d}; }
+        }
+      }
+      return { row: best.r, col: best.c, dist: best.d };
+    }
+
     function getMousePosOnCanvas(ev) {
       const rect = mapCanvas.getBoundingClientRect();
       const rawX = (ev.clientX - rect.left) * (mapCanvas.width / rect.width);
       const rawY = (ev.clientY - rect.top) * (mapCanvas.height / rect.height);
-      
       const undistorted = applyInverseCRT(rawX, rawY);
       
-      // ✅ СОХРАНЯЕМ ДЛЯ ОТЛАДКИ
-      debugMousePos = {
-        x: rawX,
-        y: rawY,
-        undistortedX: undistorted.x,
-        undistortedY: undistorted.y
-      };
-      
+      console.log(`[MOUSE] Distorted: ${rawX.toFixed(2)}, ${rawY.toFixed(2)} → Undistorted: ${undistorted.x.toFixed(2)}, ${undistorted.y.toFixed(2)}`);
       return undistorted;
     }
-
-    // ----- ГЛОБАЛЬНЫЕ ОТЛАДОЧНЫЕ КОМАНДЫ -----
-    window.netGridDebug = {
-      getNodeInfo: (id) => {
-        const n = nodes.find(n => n.id === id);
-        if (!n) console.log(`[DEBUG] Node ${id} not found`);
-        else console.log(`[DEBUG] Node ${id}: x=${n.x.toFixed(2)}, y=${n.y.toFixed(2)}, gx=${n.gx}, gy=${n.gy}`);
-      },
-      getMouseInfo: () => {
-        console.log(`[DEBUG] Mouse (distorted): ${debugMousePos.x.toFixed(2)}, ${debugMousePos.y.toFixed(2)}`);
-        console.log(`[DEBUG] Mouse (undistorted): ${debugMousePos.undistortedX.toFixed(2)}, ${debugMousePos.undistortedY.toFixed(2)}`);
-      },
-      toggleVisualDebug: () => {
-        DEBUG_MODE = !DEBUG_MODE;
-        console.log(`[DEBUG] Visual debug: ${DEBUG_MODE ? 'ON' : 'OFF'}`);
-      },
-      testHit: (nodeId) => {
-        const n = nodes.find(n => n.id === nodeId);
-        if (!n) return;
-        const dist = Math.hypot(debugMousePos.undistortedX - n.x, debugMousePos.undistortedY - n.y);
-        console.log(`[DEBUG] Distance to node ${nodeId}: ${dist.toFixed(2)} (hit radius: ${HIT_RADIUS})`);
-      },
-      rebuildLUT: () => {
-        buildInverseLUT(w, h);
-        console.log('[DEBUG] LUT rebuilt manually');
-      }
-    };
 
     // ----- Обработчики мыши -----
     mapCanvas.addEventListener('mousedown', (ev) => {
@@ -265,34 +327,18 @@
       mouse.down = true;
       mouse.x = m.x; mouse.y = m.y;
       
-      console.log(`[MOUSE] DOWN at distorted: ${debugMousePos.x.toFixed(2)}, ${debugMousePos.y.toFixed(2)}`);
-      console.log(`[MOUSE] DOWN at undistorted: ${m.x.toFixed(2)}, ${m.y.toFixed(2)}`);
-      
       let found = null;
-      let closestDist = Infinity;
-      let closestNode = null;
+      let minDist = Infinity;
       
       for (const n of nodes) {
         const d = Math.hypot(m.x - n.x, m.y - n.y);
-        console.log(`[HITTEST] Node ${n.id}: distance = ${d.toFixed(2)}`);
-        if (d < closestDist) {
-          closestDist = d;
-          closestNode = n;
-        }
-        if (d < HIT_RADIUS) { 
-          found = n; 
-          break; 
-        }
-      }
-      
-      if (closestNode) {
-        console.log(`[HITTEST] Closest node: ${closestNode.id} at distance ${closestDist.toFixed(2)}`);
+        console.log(`[HITTEST] Node ${n.id}: ${d.toFixed(2)}px`);
+        if (d < minDist) minDist = d;
+        if (d < HIT_RADIUS) { found = n; break; }
       }
       
       if (found) {
-        console.log(`[HITTEST] SUCCESS! Selected node ${found.id}`);
-        debugNearestNode = found;
-        
+        console.log(`[SUCCESS] Node ${found.id} selected (distance: ${Math.hypot(m.x - found.x, m.y - found.y).toFixed(2)}px)`);
         if (found.locked) {
           if (selectedNode && selectedNode !== found) selectedNode.selected = false;
           selectedNode = found;
@@ -305,7 +351,7 @@
         selectedNode = found;
         selectedNode.selected = true;
       } else {
-        console.log(`[HITTEST] MISS! No node within ${HIT_RADIUS}px`);
+        console.log(`[MISS] Min distance: ${minDist.toFixed(2)}px (radius: ${HIT_RADIUS}px)`);
         if (selectedNode) { selectedNode.selected = false; selectedNode = null; }
       }
     });
@@ -342,7 +388,6 @@
     });
 
     window.addEventListener('mouseup', (ev) => {
-      console.log('[MOUSE] UP');
       mouse.down = false;
       if (draggingNode) {
         const n = draggingNode;
@@ -352,6 +397,44 @@
         n.x = p.x; n.y = p.y;
         n.drag = false;
         draggingNode = null;
+      }
+    });
+
+    window.addEventListener('keydown', (ev) => {
+      if (ev.key && (ev.key.toLowerCase() === 'q' || ev.key.toLowerCase() === 'й')) {
+        const n = selectedNode || draggingNode;
+        if (!n) return;
+
+        const nearest = nearestIntersection(n.x, n.y);
+
+        const isOccupied = nodes.some(other => 
+          other !== n &&
+          other.locked &&
+          other.gx === nearest.col &&
+          other.gy === nearest.row
+        );
+
+        if (isOccupied) {
+          statusEl.textContent = `⚠ Место занято другим узлом`;
+          setTimeout(()=> statusEl.textContent = `TARGET: ${currentTargetName}  |  Q/Й = lock/unlock selected node`, 1500);
+          return;
+        }
+
+        n.gx = nearest.col;
+        n.gy = nearest.row;
+        n.targetGx = n.gx;
+        n.targetGy = n.gy;
+        n.locked = !n.locked;
+        n.lastMoveAt = performance.now();
+
+        if (n.locked) {
+          const p = gridPoints[n.gy][n.gx];
+          n.x = p.x;
+          n.y = p.y;
+        }
+
+        statusEl.textContent = `TARGET: ${currentTargetName}  |  Node ${n.id} ${n.locked ? 'locked' : 'unlocked'}`;
+        setTimeout(()=> statusEl.textContent = `TARGET: ${currentTargetName}  |  Q/Й = lock/unlock selected node`, 1200);
       }
     });
 
@@ -392,44 +475,11 @@
       roundRect(mctx, 0, 0, w, h, 8*DPR);
       mctx.fill();
 
-            const vig = mctx.createRadialGradient(w/2, h/2, Math.min(w,h)*0.06, w/2, h/2, Math.max(w,h)*0.9);
+      const vig = mctx.createRadialGradient(w/2, h/2, Math.min(w,h)*0.06, w/2, h/2, Math.max(w,h)*0.9);
       vig.addColorStop(0, 'rgba(0,0,0,0)');
       vig.addColorStop(1, 'rgba(0,0,0,0.14)');
       mctx.fillStyle = vig;
       mctx.fillRect(0,0,w,h);
-
-      // ----- ОТЛАДОЧНЫЕ ВИЗУАЛЬНЫЕ МАРКЕРЫ -----
-      if (DEBUG_MODE) {
-        // Красный крестик на позиции мыши (undistorted)
-        if (mouse.down) {
-          mctx.strokeStyle = '#FF0000';
-          mctx.lineWidth = 2 * DPR;
-          mctx.beginPath();
-          mctx.moveTo(mouse.x - 10 * DPR, mouse.y);
-          mctx.lineTo(mouse.x + 10 * DPR, mouse.y);
-          mctx.moveTo(mouse.x, mouse.y - 10 * DPR);
-          mctx.lineTo(mouse.x, mouse.y + 10 * DPR);
-          mctx.stroke();
-          
-          // Желтый круг hit radius
-          mctx.strokeStyle = '#FFFF00';
-          mctx.lineWidth = 1 * DPR;
-          mctx.globalAlpha = 0.5;
-          mctx.beginPath();
-          mctx.arc(mouse.x, mouse.y, HIT_RADIUS, 0, Math.PI*2);
-          mctx.stroke();
-          mctx.globalAlpha = 1;
-        }
-        
-        // Зеленый круг вокруг ближайшей узловой точки
-        if (debugNearestNode) {
-          mctx.strokeStyle = '#00FF00';
-          mctx.lineWidth = 2 * DPR;
-          mctx.beginPath();
-          mctx.arc(debugNearestNode.x, debugNearestNode.y, HIT_RADIUS + 5 * DPR, 0, Math.PI*2);
-          mctx.stroke();
-        }
-      }
 
       mctx.strokeStyle = `rgba(${COLOR.r},${COLOR.g},${COLOR.b},0.10)`;
       mctx.lineWidth = 1 * DPR;
@@ -468,7 +518,6 @@
       }
       mctx.restore();
 
-      // Рисуем узлы
       for (const n of nodes) {
         const pulse = 0.5 + 0.5 * Math.sin((n.id + tick*0.02) * 1.2);
         const intensity = n.selected ? 1.4 : (n.locked ? 1.2 : 1.0);
@@ -527,7 +576,7 @@
     resize();
     raf = requestAnimationFrame(loop);
 
-    console.log('[DEBUG] netGrid_v3-DEBUG loaded. Commands: netGridDebug.getMouseInfo(), netGridDebug.getNodeInfo(id), netGridDebug.toggleVisualDebug(), netGridDebug.testHit(id)');
+    console.log(`[DEBUG] netGrid_v3-FINAL loaded. Canvas: ${w}x${h}, DPR: ${DPR}, Hit radius: ${HIT_RADIUS}px`);
 
   } catch (err) {
     console.error('[DEBUG] CRITICAL ERROR:', err);
