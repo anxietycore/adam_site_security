@@ -18,10 +18,11 @@
     // ----- ПРАВИЛЬНАЯ ОБРАТНАЯ ТРАНСФОРМАЦИЯ -----
     // Lookup table для 100% точности
     let inverseLUT = null;
-    let lutSize = { w: 0, h: 0 };
+    let lutSize = { w: -1, h: -1 }; // Инициализация -1 для гарантированного первого построения
 
     function buildInverseLUT(canvasWidth, canvasHeight) {
-      const step = 2; // шаг 2px для баланса точности/производительности
+      // Увеличенная точность: step = 1 вместо 2
+      const step = 1; 
       const cols = Math.ceil(canvasWidth / step);
       const rows = Math.ceil(canvasHeight / step);
       
@@ -35,33 +36,33 @@
           const px = x * step;
           const py = y * step;
           
-          // Нормализуем координаты (дистортированные)
+          // Координаты в нормализованном пространстве [-1,1]
           const xd = (px / canvasWidth) * 2 - 1;
           const yd = (py / canvasHeight) * 2 - 1;
           
-          // Радиус дистортированной точки
+          // Радиус в ДИСТОРТИРОВАННОМ пространстве
           const rd = Math.sqrt(xd*xd + yd*yd);
           
           // ⭐ АНАЛИТИЧЕСКОЕ РЕШЕНИЕ: k*r² + (1-k)*r - rd = 0
           const k = CRT_DISTORTION;
-          let r = 0;
+          let r = rd; // fallback
           
-          if (k === 0 || rd === 0) {
-            r = rd;
-          } else {
+          if (k !== 0 && rd > 0) {
             const discriminant = (1 - k) * (1 - k) + 4 * k * rd;
             if (discriminant >= 0) {
+              // Положительный корень (отбрасываем отрицательный)
               r = (-(1 - k) + Math.sqrt(discriminant)) / (2 * k);
             }
           }
           
-          // Обратный фактор
+          // Обратный фактор для undistorted координат
           const factor = (r > 0) ? 1 / (1 + k * (r - 1)) : 1;
           
-          // Исходные координаты
+          // Исходные (undistorted) координаты
           const xn = xd * factor;
           const yn = yd * factor;
           
+          // Конвертируем обратно в пиксели (undistorted)
           inverseLUT[y][x] = {
             x: (xn + 1) * 0.5 * canvasWidth,
             y: (yn + 1) * 0.5 * canvasHeight
@@ -70,33 +71,44 @@
       }
     }
 
-    function applyInverseCRT(px, py) {
+    function applyInverseCRT(distortedPx, distortedPy) {
+      // Проверяем, нужно ли перестроить таблицу (сравнение с -1 гарантирует первый запуск)
       if (!inverseLUT || lutSize.w !== w || lutSize.h !== h) {
         buildInverseLUT(w, h);
       }
       
-      const step = 2; // должен совпадать с buildInverseLUT
-      const col = Math.floor(px / step);
-      const row = Math.floor(py / step);
+      const step = 1; // MUST match buildInverseLUT
+      const col = Math.floor(distortedPx / step);
+      const row = Math.floor(distortedPy / step);
       
-      // Граничные проверки
+      // Быстрый выход за границы
       if (row < 0 || row >= inverseLUT.length || col < 0 || col >= inverseLUT[0].length) {
-        return { x: px, y: py };
+        return { x: distortedPx, y: distortedPy };
       }
       
-      // Билинейная интерполяция
-      const x1 = inverseLUT[row][col].x;
-      const x2 = inverseLUT[row][Math.min(col + 1, inverseLUT[0].length - 1)].x;
-      const y1 = inverseLUT[row][col].y;
-      const y2 = inverseLUT[Math.min(row + 1, inverseLUT.length - 1)][col].y;
+      // ПРАВИЛЬНАЯ билинейная интерполяция
+      const fracX = (distortedPx % step) / step;
+      const fracY = (distortedPy % step) / step;
       
-      const fracX = (px % step) / step;
-      const fracY = (py % step) / step;
+      // Четыре соседние точки
+      const topLeft = inverseLUT[row][col];
+      const topRight = inverseLUT[row][Math.min(col + 1, inverseLUT[0].length - 1)];
+      const bottomLeft = inverseLUT[Math.min(row + 1, inverseLUT.length - 1)][col];
+      const bottomRight = inverseLUT[Math.min(row + 1, inverseLUT.length - 1)][Math.min(col + 1, inverseLUT[0].length - 1)];
       
-      return {
-        x: x1 * (1 - fracX) + x2 * fracX,
-        y: y1 * (1 - fracY) + y2 * fracY
-      };
+      // Интерполяция по X для верхней и нижней строк
+      const topX = topLeft.x * (1 - fracX) + topRight.x * fracX;
+      const bottomX = bottomLeft.x * (1 - fracX) + bottomRight.x * fracX;
+      
+      // Интерполяция по X для верхней и нижней строк (Y)
+      const topY = topLeft.y * (1 - fracX) + topRight.y * fracX;
+      const bottomY = bottomLeft.y * (1 - fracX) + bottomRight.y * fracX;
+      
+      // Финальная интерполяция по Y
+      const finalX = topX * (1 - fracY) + bottomX * fracY;
+      const finalY = topY * (1 - fracY) + bottomY * fracY;
+      
+      return { x: finalX, y: finalY };
     }
 
     // ----- DOM: canvas + status + victory + controls -----
@@ -342,7 +354,11 @@
       for (let i = nodes.length - 1; i >= 0; i--) {
         const n = nodes[i];
         const d = Math.hypot(m.x - n.x, m.y - n.y);
-        if (d < 12 * DPR) { found = n; break; }
+        // Увеличен радиус захвата для более удобного взаимодействия
+        if (d < 15 * DPR) { 
+          found = n; 
+          break; 
+        }
       }
       if (found) {
         if (found.locked) {
@@ -367,7 +383,7 @@
       
       let hoveredNode = null;
       for (const n of nodes) {
-        if (Math.hypot(m.x - n.x, m.y - n.y) < 12 * DPR) {
+        if (Math.hypot(m.x - n.x, m.y - n.y) < 15 * DPR) {
           hoveredNode = n; break;
         }
       }
