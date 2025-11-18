@@ -1,4 +1,5 @@
-// netGrid_v4.js — VIGIL NET GRID v4 (interactive grid, nodes move only on grid-lines)
+// netGrid_v3.js — VIGIL NET GRID v3 (interactive grid, nodes move only on grid-lines)
+// FULL replacement with fix: correct inverse CRT mapping via terminalCanvas -> mapCanvas translation
 (() => {
   try {
     // ----- CONFIG -----
@@ -15,13 +16,15 @@
     // ⭐ ДОЛЖЕН СОВПАДАТЬ С crt_overlay.js
     const CRT_DISTORTION = 0.28;
 
-    // ----- ПРАВИЛЬНАЯ ОБРАТНАЯ ТРАНСФОРМАЦИЯ -----
-    // Lookup table для 100% точности
+    // ----- PERSISTENT LUT state -----
+    // We will build LUTs for the terminalCanvas coordinate space (the one the CRT shader uses)
     let inverseLUT = null;
     let lutSize = { w: 0, h: 0 };
+    const LUT_STEP = 2; // px step for LUT grid (balance between precision and memory)
 
-    function buildInverseLUT(canvasWidth, canvasHeight) {
-      const step = 2; // шаг 2px для баланса точности/производительности
+    // Build LUT for given canvas size (terminalCanvas pixel size)
+    function buildInverseLUT_forTerminal(canvasWidth, canvasHeight) {
+      const step = LUT_STEP;
       const cols = Math.ceil(canvasWidth / step);
       const rows = Math.ceil(canvasHeight / step);
       
@@ -35,30 +38,26 @@
           const px = x * step;
           const py = y * step;
           
-          // Нормализуем координаты (дистортированные)
+          // Normalize distorted coordinate into [-1,1]
           const xd = (px / canvasWidth) * 2 - 1;
           const yd = (py / canvasHeight) * 2 - 1;
           
-          // Радиус дистортированной точки
           const rd = Math.sqrt(xd*xd + yd*yd);
-          
-          // ⭐ АНАЛИТИЧЕСКОЕ РЕШЕНИЕ: k*r² + (1-k)*r - rd = 0
           const k = CRT_DISTORTION;
           let r = 0;
-          
           if (k === 0 || rd === 0) {
             r = rd;
           } else {
+            // Solve quadratic k*r^2 + (1-k)*r - rd = 0
             const discriminant = (1 - k) * (1 - k) + 4 * k * rd;
             if (discriminant >= 0) {
               r = (-(1 - k) + Math.sqrt(discriminant)) / (2 * k);
+            } else {
+              r = rd;
             }
           }
           
-          // Обратный фактор
           const factor = (r > 0) ? 1 / (1 + k * (r - 1)) : 1;
-          
-          // Исходные координаты
           const xn = xd * factor;
           const yn = yd * factor;
           
@@ -70,33 +69,33 @@
       }
     }
 
-    function applyInverseCRT(px, py) {
-      if (!inverseLUT || lutSize.w !== w || lutSize.h !== h) {
-        buildInverseLUT(w, h);
+    // Bilinear interpolation on the LUT for a given terminalCanvas pixel coordinate (px,py)
+    function applyInverseCRT_terminal(px, py, termW, termH) {
+      // Ensure LUT for this terminal size
+      if (!inverseLUT || lutSize.w !== termW || lutSize.h !== termH) {
+        buildInverseLUT_forTerminal(termW, termH);
       }
-      
-      const step = 2; // должен совпадать с buildInverseLUT
+      const step = LUT_STEP;
       const col = Math.floor(px / step);
       const row = Math.floor(py / step);
-      
-      // Граничные проверки
       if (row < 0 || row >= inverseLUT.length || col < 0 || col >= inverseLUT[0].length) {
-        return { x: px, y: py };
+        // out of LUT bounds — return original (clamped)
+        return { x: Math.max(0, Math.min(termW, px)), y: Math.max(0, Math.min(termH, py)) };
       }
-      
-      // Билинейная интерполяция
-      const x1 = inverseLUT[row][col].x;
-      const x2 = inverseLUT[row][Math.min(col + 1, inverseLUT[0].length - 1)].x;
-      const y1 = inverseLUT[row][col].y;
-      const y2 = inverseLUT[Math.min(row + 1, inverseLUT.length - 1)][col].y;
-      
-      const fracX = (px % step) / step;
-      const fracY = (py % step) / step;
-      
-      return {
-        x: x1 * (1 - fracX) + x2 * fracX,
-        y: y1 * (1 - fracY) + y2 * fracY
-      };
+      const c00 = inverseLUT[row][col];
+      const c10 = inverseLUT[row][Math.min(col + 1, inverseLUT[0].length - 1)];
+      const c01 = inverseLUT[Math.min(row + 1, inverseLUT.length - 1)][col];
+      const c11 = inverseLUT[Math.min(row + 1, inverseLUT.length - 1)][Math.min(col + 1, inverseLUT[0].length - 1)];
+      const fracX = (px - col * step) / step;
+      const fracY = (py - row * step) / step;
+      // bilinear interp
+      const xa = c00.x * (1 - fracX) + c10.x * fracX;
+      const xb = c01.x * (1 - fracX) + c11.x * fracX;
+      const ya = c00.y * (1 - fracX) + c10.y * fracX;
+      const yb = c01.y * (1 - fracX) + c11.y * fracX;
+      const rx = xa * (1 - fracY) + xb * fracY;
+      const ry = ya * (1 - fracY) + yb * fracY;
+      return { x: rx, y: ry };
     }
 
     // ----- DOM: canvas + status + victory + controls -----
@@ -238,8 +237,9 @@
       w = mapCanvas.width = Math.max(120, Math.floor(cssW * DPR));
       h = mapCanvas.height = Math.max(120, Math.floor(cssH * DPR));
       
-      buildInverseLUT(w, h); // ⭐ ПЕРЕСТРАИВАЕМ ТАБЛИЦУ
-      
+      // NOTE: we used to build LUT for mapCanvas; that caused mismatch.
+      // KEEP building LUT lazily for terminalCanvas when needed (applyInverseCRT_terminal will rebuild).
+      // But keep building grid and nodes here for map visuals.
       buildGrid();
       resetNodesIfNeeded();
       controls.style.bottom = `${20 + SIZE_CSS + 12}px`;
@@ -326,14 +326,74 @@
       return candidates[Math.floor(Math.random()*candidates.length)];
     }
 
+    // ----- IMPORTANT: getMousePosOnCanvas (fixed pipeline) -----
+    // Steps:
+    // 1) convert ev.clientX/Y -> pixel coordinates in terminalCanvas (the canvas the CRT shader uses)
+    // 2) inverse-distort those terminalCanvas pixels to "undistorted" terminal coords via LUT/analytical
+    // 3) map undistorted terminal coords to local mapCanvas pixels (where mapCanvas was drawn into terminalCanvas)
     function getMousePosOnCanvas(ev) {
-      const rect = mapCanvas.getBoundingClientRect();
-      const rawX = (ev.clientX - rect.left) * (mapCanvas.width / rect.width);
-      const rawY = (ev.clientY - rect.top) * (mapCanvas.height / rect.height);
-      
-      return applyInverseCRT(rawX, rawY);
+      // find terminalCanvas (created by terminal_canvas.js)
+      const term = document.getElementById('terminalCanvas');
+      if (!term) {
+        // fallback to previous behaviour (direct mapCanvas rect)
+        const rect = mapCanvas.getBoundingClientRect();
+        const rawX = (ev.clientX - rect.left) * (mapCanvas.width / rect.width);
+        const rawY = (ev.clientY - rect.top) * (mapCanvas.height / rect.height);
+        return { x: rawX, y: rawY };
+      }
+
+      // 1) event -> terminalCanvas pixel coords (consider terminalCanvas may be scaled via CSS)
+      const termRect = term.getBoundingClientRect();
+      // convert client to terminalCanvas pixel space (account for backing buffer size)
+      const termPxX = (ev.clientX - termRect.left) * (term.width / termRect.width);
+      const termPxY = (ev.clientY - termRect.top) * (term.height / termRect.height);
+
+      // 2) inverse-distort in terminal space
+      const undist = applyInverseCRT_terminal(termPxX, termPxY, term.width, term.height);
+
+      // 3) determine where mapCanvas was drawn inside terminalCanvas (this should match terminal_canvas.js usage)
+      // Note: terminal_canvas.js uses:
+      // const r = mapCanvas.getBoundingClientRect();
+      // const sx = Math.round(r.left);
+      // const sy = Math.round(r.top);
+      // const sw = Math.round(r.width);
+      // const sh = Math.round(r.height);
+      // ctx.drawImage(mapCanvas, sx, sy, sw, sh);
+      const mapRect = mapCanvas.getBoundingClientRect();
+      const sx = Math.round(mapRect.left - termRect.left); // map position *inside* terminalCanvas coords (CSS px)
+      const sy = Math.round(mapRect.top - termRect.top);
+      const sw = Math.round(mapRect.width);
+      const sh = Math.round(mapRect.height);
+
+      // undist is in terminalCanvas pixel space (0..term.width)
+      // we need to convert undist.x from terminal pixel coords -> CSS coords within termRect, then to mapCanvas backing pixels.
+      // But simpler & robust: termPxX/term.width corresponds to fraction across terminalCanvas; compute fraction and compare to mapRect fraction.
+      const fracX = undist.x / term.width;
+      const fracY = undist.y / term.height;
+
+      // mapRect's origin within terminalCanvas (in CSS px) is sx (which was in CSS pixels offset from terminal left).
+      // TermRect.width corresponds to term.width / DPR? Actually we used term.width/termRect.width to go from CSS -> pixels earlier.
+      // To map fraction to mapCanvas backing pixels:
+      // undist_css_x = fracX * termRect.width  (in CSS px relative to terminal left)
+      // relative to mapRect.left: rel_css_x = undist_css_x - (mapRect.left - termRect.left) = fracX*termRect.width - (mapRect.left - termRect.left)
+      // then local_backing_x = rel_css_x * (mapCanvas.width / mapRect.width)
+      const undist_css_x = fracX * termRect.width;
+      const undist_css_y = fracY * termRect.height;
+
+      const rel_css_x = undist_css_x - (mapRect.left - termRect.left);
+      const rel_css_y = undist_css_y - (mapRect.top - termRect.top);
+
+      const localX = (rel_css_x) * (mapCanvas.width / mapRect.width);
+      const localY = (rel_css_y) * (mapCanvas.height / mapRect.height);
+
+      // clamp to map bounds
+      const clampedX = Math.max(0, Math.min(mapCanvas.width, localX));
+      const clampedY = Math.max(0, Math.min(mapCanvas.height, localY));
+
+      return { x: clampedX, y: clampedY };
     }
 
+    // ----- EVENTS -----
     mapCanvas.addEventListener('mousedown', (ev) => {
       const m = getMousePosOnCanvas(ev);
       mouse.down = true;
