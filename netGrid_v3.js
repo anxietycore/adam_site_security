@@ -1,37 +1,99 @@
-// netGrid_v6_leftbottom.js
-// Full, self-contained net grid — left-bottom HUD.
-// - Autonomous: creates its own canvas in left-bottom, manages nodes, drag/drop, lock/unlock (Q/Й).
-// - Uses direct client->canvas mapping (bounding rect -> device px).
-// - Defensive: removes previous instances if present.
-// - Debug API: window.netGridV6Left.debug(), .destroy(), .forceRespawn()
+// netGrid_v7_killold_leftbottom.js
+// 1) Aggressive cleanup: removes legacy netGrid scripts/canvases to stop terminalCanvas errors.
+// 2) Installs a full autonomous net-grid HUD in LEFT-BOTTOM.
+// 3) Interactive: nodes, drag/drop, snap, lock/unlock (Q/Й), auto-move, check/reset buttons.
+// 4) Defensive: avoids terminalCanvas, handles duplicate loads, provides debug API.
+// 5) Drop-in: include only this file. If old netGrid_xxx.js scripts are still present they will be removed.
 
 (() => {
   'use strict';
+
   try {
-    // ---------- CLEANUP previous instances ----------
-    if (window.netGridV6Left && typeof window.netGridV6Left.destroy === 'function') {
-      try { window.netGridV6Left.destroy(); } catch (e) { /* ignore */ }
+    // ---------- UTILS ----------
+    function tryRemove(node) {
+      try { if (node && node.remove) node.remove(); } catch(e) {}
     }
-    // remove any lingering canvas with our default id
-    const existing = document.getElementById('netGrid_v6_leftbottom_canvas');
-    if (existing) existing.remove();
+    function isNetGridScript(srcOrId) {
+      if (!srcOrId) return false;
+      const s = String(srcOrId).toLowerCase();
+      return s.includes('netgrid') || s.includes('net_grid') || s.includes('net-grid');
+    }
+    function log(...args){ try { console.info('[netGrid_v7]', ...args); } catch(e){} }
+    function warn(...args){ try { console.warn('[netGrid_v7]', ...args); } catch(e){} }
+    function err(...args){ try { console.error('[netGrid_v7]', ...args); } catch(e){} }
+
+    // ---------- 0) KILL OLD SCRIPTS / CANVASES ----------
+    // Remove script tags whose src or id contains "netgrid"
+    (function killOldScriptsAndCanvases(){
+      try {
+        const scripts = Array.from(document.querySelectorAll('script'));
+        for (const s of scripts) {
+          try {
+            if (s.src && isNetGridScript(s.src)) {
+              log('Removing old script (src):', s.src);
+              tryRemove(s);
+            } else if (s.id && isNetGridScript(s.id)) {
+              log('Removing old script (id):', s.id);
+              tryRemove(s);
+            }
+          } catch(e){}
+        }
+        // canvases or elements created by old scripts
+        const possibleIds = ['netgrid', 'netGrid', 'netGrid_canvas', 'netGrid_restore_mapcanvas', 'netGridFull_canvas_overlay', 'netGrid_v6_leftbottom_canvas', 'netGrid_v3', 'terminalCanvas'];
+        const allElems = Array.from(document.querySelectorAll('*'));
+        for (const el of allElems) {
+          try {
+            const id = el.id || '';
+            const cls = el.className || '';
+            if (isNetGridScript(id) || isNetGridScript(cls)) {
+              log('Removing old element:', el.tagName, id || cls);
+              tryRemove(el);
+            } else if (id && (id.toLowerCase().includes('netgrid') || id.toLowerCase().includes('net_grid') || id.toLowerCase().includes('net-grid'))) {
+              log('Removing old element by id match:', id);
+              tryRemove(el);
+            }
+          } catch(e){}
+        }
+      } catch(e){
+        warn('killOldScriptsAndCanvases error', e);
+      }
+    })();
+
+    // Additionally, try to null out known globals left by old scripts to avoid collisions
+    try { if (window.netGrid) delete window.netGrid; } catch(e){}
+    try { if (window.netGridRestore) delete window.netGridRestore; } catch(e){}
+    try { if (window.__netGridFull) delete window.__netGridFull; } catch(e){}
+    try { if (window.netGridV6Left) delete window.netGridV6Left; } catch(e){}
+    try { if (window.netGrid_v6_leftbottom) delete window.netGrid_v6_leftbottom; } catch(e){}
 
     // ---------- CONFIG ----------
-    const CSS_SIZE = 300;              // css px of the HUD square
-    const MARGIN_CSS = 20;             // css px from left+bottom
+    const CSS_SIZE = 300;              // css px square HUD
+    const MARGIN_CSS = 20;             // from left + bottom
     const DPR = Math.min(window.devicePixelRatio || 1, 2);
-    const CANVAS_Z = 2500;             // high z-index to be visible above overlays
+    const CANVAS_Z = 3000;             // super-high z
     const UI_Z = CANVAS_Z + 1;
     const CELL_COUNT = 6;
     const INTER_COUNT = CELL_COUNT + 1;
     const NODE_COUNT = 10;
     const AUTONOMOUS_MOVE_COOLDOWN = 800;
-    const HIT_RADIUS_PX = 12 * DPR;
+    const HIT_RADIUS_BASE = 12;
     const COLOR = { r: 6, g: 160, b: 118 };
 
-    // ---------- CREATE CANVAS ----------
+    // ---------- CLEAN PREVIOUS INSTANCE  ----------
+    if (window.netGrid_v7 && typeof window.netGrid_v7.destroy === 'function') {
+      try { window.netGrid_v7.destroy(); } catch(e) {}
+    }
+    // remove previous typical ids
+    tryRemove(document.getElementById('netGrid_v7_left_canvas'));
+    tryRemove(document.getElementById('netGrid_v7_controls'));
+
+    // ---------- CREATE ROOT CANVAS ----------
+    const canvasId = 'netGrid_v7_left_canvas';
+    const existingCanvas = document.getElementById(canvasId);
+    if (existingCanvas) tryRemove(existingCanvas);
+
     const canvas = document.createElement('canvas');
-    canvas.id = 'netGrid_v6_leftbottom_canvas';
+    canvas.id = canvasId;
     Object.assign(canvas.style, {
       position: 'fixed',
       left: `${MARGIN_CSS}px`,
@@ -43,13 +105,15 @@
       borderRadius: '8px',
       boxShadow: '0 18px 40px rgba(0,0,0,0.9)',
       backgroundColor: 'rgba(0,10,6,0.18)',
-      cursor: 'default'
+      cursor: 'default',
+      userSelect: 'none'
     });
     document.body.appendChild(canvas);
     const ctx = canvas.getContext('2d', { alpha: true });
 
-    // ---------- UI: status + controls ----------
+    // ---------- SMALL UI: status + controls ----------
     const statusEl = document.createElement('div');
+    statusEl.id = 'netGrid_v7_status';
     Object.assign(statusEl.style, {
       position: 'fixed',
       left: `${MARGIN_CSS + CSS_SIZE + 12}px`,
@@ -67,6 +131,7 @@
     document.body.appendChild(statusEl);
 
     const controls = document.createElement('div');
+    controls.id = 'netGrid_v7_controls';
     Object.assign(controls.style, {
       position: 'fixed',
       left: `${MARGIN_CSS}px`,
@@ -74,40 +139,34 @@
       display: 'flex',
       gap: '8px',
       zIndex: UI_Z,
-      alignItems: 'center'
+      alignItems: 'center',
+      pointerEvents: 'auto'
     });
     document.body.appendChild(controls);
 
-    const checkBtn = document.createElement('button');
-    checkBtn.textContent = 'ПРОВЕРИТЬ ПРИКОЛ';
-    Object.assign(checkBtn.style, {
-      padding: '8px 12px',
-      borderRadius: '6px',
-      border: `2px solid rgba(${COLOR.r},${COLOR.g},${COLOR.b},0.95)`,
-      background: 'rgba(0,0,0,0.4)',
-      color: `rgba(${COLOR.r},${COLOR.g},${COLOR.b},1)`,
-      fontFamily: 'Courier, monospace',
-      cursor: 'pointer',
-      fontWeight: '700'
-    });
-    controls.appendChild(checkBtn);
+    const makeBtn = (text) => {
+      const b = document.createElement('button');
+      b.textContent = text;
+      Object.assign(b.style, {
+        padding: '8px 12px',
+        borderRadius: '6px',
+        border: `2px solid rgba(${COLOR.r},${COLOR.g},${COLOR.b},0.95)`,
+        background: 'rgba(0,0,0,0.4)',
+        color: `rgba(${COLOR.r},${COLOR.g},${COLOR.b},1)`,
+        fontFamily: 'Courier, monospace',
+        cursor: 'pointer',
+        fontWeight: '700'
+      });
+      return b;
+    };
 
-    const resetBtn = document.createElement('button');
-    resetBtn.textContent = '⟳';
-    Object.assign(resetBtn.style, {
-      padding: '8px 10px',
-      borderRadius: '6px',
-      border: `2px solid rgba(${COLOR.r},${COLOR.g},${COLOR.b},0.95)`,
-      background: 'rgba(0,0,0,0.4)',
-      color: `rgba(${COLOR.r},${COLOR.g},${COLOR.b},1)`,
-      fontFamily: 'Courier, monospace',
-      cursor: 'pointer',
-      fontWeight: '700'
-    });
+    const checkBtn = makeBtn('ПРОВЕРИТЬ ПРИКОЛ');
+    const resetBtn = makeBtn('⟳');
+    controls.appendChild(checkBtn);
     controls.appendChild(resetBtn);
 
     // ---------- STATE ----------
-    let canvasW = 0, canvasH = 0;      // device pixels
+    let canvasW = 0, canvasH = 0;
     let gridPoints = [];
     let nodes = [];
     let raf = null;
@@ -118,6 +177,9 @@
     let victoryEl = null;
     let victoryShown = false;
 
+    const HIT_RADIUS_PX = Math.round(HIT_RADIUS_BASE * DPR);
+
+    // symbols (target patterns)
     const SYMBOLS = {
       V: [[0,0],[1,1],[2,2],[3,3],[4,4],[5,5],[6,6],[6,0],[5,1],[4,2]],
       I: [[0,3],[1,3],[2,3],[3,3],[4,3],[5,3],[6,3]],
@@ -131,7 +193,10 @@
     // ---------- HELPERS ----------
     function glowColor(a=1){ return `rgba(${COLOR.r},${COLOR.g},${COLOR.b},${a})`; }
     function redColor(a=1){ return `rgba(255,60,60,${a})`; }
+    function safeNum(n, fallback=0){ return (typeof n === 'number' && isFinite(n)) ? n : fallback; }
+    function tryNow(){ try { return performance.now(); } catch(e){ return Date.now(); } }
 
+    // ---------- GRID BUILD ----------
     function setCanvasSize() {
       const rect = canvas.getBoundingClientRect();
       const cssW = Math.max(40, rect.width);
@@ -157,15 +222,17 @@
       }
     }
 
+    // ---------- NODES ----------
     function respawnNodes() {
       nodes = [];
       const positions = [];
       for (let r=0;r<INTER_COUNT;r++){
         for (let c=0;c<INTER_COUNT;c++) positions.push([r,c]);
       }
-      for (let i=positions.length-1;i>0;i--){
+      // Fisher-Yates shuffle
+      for (let i = positions.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random()*(i+1));
-        [positions[i],positions[j]] = [positions[j],positions[i]];
+        [positions[i], positions[j]] = [positions[j], positions[i]];
       }
       const chosen = positions.slice(0, NODE_COUNT);
       nodes = chosen.map((rc, idx) => {
@@ -178,7 +245,7 @@
           targetGx: c, targetGy: r,
           speed: 0.002 + Math.random()*0.004,
           locked: false,
-          lastMoveAt: performance.now() - Math.random()*1000,
+          lastMoveAt: tryNow() - Math.random()*1000,
           drag: false,
           selected: false
         };
@@ -194,7 +261,7 @@
         for (let c=0;c<INTER_COUNT;c++){
           const p = gridPoints[r][c];
           const d = Math.hypot(px - p.x, py - p.y);
-          if (d < best.d) { best = {r, c, d}; }
+          if (d < best.d) { best = { r, c, d }; }
         }
       }
       return { row: best.r, col: best.c, dist: best.d };
@@ -210,7 +277,7 @@
       return candidates[Math.floor(Math.random()*candidates.length)];
     }
 
-    // client -> canvas device coords
+    // ---------- MAPPING client -> canvas ----------
     function clientToCanvas(ev){
       const rect = canvas.getBoundingClientRect();
       const rawX = (ev.clientX - rect.left) * (canvas.width / rect.width);
@@ -219,96 +286,100 @@
     }
 
     // ---------- POINTER HANDLERS ----------
-    function onPointerDown(ev) {
-      if (ev.button !== 0) return;
-      const m = clientToCanvas(ev);
-      let found = null;
-      for (let i = nodes.length - 1; i >= 0; i--) {
-        const n = nodes[i];
-        const d = Math.hypot(m.x - n.x, m.y - n.y);
-        if (d < HIT_RADIUS_PX) { found = n; break; }
-      }
-      if (found) {
-        if (found.locked) {
+    function pointerDown(ev) {
+      try {
+        if (ev.button !== 0) return;
+        const m = clientToCanvas(ev);
+        let found = null;
+        for (let i = nodes.length - 1; i >= 0; i--) {
+          const n = nodes[i];
+          const d = Math.hypot(m.x - n.x, m.y - n.y);
+          if (d < HIT_RADIUS_PX) { found = n; break; }
+        }
+        if (found) {
+          if (found.locked) {
+            if (selectedNode && selectedNode !== found) selectedNode.selected = false;
+            selectedNode = found; selectedNode.selected = true;
+            return;
+          }
+          draggingNode = found; draggingNode.drag = true;
           if (selectedNode && selectedNode !== found) selectedNode.selected = false;
           selectedNode = found; selectedNode.selected = true;
-          return;
+          ev.preventDefault();
+        } else {
+          if (selectedNode) { selectedNode.selected = false; selectedNode = null; }
         }
-        draggingNode = found; draggingNode.drag = true;
-        if (selectedNode && selectedNode !== found) selectedNode.selected = false;
-        selectedNode = found; selectedNode.selected = true;
-        ev.preventDefault();
-      } else {
-        if (selectedNode) { selectedNode.selected = false; selectedNode = null; }
-      }
+      } catch(e){ warn('pointerDown err', e); }
     }
 
     let lastPointerTime = 0;
-    function onPointerMove(ev) {
-      const now = performance.now();
-      if (now - lastPointerTime < 8) return; // throttle
-      lastPointerTime = now;
-      const m = clientToCanvas(ev);
-      let hovered = null;
-      for (const n of nodes) {
-        if (Math.hypot(m.x - n.x, m.y - n.y) < HIT_RADIUS_PX) { hovered = n; break; }
-      }
-      canvas.style.cursor = hovered ? (hovered.locked ? 'not-allowed' : 'pointer') : 'default';
-      if (draggingNode && draggingNode.locked) {
-        draggingNode.drag = false; draggingNode = null;
-      }
-      if (draggingNode) {
-        const nearest = nearestIntersection(m.x, m.y);
-        draggingNode.gx = nearest.col;
-        draggingNode.gy = nearest.row;
-        draggingNode.targetGx = nearest.col;
-        draggingNode.targetGy = nearest.row;
-        const p = gridPoints[nearest.row][nearest.col];
-        draggingNode.x = p.x; draggingNode.y = p.y;
-        ev.preventDefault();
-      }
-    }
-
-    function onPointerUp(ev) {
-      if (draggingNode) {
-        const n = draggingNode;
-        const nearest = nearestIntersection(n.x, n.y);
-        n.gx = nearest.col; n.gy = nearest.row;
-        const p = gridPoints[n.gy][n.gx];
-        n.x = p.x; n.y = p.y;
-        n.drag = false; draggingNode = null;
-        ev.preventDefault();
-      }
-    }
-
-    function onKeyDown(ev) {
-      if (!ev.key) return;
-      if (ev.key.toLowerCase() === 'q' || ev.key.toLowerCase() === 'й') {
-        const n = selectedNode || draggingNode;
-        if (!n) return;
-        const nearest = nearestIntersection(n.x, n.y);
-        const occupied = nodes.some(o => o !== n && o.locked && o.gx === nearest.col && o.gy === nearest.row);
-        if (occupied) {
-          flashStatus('⚠ Место занято другим узлом');
-          return;
+    function pointerMove(ev) {
+      try {
+        const now = performance.now();
+        if (now - lastPointerTime < 8) return;
+        lastPointerTime = now;
+        const m = clientToCanvas(ev);
+        let hovered = null;
+        for (const n of nodes) {
+          if (Math.hypot(m.x - n.x, m.y - n.y) < HIT_RADIUS_PX) { hovered = n; break; }
         }
-        n.gx = nearest.col; n.gy = nearest.row; n.targetGx = n.gx; n.targetGy = n.gy;
-        n.locked = !n.locked; n.lastMoveAt = performance.now();
-        if (n.locked) { const p = gridPoints[n.gy][n.gx]; n.x = p.x; n.y = p.y; }
-        flashStatus(`Node ${n.id} ${n.locked ? 'locked' : 'unlocked'}`, 1200);
-      }
+        canvas.style.cursor = hovered ? (hovered.locked ? 'not-allowed' : 'pointer') : 'default';
+        if (draggingNode && draggingNode.locked) {
+          draggingNode.drag = false; draggingNode = null;
+        }
+        if (draggingNode) {
+          const nearest = nearestIntersection(m.x, m.y);
+          draggingNode.gx = nearest.col; draggingNode.gy = nearest.row;
+          draggingNode.targetGx = nearest.col; draggingNode.targetGy = nearest.row;
+          const p = gridPoints[nearest.row][nearest.col];
+          draggingNode.x = p.x; draggingNode.y = p.y;
+          ev.preventDefault();
+        }
+      } catch(e){ warn('pointerMove err', e); }
     }
 
-    // small status flash
+    function pointerUp(ev) {
+      try {
+        if (draggingNode) {
+          const n = draggingNode;
+          const nearest = nearestIntersection(n.x, n.y);
+          n.gx = nearest.col; n.gy = nearest.row;
+          const p = gridPoints[n.gy][n.gx];
+          n.x = p.x; n.y = p.y;
+          n.drag = false; draggingNode = null;
+          ev.preventDefault();
+        }
+      } catch(e){ warn('pointerUp err', e); }
+    }
+
+    function keyDownHandler(ev) {
+      try {
+        if (!ev.key) return;
+        if (ev.key.toLowerCase() === 'q' || ev.key.toLowerCase() === 'й') {
+          const n = selectedNode || draggingNode;
+          if (!n) return;
+          const nearest = nearestIntersection(n.x, n.y);
+          const occupied = nodes.some(o => o !== n && o.locked && o.gx === nearest.col && o.gy === nearest.row);
+          if (occupied) {
+            flashStatus('⚠ Место занято другим узлом');
+            return;
+          }
+          n.gx = nearest.col; n.gy = nearest.row; n.targetGx = n.gx; n.targetGy = n.gy;
+          n.locked = !n.locked; n.lastMoveAt = tryNow();
+          if (n.locked) { const p = gridPoints[n.gy][n.gx]; n.x = p.x; n.y = p.y; }
+          flashStatus(`Node ${n.id} ${n.locked ? 'locked' : 'unlocked'}`, 1200);
+        }
+      } catch(e){ warn('keyDownHandler err', e); }
+    }
+
     let statusTimer = null;
     function flashStatus(text, timeout = 900) {
-      const prev = statusEl.textContent;
       statusEl.textContent = text;
       if (statusTimer) clearTimeout(statusTimer);
       statusTimer = setTimeout(()=> statusEl.textContent = `TARGET: ${currentTargetName}  |  Q/Й = lock/unlock`, timeout);
     }
 
-    // ---------- UPDATE / DRAW ----------
+    // ---------- UPDATE & DRAW ----------
     function update(dt) {
       tick++;
       const now = performance.now();
@@ -337,12 +408,14 @@
     }
 
     function draw() {
+      // clear
       ctx.clearRect(0,0,canvas.width, canvas.height);
+
       ctx.save();
-      // background rounded rect
+      // rounded background
       const r = 8 * DPR;
       roundRect(ctx, 0, 0, canvas.width, canvas.height, r);
-      ctx.fillStyle = 'rgba(2,18,12,0.9)';
+      ctx.fillStyle = 'rgba(2,18,12,0.92)';
       ctx.fill();
 
       // vignette
@@ -419,18 +492,19 @@
       ctx.restore();
     }
 
-    function roundRect(ctx, x, y, w, h, r) {
-      ctx.beginPath();
-      ctx.moveTo(x + r, y);
-      ctx.arcTo(x + w, y, x + w, y + h, r);
-      ctx.arcTo(x + w, y + h, x, y + h, r);
-      ctx.arcTo(x, y + h, x, y, r);
-      ctx.arcTo(x, y, x + w, y, r);
-      ctx.closePath();
+    function roundRect(cn, x, y, w, h, r) {
+      cn.beginPath();
+      cn.moveTo(x + r, y);
+      cn.arcTo(x + w, y, x + w, y + h, r);
+      cn.arcTo(x + w, y + h, x, y + h, r);
+      cn.arcTo(x, y + h, x, y, r);
+      cn.arcTo(x, y, x + w, y, r);
+      cn.closePath();
     }
 
-    // ---------- loop ----------
-    function loop(now) {
+    // ---------- MAIN LOOP ----------
+    function loop(ms) {
+      const now = ms || performance.now();
       const dt = Math.max(1, now - lastTime);
       lastTime = now;
       update(dt);
@@ -438,7 +512,7 @@
       raf = requestAnimationFrame(loop);
     }
 
-    // ---------- victory ----------
+    // ---------- VICTORY CHECK ----------
     function checkVictory() {
       const set = new Set(nodes.map(n => `${n.gy},${n.gx}`));
       const allPresent = currentTarget.every(([r,c]) => set.has(`${r},${c}`));
@@ -461,7 +535,7 @@
       return allPresent;
     }
 
-    // ---------- controls ----------
+    // ---------- CONTROLS ----------
     checkBtn.addEventListener('click', () => {
       const ok = checkVictory();
       if (!ok) flashStatus('TARGET: ПРИКОЛ НЕ СОБРАН', 1200);
@@ -472,13 +546,13 @@
       respawnNodes();
     });
 
-    // ---------- events binding ----------
-    canvas.addEventListener('pointerdown', onPointerDown, { passive: false });
-    window.addEventListener('pointermove', onPointerMove, { passive: false });
-    window.addEventListener('pointerup', onPointerUp, { passive: false });
-    window.addEventListener('keydown', onKeyDown, { passive: false });
+    // ---------- EVENTS ----------
+    canvas.addEventListener('pointerdown', pointerDown, { passive: false });
+    window.addEventListener('pointermove', pointerMove, { passive: false });
+    window.addEventListener('pointerup', pointerUp, { passive: false });
+    window.addEventListener('keydown', keyDownHandler, { passive: false });
 
-    // ---------- init ----------
+    // ---------- INIT ----------
     function init() {
       setCanvasSize();
       buildGrid();
@@ -488,11 +562,11 @@
       raf = requestAnimationFrame(loop);
     }
 
-    // on resize: keep nodes snapped and visible
+    // resize handler to re-snap
     let resizeTimer = null;
     function onResize() {
       if (resizeTimer) clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(()=> {
+      resizeTimer = setTimeout(()=>{
         setCanvasSize();
         buildGrid();
         for (const n of nodes) {
@@ -505,33 +579,35 @@
     }
     window.addEventListener('resize', onResize);
 
-    // run
-    init();
-
-    // ---------- debug API ----------
-    window.netGridV6Left = {
+    // ---------- DEBUG API & DESTROY ----------
+    window.netGrid_v7 = {
       canvas, ctx, nodes, gridPoints,
-      debug: () => ({
-        canvasSize: { w: canvas.width, h: canvas.height, cssW: canvas.clientWidth, cssH: canvas.clientHeight },
-        nodesCount: nodes.length, selected: selectedNode ? selectedNode.id : null, dragging: draggingNode ? draggingNode.id : null,
-        target: currentTargetName
-      }),
+      debug: function(){
+        return {
+          canvasSize: { w: canvas.width, h: canvas.height, cssW: canvas.clientWidth, cssH: canvas.clientHeight },
+          nodesCount: nodes.length,
+          selected: selectedNode ? selectedNode.id : null,
+          dragging: draggingNode ? draggingNode.id : null,
+          target: currentTargetName
+        };
+      },
       forceRespawn: respawnNodes,
-      destroy: () => {
+      destroy: function(){
         try {
           if (raf) cancelAnimationFrame(raf);
           canvas.remove();
           controls.remove();
           statusEl.remove();
           if (victoryEl) victoryEl.remove();
-          delete window.netGridV6Left;
-        } catch (e){}
+          delete window.netGrid_v7;
+        } catch(e){ warn('destroy fail', e); }
       }
     };
 
-    console.info('netGrid_v6_leftbottom loaded — left-bottom HUD active.');
+    init();
+    log('netGrid_v7 loaded — left-bottom autonomous HUD active. Old netGrid scripts (if any) were removed.');
 
-  } catch (err) {
-    console.error('netGrid_v6_leftbottom error', err);
+  } catch (e) {
+    try { console.error('[netGrid_v7] fatal error', e); } catch(_) {}
   }
 })();
