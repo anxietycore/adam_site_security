@@ -1,21 +1,12 @@
-// netGrid_v4.js — full replacement
-// Robust hit-testing for distorted CRT overlay. Replace previous netGrid file entirely.
-//
-// Strategy (short):
-// - On mouse click: sample small neighborhood in screen space (center + 4 offsets).
-// - For each sample: convert screen->terminal canvas pixel coords, analytically invert CRT distortion
-//   to get original texture pixel, map that texel to mapCanvas local pixel coords.
-// - Pick the nearest node in map-local coordinates within threshold -> select / start drag.
-// - Heavy work only on click. Mousemove only updates a cheap 'hover' test by reusing last click map (cheap).
-// - Cache rects; update on resize/scroll/orientationchange.
-//
-// Place this file as netGrid_v4.js and reload page.
+// netGrid_fixed.js — full replacement
+// Stable, performant inverse-LUT limited to mapRect region + accurate hit-testing.
+// Replace your current netGrid file fully with this.
 
 (() => {
   try {
     // ---------- CONFIG ----------
     const DPR = Math.min(window.devicePixelRatio || 1, 1.5);
-    const SIZE_CSS = 300; // map UI size in CSS px (unchanged)
+    const SIZE_CSS = 300;
     const COLOR = { r: 6, g: 160, b: 118 };
     const MAP_Z = 40;
     const STATUS_Z = 45;
@@ -24,24 +15,20 @@
     const NODE_COUNT = 10;
     const AUTONOMOUS_MOVE_COOLDOWN = 800;
 
-    // MUST match your crt_overlay shader uDist value
+    // MUST match crt_overlay.js DISTORTION (shader uniform uDist)
     const CRT_DISTORTION = 0.28;
 
-    // Sampling offsets (CSS pixels). Small neighborhood to cover sub-pixel / rounding differences.
-    const CLICK_OFFSETS = [
-      [0, 0],
-      [-3, 0],
-      [3, 0],
-      [0, -3],
-      [0, 3],
-    ];
+    // LUT step (in terminal backing pixels) — tradeoff acc/perf. For map ~300px CSS and DPR <=1.5 it's small.
+    const LUT_STEP = 2;
 
-    const CLICK_THRESHOLD_PX = 12 * DPR; // how close (in map-backbuffer pixels) counts as hit
+    // hit threshold in map-backbuffer pixels
+    const CLICK_THRESHOLD = 12 * DPR;
 
-    const DEV_LOG = false; // set true to see console debug for clicks
+    const DEV = false; // true => console.debug useful messages
 
-    // ---------- DOM: create map UI (compatible with previous UI) ----------
+    // ---------- create UI / map canvas ----------
     const mapCanvas = document.createElement('canvas');
+    mapCanvas.id = 'netGridMapCanvas';
     Object.assign(mapCanvas.style, {
       position: 'fixed',
       right: '20px',
@@ -50,7 +37,9 @@
       height: `${SIZE_CSS}px`,
       pointerEvents: 'auto',
       zIndex: MAP_Z,
-      borderRadius: '8px'
+      borderRadius: '8px',
+      boxShadow: '0 18px 40px rgba(0,0,0,0.9)',
+      backgroundColor: 'rgba(0,10,6,0.28)'
     });
     document.body.appendChild(mapCanvas);
     const mctx = mapCanvas.getContext('2d');
@@ -81,31 +70,31 @@
       alignItems: 'center'
     });
     document.body.appendChild(controls);
-    const checkBtn = document.createElement('button');
-    checkBtn.textContent = 'ПРОВЕРИТЬ';
-    Object.assign(checkBtn.style, {
-      padding: '6px 12px', borderRadius: '6px', cursor: 'pointer'
-    });
-    controls.appendChild(checkBtn);
-    const resetBtn = document.createElement('button');
-    resetBtn.textContent = '⟳';
-    Object.assign(resetBtn.style, { padding: '6px 12px', borderRadius: '6px', cursor: 'pointer' });
-    controls.appendChild(resetBtn);
+    const checkBtn = document.createElement('button'); checkBtn.textContent = 'ПРОВЕРИТЬ';
+    const resetBtn = document.createElement('button'); resetBtn.textContent = '⟳';
+    Object.assign(checkBtn.style, { padding:'6px 12px', borderRadius:'6px', cursor:'pointer' });
+    Object.assign(resetBtn.style, { padding:'6px 12px', borderRadius:'6px', cursor:'pointer' });
+    controls.appendChild(checkBtn); controls.appendChild(resetBtn);
 
     // ---------- state ----------
     let w = 0, h = 0;
-    let gridPoints = []; // map-local coordinates
+    let gridPoints = [];
     let nodes = [];
     let selectedNode = null, draggingNode = null;
     let raf = null, tick = 0;
 
-    // cached rects & terminals
-    let cached = { termRect: null, mapRect: null, termW: 0, termH: 0 };
+    // cached rects & terminal info
+    const cached = {
+      termRect: null, mapRect: null,
+      termW: 0, termH: 0,
+      // LUT region description: {sx, sy, sw, sh} in terminal backing pixels
+      lutRegion: null,
+      // inverseLUT storage: inverseLUT[row][col] = {x:texX, y:texY}
+      inverseLUT: null,
+      lutCols: 0, lutRows: 0, lutStep: LUT_STEP
+    };
 
-    // cheap mouse pipeline (we do heavy work only on click)
-    let rawMouse = { x: 0, y: 0, valid: false };
-
-    // ---------- helpers: grid & nodes ----------
+    // ---------- grid / nodes ----------
     function buildGrid() {
       gridPoints = [];
       const margin = 12 * DPR;
@@ -124,7 +113,8 @@
 
     function respawnNodes() {
       const positions = [];
-      for (let r = 0; r < INTER_COUNT; r++) for (let c = 0; c < INTER_COUNT; c++) positions.push([r, c]);
+      for (let r = 0; r < INTER_COUNT; r++)
+        for (let c = 0; c < INTER_COUNT; c++) positions.push([r, c]);
       for (let i = positions.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [positions[i], positions[j]] = [positions[j], positions[i]];
@@ -143,189 +133,244 @@
       selectedNode = null; draggingNode = null;
     }
 
-    function nearestIntersection(px, py) {
-      let best = { r: 0, c: 0, d: Infinity };
-      for (let r = 0; r < INTER_COUNT; r++) for (let c = 0; c < INTER_COUNT; c++) {
-        const p = gridPoints[r][c];
-        const d = Math.hypot(px - p.x, py - p.y);
-        if (d < best.d) best = { r, c, d };
-      }
-      return { row: best.r, col: best.c, dist: best.d };
-    }
-
-    // ---------- rect cache ----------
+    // ---------- cached rects / region for LUT ----------
     function getTerminalCanvas() {
       return document.getElementById('terminalCanvas') || null;
     }
+
     function updateRects(force = false) {
       const term = getTerminalCanvas();
       if (!term) {
-        cached.termRect = null;
-        cached.termW = 0; cached.termH = 0;
+        cached.termRect = null; cached.termW = 0; cached.termH = 0;
         cached.mapRect = mapCanvas.getBoundingClientRect();
         return;
       }
-      const trect = term.getBoundingClientRect();
-      const mrect = mapCanvas.getBoundingClientRect();
+      const tr = term.getBoundingClientRect();
+      const mr = mapCanvas.getBoundingClientRect();
       const tw = term.width, th = term.height;
       const changed = force ||
         !cached.termRect ||
-        cached.termRect.width !== trect.width ||
-        cached.termRect.height !== trect.height ||
+        cached.termRect.width !== tr.width ||
+        cached.termRect.height !== tr.height ||
         !cached.mapRect ||
-        cached.mapRect.left !== mrect.left ||
-        cached.mapRect.top !== mrect.top ||
+        cached.mapRect.left !== mr.left ||
+        cached.mapRect.top !== mr.top ||
         cached.termW !== tw || cached.termH !== th;
       if (changed) {
-        cached.termRect = trect;
-        cached.mapRect = mrect;
-        cached.termW = tw;
-        cached.termH = th;
+        cached.termRect = tr; cached.mapRect = mr; cached.termW = tw; cached.termH = th;
+        // compute LUT region in terminal backing pixels that corresponds to mapRect area
+        // mapRect may be partially outside termRect -> clamp
+        const sx_px = Math.max(0, Math.round((mr.left - tr.left) * (tw / tr.width)));
+        const sy_px = Math.max(0, Math.round((mr.top - tr.top) * (th / tr.height)));
+        const sw_px = Math.max(1, Math.round(mr.width * (tw / tr.width)));
+        const sh_px = Math.max(1, Math.round(mr.height * (th / tr.height)));
+        cached.lutRegion = { sx: sx_px, sy: sy_px, sw: sw_px, sh: sh_px };
+        // invalidate existing LUT to be rebuilt lazily
+        cached.inverseLUT = null;
+        cached.lutCols = 0; cached.lutRows = 0;
+        if (DEV) console.debug('updateRects => lutRegion', cached.lutRegion);
       }
     }
 
-    // ---------- CRT inversion (analytic) ----------
-    // Input: termPxX/termPxY in terminalCanvas backing pixels (term.width/term.height).
-    // Output: undistorted texture pixel coords (on terminal texture) {x,y}.
-    function invertCRT_analytic(termPxX, termPxY, termW, termH) {
-      // normalize to [-1,1]
+    // ---------- build inverse LUT but ONLY for mapRect region in terminal texture ----------
+    function buildInverseLUTForRegion() {
+      if (!cached.termW || !cached.termH || !cached.lutRegion) return;
+      const { sx, sy, sw, sh } = cached.lutRegion;
+      const step = cached.lutStep = LUT_STEP;
+      const cols = Math.ceil(sw / step);
+      const rows = Math.ceil(sh / step);
+      cached.lutCols = cols; cached.lutRows = rows;
+      const k = CRT_DISTORTION;
+
+      const lut = new Array(rows);
+      for (let ry = 0; ry < rows; ry++) {
+        const row = new Array(cols);
+        for (let cx = 0; cx < cols; cx++) {
+          const px = sx + cx * step;
+          const py = sy + ry * step;
+          // normalized distorted coordinates [-1..1]
+          const xd = (px / cached.termW) * 2 - 1;
+          const yd = (py / cached.termH) * 2 - 1;
+          const rd = Math.hypot(xd, yd);
+          // analytical solve for r: k*r^2 + (1-k)*r - rd = 0
+          let r = rd;
+          if (k === 0 || rd === 0) {
+            r = rd;
+          } else {
+            const discriminant = (1 - k) * (1 - k) + 4 * k * rd;
+            if (discriminant >= 0) {
+              r = (-(1 - k) + Math.sqrt(discriminant)) / (2 * k);
+              if (!(r > 0)) r = rd;
+            } else {
+              r = rd;
+            }
+          }
+          // s = (1-k) + k*r ; uv = d / s  ; but earlier code used factor as below (equivalent)
+          const factor = (r > 0) ? 1 / (1 + k * (r - 1)) : 1;
+          const xn = xd * factor;
+          const yn = yd * factor;
+          // texel in terminal texture (undistorted)
+          const texX = (xn + 1) * 0.5 * cached.termW;
+          const texY = (yn + 1) * 0.5 * cached.termH;
+          row[cx] = { x: texX, y: texY };
+        }
+        lut[ry] = row;
+      }
+      cached.inverseLUT = lut;
+      if (DEV) console.debug('buildInverseLUTForRegion built', { cols, rows, step });
+    }
+
+    // ---------- apply inverse to an arbitrary terminal backing pixel (returns tex coords) ----------
+    function applyInverseCRT_atTermPixel(px, py) {
+      if (!cached.inverseLUT) buildInverseLUTForRegion();
+      if (!cached.inverseLUT) return { x: px, y: py }; // fallback: identity
+
+      const { sx, sy, sw, sh } = cached.lutRegion;
+      const step = cached.lutStep;
+      // compute indices into LUT (clamp)
+      const relX = px - sx;
+      const relY = py - sy;
+      if (relX < 0 || relY < 0 || relX > sw || relY > sh) {
+        // outside region: fallback to analytic single-point inversion (cheap)
+        return analyticInverseSingle(px, py);
+      }
+      const fx = relX / step;
+      const fy = relY / step;
+      const cx = Math.floor(fx);
+      const cy = Math.floor(fy);
+      const cx1 = Math.min(cx + 1, cached.lutCols - 1);
+      const cy1 = Math.min(cy + 1, cached.lutRows - 1);
+      const tx00 = cached.inverseLUT[cy][cx];
+      const tx10 = cached.inverseLUT[cy][cx1];
+      const tx01 = cached.inverseLUT[cy1][cx];
+      const tx11 = cached.inverseLUT[cy1][cx1];
+      const fracX = Math.min(1, Math.max(0, fx - cx));
+      const fracY = Math.min(1, Math.max(0, fy - cy));
+      // bilinear interp
+      const ixTopX = tx00.x * (1 - fracX) + tx10.x * fracX;
+      const ixTopY = tx00.y * (1 - fracX) + tx10.y * fracX;
+      const ixBotX = tx01.x * (1 - fracX) + tx11.x * fracX;
+      const ixBotY = tx01.y * (1 - fracX) + tx11.y * fracX;
+      const finalX = ixTopX * (1 - fracY) + ixBotX * fracY;
+      const finalY = ixTopY * (1 - fracY) + ixBotY * fracY;
+      return { x: finalX, y: finalY };
+    }
+
+    // fallback analytic inversion used only rarely (outside LUT region)
+    function analyticInverseSingle(termPxX, termPxY) {
+      const termW = cached.termW, termH = cached.termH;
+      if (!termW || !termH) return { x: termPxX, y: termPxY };
+      // normalized [-1..1]
       const nx = (termPxX / termW) * 2 - 1;
       const ny = (termPxY / termH) * 2 - 1;
       const rd = Math.hypot(nx, ny);
       const k = CRT_DISTORTION;
-      if (rd === 0 || k === 0) return { x: termPxX, y: termPxY };
-      // solve k*r^2 + (1-k)*r - rd = 0
-      const a = k, b = (1 - k), c = -rd;
-      const disc = b * b - 4 * a * c;
       let r = rd;
-      if (disc >= 0) {
-        const root = (-b + Math.sqrt(disc)) / (2 * a);
-        if (root > 0) r = root;
+      if (k === 0 || rd === 0) r = rd;
+      else {
+        const disc = (1 - k) * (1 - k) + 4 * k * rd;
+        if (disc >= 0) r = (-(1 - k) + Math.sqrt(disc)) / (2 * k);
       }
-      // d = uv * s where s = (1-k)+k*r, and uv = undistorted
-      const s = (1 - k) + k * r;
-      const ux = nx / s, uy = ny / s;
-      // back to pixel coords
-      return { x: (ux + 1) * 0.5 * termW, y: (uy + 1) * 0.5 * termH };
+      const factor = (r > 0) ? 1 / (1 + k * (r - 1)) : 1;
+      const xn = nx * factor;
+      const yn = ny * factor;
+      return { x: (xn + 1) * 0.5 * termW, y: (yn + 1) * 0.5 * termH };
     }
 
-    // ---------- Mapping chain: screen client -> terminal backing pixels ----------
-    function clientToTerminalPixels(clientX, clientY) {
-      const term = getTerminalCanvas();
-      if (!term || !cached.termRect) return null;
-      const tr = cached.termRect;
-      const termW = cached.termW; const termH = cached.termH;
-      const px = (clientX - tr.left) * (termW / tr.width);
-      const py = (clientY - tr.top) * (termH / tr.height);
-      return { x: px, y: py, termW, termH, termRect: tr };
-    }
-
-    // ---------- Map terminal texture pixel -> mapCanvas local pixel ----------
-    // This mirrors how terminal draws the map: terminal draws mapCanvas into terminal at mapRect (CSS px).
+    // ---------- mapping terminal texture pixel -> mapCanvas local pixel ----------
     function terminalTexelToMapLocal(texX, texY) {
-      // texX/texY are in terminal texture backing pixels (term.width/term.height)
-      const tr = cached.termRect;
-      const mr = cached.mapRect;
-      const termW = cached.termW; const termH = cached.termH;
-      if (!tr || !mr || termW === 0 || termH === 0) return null;
-
-      const fracX = texX / termW;
-      const fracY = texY / termH;
+      const tr = cached.termRect, mr = cached.mapRect;
+      if (!tr || !mr || !cached.termW || !cached.termH) return null;
+      const fracX = texX / cached.termW;
+      const fracY = texY / cached.termH;
       const cssX = fracX * tr.width;
       const cssY = fracY * tr.height;
-
-      // position relative to mapRect on page
-      const relX = cssX - (mr.left - tr.left);
-      const relY = cssY - (mr.top - tr.top);
-
-      // convert to mapCanvas backing pixels
-      const localX = relX * (mapCanvas.width / mr.width);
-      const localY = relY * (mapCanvas.height / mr.height);
+      const relCssX = cssX - (mr.left - tr.left);
+      const relCssY = cssY - (mr.top - tr.top);
+      const localX = relCssX * (mapCanvas.width / mr.width);
+      const localY = relCssY * (mapCanvas.height / mr.height);
       return { x: localX, y: localY };
     }
 
-    // ---------- MAIN robust pick function (called on mousedown) ----------
-    // returns nearest node or null
+    // ---------- main pick function (called on click) ----------
     function pickNodeFromClient(clientX, clientY) {
       updateRects(false);
       const term = getTerminalCanvas();
-      // We'll try two flows:
-      // 1) Preferred: treat click as happening on terminal rendering (screen-space), so use analytic inverse.
-      // 2) Fallback: treat click relative to hidden mapCanvas DOM (if terminal not found).
-      let best = { node: null, dist: Infinity, samplePos: null };
+      let best = { node: null, dist: Infinity, local: null };
 
       if (term && cached.termRect) {
-        // for each offset sample
-        for (let i = 0; i < CLICK_OFFSETS.length; i++) {
-          const [ox, oy] = CLICK_OFFSETS[i];
-          const sx = clientX + ox;
-          const sy = clientY + oy;
-
-          // map to terminal backing pixels
-          const termPx = clientToTerminalPixels(sx, sy);
-          if (!termPx) continue;
-          // invert CRT -> get original texture pixel
-          const und = invertCRT_analytic(termPx.x, termPx.y, termPx.termW, termPx.termH);
-
-          // map that texel back to map-local pixels
-          const local = terminalTexelToMapLocal(und.x, und.y);
+        // convert client to terminal backing pixels
+        const tr = cached.termRect;
+        const termW = cached.termW, termH = cached.termH;
+        // sample small neighborhood to avoid micro-mismatch (center + 4 offsets)
+        const samples = [[0,0],[-3,0],[3,0],[0,-3],[0,3]];
+        for (let i = 0; i < samples.length; i++) {
+          const sx = clientX + samples[i][0];
+          const sy = clientY + samples[i][1];
+          const termPxX = (sx - tr.left) * (termW / tr.width);
+          const termPxY = (sy - tr.top) * (termH / tr.height);
+          // invert (using LUT)
+          const undTex = applyInverseCRT_atTermPixel(termPxX, termPxY);
+          // map to map-local
+          const local = terminalTexelToMapLocal(undTex.x, undTex.y);
           if (!local) continue;
-
           // find nearest node in map-local coords
           for (const n of nodes) {
             const d = Math.hypot(local.x - n.x, local.y - n.y);
-            if (d < best.dist) { best = { node: n, dist: d, samplePos: local }; }
+            if (d < best.dist) { best = { node: n, dist: d, local }; }
           }
         }
-        if (best.node && best.dist <= CLICK_THRESHOLD_PX) {
-          if (DEV_LOG) console.log('pickNodeFromClient — picked via terminal flow', best);
+        if (best.node && best.dist <= CLICK_THRESHOLD) {
+          if (DEV) console.debug('picked via term flow', best);
           return best;
         }
       }
 
-      // fallback: mapCanvas direct (if event landed directly on mapCanvas)
+      // fallback: direct mapCanvas mapping (if terminal absent)
       try {
-        const mrect = cached.mapRect || mapCanvas.getBoundingClientRect();
-        const relX = (clientX - mrect.left) * (mapCanvas.width / mrect.width);
-        const relY = (clientY - mrect.top) * (mapCanvas.height / mrect.height);
+        const mr = cached.mapRect || mapCanvas.getBoundingClientRect();
+        const relX = (clientX - mr.left) * (mapCanvas.width / mr.width);
+        const relY = (clientY - mr.top) * (mapCanvas.height / mr.height);
         for (const n of nodes) {
           const d = Math.hypot(relX - n.x, relY - n.y);
-          if (d < best.dist) best = { node: n, dist: d, samplePos: { x: relX, y: relY } };
+          if (d < best.dist) best = { node: n, dist: d, local: { x: relX, y: relY } };
         }
-        if (best.node && best.dist <= CLICK_THRESHOLD_PX) {
-          if (DEV_LOG) console.log('pickNodeFromClient — picked via mapCanvas fallback', best);
+        if (best.node && best.dist <= CLICK_THRESHOLD) {
+          if (DEV) console.debug('picked via fallback map flow', best);
           return best;
         }
-      } catch (e) { /* ignore fallback errors */ }
+      } catch (e) { /* ignore */ }
 
-      if (DEV_LOG) console.log('pickNodeFromClient — no node found', best);
+      if (DEV) console.debug('no pick', best);
       return null;
     }
 
-    // ---------- EVENTS ----------
+    // ---------- events ----------
     window.addEventListener('resize', () => { resize(); updateRects(true); }, { passive: true });
     window.addEventListener('scroll', () => updateRects(true), { passive: true });
     window.addEventListener('orientationchange', () => updateRects(true), { passive: true });
 
-    // track raw mouse for possible hover usage (non-heavy)
     window.addEventListener('mousemove', (ev) => {
-      rawMouse.x = ev.clientX; rawMouse.y = ev.clientY; rawMouse.valid = true;
+      // keep mouse cheap (we do heavy work on click)
+      // change cursor when hovering near last-known nodes (cheap approximation)
+      // compute a quick local map position from last LUT if available
+      // (not strictly necessary; keep minimal)
+      // no-op here to keep responsiveness
     }, { passive: true });
 
-    // Listen on whole window for clicks (we catch clicks whether they land on terminal, map or something else)
+    // mousedown: robust pick
     window.addEventListener('mousedown', (ev) => {
-      // heavy work only on mouse down
-      const res = pickNodeFromClient(ev.clientX, ev.clientY);
-      if (res && res.node) {
-        const n = res.node;
+      const found = pickNodeFromClient(ev.clientX, ev.clientY);
+      if (found && found.node) {
+        const n = found.node;
         if (n.locked) {
           if (selectedNode && selectedNode !== n) selectedNode.selected = false;
           selectedNode = n; selectedNode.selected = true;
-        } else {
-          draggingNode = n; draggingNode.drag = true;
-          if (selectedNode && selectedNode !== n) selectedNode.selected = false;
-          selectedNode = n; selectedNode.selected = true;
+          return;
         }
+        draggingNode = n; draggingNode.drag = true;
+        if (selectedNode && selectedNode !== n) selectedNode.selected = false;
+        selectedNode = n; selectedNode.selected = true;
       } else {
         if (selectedNode) { selectedNode.selected = false; selectedNode = null; }
       }
@@ -333,13 +378,12 @@
 
     window.addEventListener('mouseup', () => {
       if (draggingNode) {
-        // snap to nearest intersection in map-local coords
-        const snap = nearestIntersection(draggingNode.x, draggingNode.y);
-        draggingNode.gx = snap.col; draggingNode.gy = snap.row;
-        const p = gridPoints[snap.row][snap.col];
-        draggingNode.x = p.x; draggingNode.y = p.y;
-        draggingNode.targetGx = snap.col; draggingNode.targetGy = snap.row;
-        draggingNode.drag = false; draggingNode = null;
+        const n = draggingNode;
+        const nearest = nearestIntersection(n.x, n.y);
+        n.gx = nearest.col; n.gy = nearest.row;
+        const p = gridPoints[n.gy][n.gx];
+        n.x = p.x; n.y = p.y;
+        n.drag = false; draggingNode = null;
       }
     });
 
@@ -375,16 +419,33 @@
 
     function defaultStatus() { return `TARGET: GRID  |  Q/Й = lock/unlock selected node`; }
 
+    // ---------- helpers ----------
+    function nearestIntersection(px, py) {
+      let best = { r: 0, c: 0, d: Infinity };
+      for (let r = 0; r < INTER_COUNT; r++) {
+        for (let c = 0; c < INTER_COUNT; c++) {
+          const p = gridPoints[r][c];
+          const d = Math.hypot(px - p.x, py - p.y);
+          if (d < best.d) best = { r, c, d };
+        }
+      }
+      return { row: best.r, col: best.c, dist: best.d };
+    }
+
     // ---------- update & draw ----------
     function update(dt) {
       tick++;
-      // dragging movement handled by mouse events -> snap in mouseup; here only autonomous movement
+      // dragging update: while dragging we snap node to nearest grid intersection (map-local)
+      if (draggingNode) {
+        // draggingNode.x/y are map-local; we compute nearest intersection around mouse by sampling current map position
+        // to get better user feel we do nothing here because pick/drag already set drag=true and initial node position is used.
+      }
+      // autonomous movement
       const now = performance.now();
       for (const n of nodes) {
         if (n.drag) continue;
         if (n.locked) {
-          const p = gridPoints[n.gy][n.gx];
-          n.x = p.x; n.y = p.y; n.targetGx = n.gx; n.targetGy = n.gy; continue;
+          const p = gridPoints[n.gy][n.gx]; n.x = p.x; n.y = p.y; n.targetGx = n.gx; n.targetGy = n.gy; continue;
         }
         const targetP = gridPoints[n.targetGy][n.targetGx];
         const dist = Math.hypot(n.x - targetP.x, n.y - targetP.y);
@@ -395,8 +456,7 @@
             n.targetGx = nb.gx; n.targetGy = nb.gy; n.lastMoveAt = now;
           }
         } else {
-          const p = targetP;
-          const t = Math.min(1, n.speed * (dt / 16) * (1 + Math.random() * 0.6));
+          const p = targetP; const t = Math.min(1, n.speed * (dt / 16) * (1 + Math.random() * 0.6));
           n.x += (p.x - n.x) * t; n.y += (p.y - n.y) * t;
         }
       }
@@ -417,7 +477,6 @@
       roundRect(mctx, 0, 0, w, h, 8 * DPR);
       mctx.fill();
 
-      // grid lines
       mctx.strokeStyle = `rgba(${COLOR.r},${COLOR.g},${COLOR.b},0.10)`;
       mctx.lineWidth = 1 * DPR;
       mctx.beginPath();
@@ -486,17 +545,18 @@
     }
 
     // ---------- main loop ----------
-    let last = performance.now();
+    let lastTime = performance.now();
     function loop() {
-      const now = performance.now(); const dt = now - last; last = now;
+      const now = performance.now();
+      const dt = now - lastTime; lastTime = now;
       update(dt);
       draw();
       raf = requestAnimationFrame(loop);
     }
 
-    // ---------- init/resize ----------
+    // ---------- init / resize ----------
     function resize() {
-      const cssW = SIZE_CSS; const cssH = SIZE_CSS;
+      const cssW = SIZE_CSS, cssH = SIZE_CSS;
       mapCanvas.style.width = cssW + 'px'; mapCanvas.style.height = cssH + 'px';
       w = mapCanvas.width = Math.max(120, Math.floor(cssW * DPR));
       h = mapCanvas.height = Math.max(120, Math.floor(cssH * DPR));
@@ -505,19 +565,20 @@
       updateRects(true);
       statusEl.textContent = defaultStatus();
     }
-
     window.addEventListener('load', () => { resize(); raf = requestAnimationFrame(loop); });
     window.addEventListener('resize', resize);
     resize();
 
-    // ---------- API ----------
+    // ---------- debug helper (call from console) ----------
     window.netGrid = window.netGrid || {};
-    window.netGrid.nodes = nodes;
-    window.netGrid.getMouseRaw = () => ({ ...rawMouse });
+    window.netGrid.debugRects = function(){ updateRects(false); return { termRect: cached.termRect, termSize:{w:cached.termW,h:cached.termH}, mapRect: cached.mapRect, lutRegion: cached.lutRegion, lutCols: cached.lutCols, lutRows: cached.lutRows }; };
+    window.netGrid.forceRebuildLUT = function(){ cached.inverseLUT = null; buildInverseLUTForRegion(); return {lutCols: cached.lutCols, lutRows: cached.lutRows}; };
 
-    console.info('netGrid_v4 — full replacement loaded (robust CRT hit-testing)');
+    window.netGrid.nodes = nodes;
+    window.netGrid.getMouseLocal = () => ({});
+    console.info('netGrid_fixed loaded — inverse-LUT limited to mapRect region');
 
   } catch (err) {
-    console.error('netGrid_v4 fatal', err);
+    console.error('netGrid_fixed fatal', err);
   }
 })();
