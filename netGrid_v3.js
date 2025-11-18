@@ -1,4 +1,4 @@
-// netGrid_v3.js — VIGIL NET GRID v3 (interactive grid, nodes move only on grid-lines)
+// netGrid_v3.js — VIGIL NET GRID v3 (интерактивная сетка с точной коррекцией под CRT-изгиб)
 (() => {
   try {
     // ----- CONFIG -----
@@ -11,58 +11,53 @@
     const INTER_COUNT = CELL_COUNT + 1;
     const NODE_COUNT = 10;
     const AUTONOMOUS_MOVE_COOLDOWN = 800;
-    
-    // ⭐ ДОЛЖЕН СОВПАДАТЬ С crt_overlay.js
     const CRT_DISTORTION = 0.28;
 
-    // ----- ПРАВИЛЬНАЯ ОБРАТНАЯ ТРАНСФОРМАЦИЯ -----
-    // Lookup table для 100% точности
+    // ----- ОБРАТНАЯ ТРАНСФОРМАЦИЯ (100% точность) -----
     let inverseLUT = null;
-    let lutSize = { w: -1, h: -1 }; // Инициализация -1 для гарантированного первого построения
+    let lutSize = { w: -1, h: -1 }; // -1 гарантирует первое построение
 
     function buildInverseLUT(canvasWidth, canvasHeight) {
-      // Увеличенная точность: step = 1 вместо 2
-      const step = 1; 
+      const step = 1; // 1px точность
       const cols = Math.ceil(canvasWidth / step);
       const rows = Math.ceil(canvasHeight / step);
       
       lutSize.w = canvasWidth;
       lutSize.h = canvasHeight;
-      
       inverseLUT = new Array(rows);
+      
       for (let y = 0; y < rows; y++) {
         inverseLUT[y] = new Array(cols);
         for (let x = 0; x < cols; x++) {
           const px = x * step;
           const py = y * step;
           
-          // Координаты в нормализованном пространстве [-1,1]
+          // Нормализуем в [-1, 1]
           const xd = (px / canvasWidth) * 2 - 1;
           const yd = (py / canvasHeight) * 2 - 1;
           
-          // Радиус в ДИСТОРТИРОВАННОМ пространстве
+          // Радиус в изогнутом пространстве
           const rd = Math.sqrt(xd*xd + yd*yd);
           
-          // ⭐ АНАЛИТИЧЕСКОЕ РЕШЕНИЕ: k*r² + (1-k)*r - rd = 0
+          // Аналитическое решение уравнения: k*r² + (1-k)*r - rd = 0
           const k = CRT_DISTORTION;
           let r = rd; // fallback
           
           if (k !== 0 && rd > 0) {
             const discriminant = (1 - k) * (1 - k) + 4 * k * rd;
             if (discriminant >= 0) {
-              // Положительный корень (отбрасываем отрицательный)
               r = (-(1 - k) + Math.sqrt(discriminant)) / (2 * k);
             }
           }
           
-          // Обратный фактор для undistorted координат
+          // Обратный фактор
           const factor = (r > 0) ? 1 / (1 + k * (r - 1)) : 1;
           
-          // Исходные (undistorted) координаты
+          // Исходные (плоские) координаты
           const xn = xd * factor;
           const yn = yd * factor;
           
-          // Конвертируем обратно в пиксели (undistorted)
+          // Возвращаем в пиксели
           inverseLUT[y][x] = {
             x: (xn + 1) * 0.5 * canvasWidth,
             y: (yn + 1) * 0.5 * canvasHeight
@@ -72,46 +67,44 @@
     }
 
     function applyInverseCRT(distortedPx, distortedPy) {
-      // Проверяем, нужно ли перестроить таблицу (сравнение с -1 гарантирует первый запуск)
+      // Перестраиваем таблицу только если размеры изменились
       if (!inverseLUT || lutSize.w !== w || lutSize.h !== h) {
+        if (w <= 0 || h <= 0) return { x: distortedPx, y: distortedPy }; // Защита от нулевых размеров
         buildInverseLUT(w, h);
       }
       
-      const step = 1; // MUST match buildInverseLUT
+      const step = 1;
       const col = Math.floor(distortedPx / step);
       const row = Math.floor(distortedPy / step);
       
-      // Быстрый выход за границы
+      // Граничные проверки
       if (row < 0 || row >= inverseLUT.length || col < 0 || col >= inverseLUT[0].length) {
         return { x: distortedPx, y: distortedPy };
       }
       
-      // ПРАВИЛЬНАЯ билинейная интерполяция
-      const fracX = (distortedPx % step) / step;
-      const fracY = (distortedPy % step) / step;
+      // ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: правильная дробная часть
+      const fracX = (distortedPx - col * step) / step;
+      const fracY = (distortedPy - row * step) / step;
       
-      // Четыре соседние точки
+      // Четыре соседние точки (с защитой от выхода за границы)
       const topLeft = inverseLUT[row][col];
       const topRight = inverseLUT[row][Math.min(col + 1, inverseLUT[0].length - 1)];
       const bottomLeft = inverseLUT[Math.min(row + 1, inverseLUT.length - 1)][col];
       const bottomRight = inverseLUT[Math.min(row + 1, inverseLUT.length - 1)][Math.min(col + 1, inverseLUT[0].length - 1)];
       
-      // Интерполяция по X для верхней и нижней строк
+      // Билинейная интерполяция
       const topX = topLeft.x * (1 - fracX) + topRight.x * fracX;
       const bottomX = bottomLeft.x * (1 - fracX) + bottomRight.x * fracX;
+      const finalX = topX * (1 - fracY) + bottomX * fracY;
       
-      // Интерполяция по X для верхней и нижней строк (Y)
       const topY = topLeft.y * (1 - fracX) + topRight.y * fracX;
       const bottomY = bottomLeft.y * (1 - fracX) + bottomRight.y * fracX;
-      
-      // Финальная интерполяция по Y
-      const finalX = topX * (1 - fracY) + bottomX * fracY;
       const finalY = topY * (1 - fracY) + bottomY * fracY;
       
       return { x: finalX, y: finalY };
     }
 
-    // ----- DOM: canvas + status + victory + controls -----
+    // ----- DOM-элементы -----
     const mapCanvas = document.createElement('canvas');
     Object.assign(mapCanvas.style, {
       position: 'fixed',
@@ -209,29 +202,20 @@
     });
     controls.appendChild(resetBtn);
 
-    // ----- internal state -----
+    // ----- Внутреннее состояние -----
     let w = 0, h = 0;
     let gridPoints = [];
     let nodes = [];
     let raf = null;
     let tick = 0;
-
     let selectedNode = null;
     let draggingNode = null;
     let mouse = { x: 0, y: 0, down: false };
 
     const SYMBOLS = {
-      V: [
-        [0,0],[1,1],[2,2],[3,3],[4,4],[5,5],[6,6],
-        [6,0],[5,1],[4,2]
-      ],
-      I: [
-        [0,3],[1,3],[2,3],[3,3],[4,3],[5,3],[6,3]
-      ],
-      X: [
-        [0,0],[1,1],[2,2],[3,3],[4,4],[5,5],[6,6],
-        [0,6],[1,5],[2,4],[4,2],[5,1],[6,0]
-      ]
+      V: [[0,0],[1,1],[2,2],[3,3],[4,4],[5,5],[6,6],[6,0],[5,1],[4,2]],
+      I: [[0,3],[1,3],[2,3],[3,3],[4,3],[5,3],[6,3]],
+      X: [[0,0],[1,1],[2,2],[3,3],[4,4],[5,5],[6,6],[0,6],[1,5],[2,4],[4,2],[5,1],[6,0]]
     };
     const symbolNames = Object.keys(SYMBOLS);
     const currentTargetName = symbolNames[Math.floor(Math.random()*symbolNames.length)];
@@ -239,7 +223,7 @@
 
     statusEl.textContent = `TARGET: ${currentTargetName}  |  Q/Й = lock/unlock selected node`;
 
-    // ----- helpers -----
+    // ----- Вспомогательные функции -----
     function glowColor(a=1){ return `rgba(${COLOR.r},${COLOR.g},${COLOR.b},${a})`; }
     function redColor(a=1){ return `rgba(255,60,60,${a})`; }
 
@@ -250,8 +234,7 @@
       w = mapCanvas.width = Math.max(120, Math.floor(cssW * DPR));
       h = mapCanvas.height = Math.max(120, Math.floor(cssH * DPR));
       
-      buildInverseLUT(w, h); // ⭐ ПЕРЕСТРАИВАЕМ ТАБЛИЦУ
-      
+      buildInverseLUT(w, h);
       buildGrid();
       resetNodesIfNeeded();
       controls.style.bottom = `${20 + SIZE_CSS + 12}px`;
@@ -342,9 +325,11 @@
       const rect = mapCanvas.getBoundingClientRect();
       const rawX = (ev.clientX - rect.left) * (mapCanvas.width / rect.width);
       const rawY = (ev.clientY - rect.top) * (mapCanvas.height / rect.height);
-      
       return applyInverseCRT(rawX, rawY);
     }
+
+    // ✅ Увеличен радиус захвата для более комфортного взаимодействия
+    const HIT_RADIUS = 18 * DPR;
 
     mapCanvas.addEventListener('mousedown', (ev) => {
       const m = getMousePosOnCanvas(ev);
@@ -354,11 +339,7 @@
       for (let i = nodes.length - 1; i >= 0; i--) {
         const n = nodes[i];
         const d = Math.hypot(m.x - n.x, m.y - n.y);
-        // Увеличен радиус захвата для более удобного взаимодействия
-        if (d < 15 * DPR) { 
-          found = n; 
-          break; 
-        }
+        if (d < HIT_RADIUS) { found = n; break; }
       }
       if (found) {
         if (found.locked) {
@@ -383,7 +364,7 @@
       
       let hoveredNode = null;
       for (const n of nodes) {
-        if (Math.hypot(m.x - n.x, m.y - n.y) < 15 * DPR) {
+        if (Math.hypot(m.x - n.x, m.y - n.y) < HIT_RADIUS) {
           hoveredNode = n; break;
         }
       }
@@ -624,6 +605,7 @@
     resize();
     raf = requestAnimationFrame(loop);
 
+    // Экспорт в window для отладки
     window.netGrid = window.netGrid || {};
     window.netGrid.nodes = nodes;
     window.netGrid.lockAll = function() {
@@ -634,9 +616,9 @@
     };
     window.netGrid.getTargetName = () => currentTargetName;
 
-    console.info('netGrid_v4 loaded — INTERACTIVE GRID (nodes move only on intersections)');
+    console.info('netGrid_v5 loaded — PIXEL-PERFECT INTERACTIVE GRID');
 
   } catch (err) {
-    console.error('netGrid_v4 error', err);
+    console.error('netGrid_v5 critical error:', err);
   }
 })();
