@@ -1,4 +1,4 @@
-// netGrid_v3.js — VIGIL NET GRID v3 (интерактивная сетка с точной коррекцией под CRT-изгиб)
+// netGrid_v3-DEBUG.js — ОТЛАДОЧНАЯ ВЕРСИЯ
 (() => {
   try {
     // ----- CONFIG -----
@@ -12,13 +12,19 @@
     const NODE_COUNT = 10;
     const AUTONOMOUS_MOVE_COOLDOWN = 800;
     const CRT_DISTORTION = 0.28;
+    
+    // ----- ОТЛАДОЧНЫЕ ПЕРЕМЕННЫЕ -----
+    let DEBUG_MODE = true; // ✅ Включите/выключите отладку
+    let debugMousePos = { x: 0, y: 0, undistortedX: 0, undistortedY: 0 };
+    let debugNearestNode = null;
 
-    // ----- ОБРАТНАЯ ТРАНСФОРМАЦИЯ (100% точность) -----
+    // ----- ОБРАТНАЯ ТРАНСФОРМАЦИЯ -----
     let inverseLUT = null;
-    let lutSize = { w: -1, h: -1 }; // -1 гарантирует первое построение
+    let lutSize = { w: -1, h: -1 };
 
     function buildInverseLUT(canvasWidth, canvasHeight) {
-      const step = 1; // 1px точность
+      console.log(`[DEBUG] Building LUT ${canvasWidth}x${canvasHeight}`);
+      const step = 1;
       const cols = Math.ceil(canvasWidth / step);
       const rows = Math.ceil(canvasHeight / step);
       
@@ -32,16 +38,12 @@
           const px = x * step;
           const py = y * step;
           
-          // Нормализуем в [-1, 1]
           const xd = (px / canvasWidth) * 2 - 1;
           const yd = (py / canvasHeight) * 2 - 1;
-          
-          // Радиус в изогнутом пространстве
           const rd = Math.sqrt(xd*xd + yd*yd);
           
-          // Аналитическое решение уравнения: k*r² + (1-k)*r - rd = 0
           const k = CRT_DISTORTION;
-          let r = rd; // fallback
+          let r = rd;
           
           if (k !== 0 && rd > 0) {
             const discriminant = (1 - k) * (1 - k) + 4 * k * rd;
@@ -50,26 +52,22 @@
             }
           }
           
-          // Обратный фактор
           const factor = (r > 0) ? 1 / (1 + k * (r - 1)) : 1;
-          
-          // Исходные (плоские) координаты
           const xn = xd * factor;
           const yn = yd * factor;
           
-          // Возвращаем в пиксели
           inverseLUT[y][x] = {
             x: (xn + 1) * 0.5 * canvasWidth,
             y: (yn + 1) * 0.5 * canvasHeight
           };
         }
       }
+      console.log(`[DEBUG] LUT built: ${rows}x${cols} cells`);
     }
 
     function applyInverseCRT(distortedPx, distortedPy) {
-      // Перестраиваем таблицу только если размеры изменились
       if (!inverseLUT || lutSize.w !== w || lutSize.h !== h) {
-        if (w <= 0 || h <= 0) return { x: distortedPx, y: distortedPy }; // Защита от нулевых размеров
+        if (w <= 0 || h <= 0) return { x: distortedPx, y: distortedPy };
         buildInverseLUT(w, h);
       }
       
@@ -77,22 +75,18 @@
       const col = Math.floor(distortedPx / step);
       const row = Math.floor(distortedPy / step);
       
-      // Граничные проверки
       if (row < 0 || row >= inverseLUT.length || col < 0 || col >= inverseLUT[0].length) {
         return { x: distortedPx, y: distortedPy };
       }
       
-      // ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: правильная дробная часть
       const fracX = (distortedPx - col * step) / step;
       const fracY = (distortedPy - row * step) / step;
       
-      // Четыре соседние точки (с защитой от выхода за границы)
       const topLeft = inverseLUT[row][col];
       const topRight = inverseLUT[row][Math.min(col + 1, inverseLUT[0].length - 1)];
       const bottomLeft = inverseLUT[Math.min(row + 1, inverseLUT.length - 1)][col];
       const bottomRight = inverseLUT[Math.min(row + 1, inverseLUT.length - 1)][Math.min(col + 1, inverseLUT[0].length - 1)];
       
-      // Билинейная интерполяция
       const topX = topLeft.x * (1 - fracX) + topRight.x * fracX;
       const bottomX = bottomLeft.x * (1 - fracX) + bottomRight.x * fracX;
       const finalX = topX * (1 - fracY) + bottomX * fracY;
@@ -122,86 +116,6 @@
     document.body.appendChild(mapCanvas);
     const mctx = mapCanvas.getContext('2d');
 
-    const statusEl = document.createElement('div');
-    Object.assign(statusEl.style, {
-      position: 'fixed',
-      left: '18px',
-      bottom: '12px',
-      fontFamily: 'Courier, monospace',
-      fontSize: '13px',
-      color: `rgba(${COLOR.r}, ${COLOR.g}, ${COLOR.b}, 1)`,
-      textShadow: `0 0 10px rgba(${COLOR.r}, ${COLOR.g}, ${COLOR.b}, 0.9)`,
-      zIndex: STATUS_Z,
-      pointerEvents: 'none',
-      userSelect: 'none',
-      letterSpacing: '0.6px',
-      fontWeight: '700',
-      opacity: '1',
-    });
-    document.body.appendChild(statusEl);
-
-    const victoryEl = document.createElement('div');
-    Object.assign(victoryEl.style, {
-      pointerEvents: 'none',
-      position: 'fixed',
-      left: '50%',
-      top: '50%',
-      transform: 'translate(-50%,-50%)',
-      color: `rgba(${COLOR.r}, ${COLOR.g}, ${COLOR.b}, 1)`,
-      fontSize: '36px',
-      fontWeight: '900',
-      textShadow: `0 0 18px rgba(${COLOR.r}, ${COLOR.g}, ${COLOR.b}, 0.85)`,
-      zIndex: 80,
-      display: 'none',
-      textAlign: 'center',
-      padding: '10px 20px',
-      borderRadius: '8px',
-      background: 'rgba(0,0,0,0.35)'
-    });
-    victoryEl.textContent = 'Ура, победил!';
-    document.body.appendChild(victoryEl);
-
-    const controls = document.createElement('div');
-    Object.assign(controls.style, {
-      position: 'fixed',
-      right: '20px',
-      bottom: `${20 + SIZE_CSS + 12}px`,
-      display: 'flex',
-      gap: '8px',
-      zIndex: MAP_Z + 1,
-      alignItems: 'center'
-    });
-    document.body.appendChild(controls);
-
-    const checkBtn = document.createElement('button');
-    checkBtn.textContent = 'ПРОВЕРИТЬ ПРИКОЛ';
-    Object.assign(checkBtn.style, {
-      padding: '8px 18px',
-      borderRadius: '6px',
-      border: `2px solid rgba(${COLOR.r},${COLOR.g},${COLOR.b},0.95)`,
-      background: 'rgba(0,0,0,0.5)',
-      color: `rgba(${COLOR.r},${COLOR.g},${COLOR.b},1)`,
-      fontFamily: 'Courier, monospace',
-      cursor: 'pointer',
-      fontWeight: '700',
-      letterSpacing: '1px'
-    });
-    controls.appendChild(checkBtn);
-
-    const resetBtn = document.createElement('button');
-    resetBtn.textContent = '⟳';
-    Object.assign(resetBtn.style, {
-      padding: '8px 12px',
-      borderRadius: '6px',
-      border: `2px solid rgba(${COLOR.r},${COLOR.g},${COLOR.b},0.95)`,
-      background: 'rgba(0,0,0,0.5)',
-      color: `rgba(${COLOR.r},${COLOR.g},${COLOR.b},1)`,
-      fontFamily: 'Courier, monospace',
-      cursor: 'pointer',
-      fontWeight: '700'
-    });
-    controls.appendChild(resetBtn);
-
     // ----- Внутреннее состояние -----
     let w = 0, h = 0;
     let gridPoints = [];
@@ -212,6 +126,9 @@
     let draggingNode = null;
     let mouse = { x: 0, y: 0, down: false };
 
+    const HIT_RADIUS = 20 * DPR; // ✅ Увеличен для отладки
+
+    // ----- Символы -----
     const SYMBOLS = {
       V: [[0,0],[1,1],[2,2],[3,3],[4,4],[5,5],[6,6],[6,0],[5,1],[4,2]],
       I: [[0,3],[1,3],[2,3],[3,3],[4,3],[5,3],[6,3]],
@@ -220,8 +137,6 @@
     const symbolNames = Object.keys(SYMBOLS);
     const currentTargetName = symbolNames[Math.floor(Math.random()*symbolNames.length)];
     const currentTarget = SYMBOLS[currentTargetName];
-
-    statusEl.textContent = `TARGET: ${currentTargetName}  |  Q/Й = lock/unlock selected node`;
 
     // ----- Вспомогательные функции -----
     function glowColor(a=1){ return `rgba(${COLOR.r},${COLOR.g},${COLOR.b},${a})`; }
@@ -234,10 +149,11 @@
       w = mapCanvas.width = Math.max(120, Math.floor(cssW * DPR));
       h = mapCanvas.height = Math.max(120, Math.floor(cssH * DPR));
       
+      console.log(`[DEBUG] Resize: canvas ${w}x${h}, CSS ${cssW}x${cssH}, DPR ${DPR}`);
+      
       buildInverseLUT(w, h);
       buildGrid();
       resetNodesIfNeeded();
-      controls.style.bottom = `${20 + SIZE_CSS + 12}px`;
     }
 
     function buildGrid() {
@@ -295,53 +211,88 @@
       });
       selectedNode = null;
       draggingNode = null;
-      victoryEl.style.display = 'none';
-      victoryShown = false;
-    }
-
-    function nearestIntersection(px, py){
-      let best = { r:0, c:0, d: Infinity };
-      for (let r=0;r<INTER_COUNT;r++){
-        for (let c=0;c<INTER_COUNT;c++){
-          const p = gridPoints[r][c];
-          const d = Math.hypot(px - p.x, py - p.y);
-          if (d < best.d) { best = {r, c, d}; }
-        }
-      }
-      return { row: best.r, col: best.c, dist: best.d };
-    }
-
-    function pickNeighbor(gx, gy) {
-      const candidates = [];
-      if (gy > 0) candidates.push({gx,gy:gy-1});
-      if (gy < INTER_COUNT-1) candidates.push({gx,gy:gy+1});
-      if (gx > 0) candidates.push({gx:gx-1,gy});
-      if (gx < INTER_COUNT-1) candidates.push({gx:gx+1,gy});
-      if (candidates.length === 0) return {gx,gy};
-      return candidates[Math.floor(Math.random()*candidates.length)];
+      console.log(`[DEBUG] Nodes respawned: ${nodes.length} nodes`);
     }
 
     function getMousePosOnCanvas(ev) {
       const rect = mapCanvas.getBoundingClientRect();
       const rawX = (ev.clientX - rect.left) * (mapCanvas.width / rect.width);
       const rawY = (ev.clientY - rect.top) * (mapCanvas.height / rect.height);
-      return applyInverseCRT(rawX, rawY);
+      
+      const undistorted = applyInverseCRT(rawX, rawY);
+      
+      // ✅ СОХРАНЯЕМ ДЛЯ ОТЛАДКИ
+      debugMousePos = {
+        x: rawX,
+        y: rawY,
+        undistortedX: undistorted.x,
+        undistortedY: undistorted.y
+      };
+      
+      return undistorted;
     }
 
-    // ✅ Увеличен радиус захвата для более комфортного взаимодействия
-    const HIT_RADIUS = 18 * DPR;
+    // ----- ГЛОБАЛЬНЫЕ ОТЛАДОЧНЫЕ КОМАНДЫ -----
+    window.netGridDebug = {
+      getNodeInfo: (id) => {
+        const n = nodes.find(n => n.id === id);
+        if (!n) console.log(`[DEBUG] Node ${id} not found`);
+        else console.log(`[DEBUG] Node ${id}: x=${n.x.toFixed(2)}, y=${n.y.toFixed(2)}, gx=${n.gx}, gy=${n.gy}`);
+      },
+      getMouseInfo: () => {
+        console.log(`[DEBUG] Mouse (distorted): ${debugMousePos.x.toFixed(2)}, ${debugMousePos.y.toFixed(2)}`);
+        console.log(`[DEBUG] Mouse (undistorted): ${debugMousePos.undistortedX.toFixed(2)}, ${debugMousePos.undistortedY.toFixed(2)}`);
+      },
+      toggleVisualDebug: () => {
+        DEBUG_MODE = !DEBUG_MODE;
+        console.log(`[DEBUG] Visual debug: ${DEBUG_MODE ? 'ON' : 'OFF'}`);
+      },
+      testHit: (nodeId) => {
+        const n = nodes.find(n => n.id === nodeId);
+        if (!n) return;
+        const dist = Math.hypot(debugMousePos.undistortedX - n.x, debugMousePos.undistortedY - n.y);
+        console.log(`[DEBUG] Distance to node ${nodeId}: ${dist.toFixed(2)} (hit radius: ${HIT_RADIUS})`);
+      },
+      rebuildLUT: () => {
+        buildInverseLUT(w, h);
+        console.log('[DEBUG] LUT rebuilt manually');
+      }
+    };
 
+    // ----- Обработчики мыши -----
     mapCanvas.addEventListener('mousedown', (ev) => {
       const m = getMousePosOnCanvas(ev);
       mouse.down = true;
       mouse.x = m.x; mouse.y = m.y;
+      
+      console.log(`[MOUSE] DOWN at distorted: ${debugMousePos.x.toFixed(2)}, ${debugMousePos.y.toFixed(2)}`);
+      console.log(`[MOUSE] DOWN at undistorted: ${m.x.toFixed(2)}, ${m.y.toFixed(2)}`);
+      
       let found = null;
-      for (let i = nodes.length - 1; i >= 0; i--) {
-        const n = nodes[i];
+      let closestDist = Infinity;
+      let closestNode = null;
+      
+      for (const n of nodes) {
         const d = Math.hypot(m.x - n.x, m.y - n.y);
-        if (d < HIT_RADIUS) { found = n; break; }
+        console.log(`[HITTEST] Node ${n.id}: distance = ${d.toFixed(2)}`);
+        if (d < closestDist) {
+          closestDist = d;
+          closestNode = n;
+        }
+        if (d < HIT_RADIUS) { 
+          found = n; 
+          break; 
+        }
       }
+      
+      if (closestNode) {
+        console.log(`[HITTEST] Closest node: ${closestNode.id} at distance ${closestDist.toFixed(2)}`);
+      }
+      
       if (found) {
+        console.log(`[HITTEST] SUCCESS! Selected node ${found.id}`);
+        debugNearestNode = found;
+        
         if (found.locked) {
           if (selectedNode && selectedNode !== found) selectedNode.selected = false;
           selectedNode = found;
@@ -354,6 +305,7 @@
         selectedNode = found;
         selectedNode.selected = true;
       } else {
+        console.log(`[HITTEST] MISS! No node within ${HIT_RADIUS}px`);
         if (selectedNode) { selectedNode.selected = false; selectedNode = null; }
       }
     });
@@ -390,6 +342,7 @@
     });
 
     window.addEventListener('mouseup', (ev) => {
+      console.log('[MOUSE] UP');
       mouse.down = false;
       if (draggingNode) {
         const n = draggingNode;
@@ -402,72 +355,7 @@
       }
     });
 
-    window.addEventListener('keydown', (ev) => {
-      if (ev.key && (ev.key.toLowerCase() === 'q' || ev.key.toLowerCase() === 'й')) {
-        const n = selectedNode || draggingNode;
-        if (!n) return;
-
-        const nearest = nearestIntersection(n.x, n.y);
-
-        const isOccupied = nodes.some(other => 
-          other !== n &&
-          other.locked &&
-          other.gx === nearest.col &&
-          other.gy === nearest.row
-        );
-
-        if (isOccupied) {
-          statusEl.textContent = `⚠ Место занято другим узлом`;
-          setTimeout(()=> statusEl.textContent = `TARGET: ${currentTargetName}  |  Q/Й = lock/unlock selected node`, 1500);
-          return;
-        }
-
-        n.gx = nearest.col;
-        n.gy = nearest.row;
-        n.targetGx = n.gx;
-        n.targetGy = n.gy;
-        n.locked = !n.locked;
-        n.lastMoveAt = performance.now();
-
-        if (n.locked) {
-          const p = gridPoints[n.gy][n.gx];
-          n.x = p.x;
-          n.y = p.y;
-        }
-
-        statusEl.textContent = `TARGET: ${currentTargetName}  |  Node ${n.id} ${n.locked ? 'locked' : 'unlocked'}`;
-        setTimeout(()=> statusEl.textContent = `TARGET: ${currentTargetName}  |  Q/Й = lock/unlock selected node`, 1200);
-      }
-    });
-
-    let victoryShown = false;
-    function checkVictory() {
-      const set = new Set(nodes.map(n => `${n.gy},${n.gx}`));
-      const allPresent = currentTarget.every(([r,c]) => set.has(`${r},${c}`));
-      if (allPresent) {
-        victoryShown = true;
-        victoryEl.style.display = 'block';
-        console.info('Victory matched:', currentTargetName);
-        return true;
-      } else {
-        return false;
-      }
-    }
-
-    checkBtn.addEventListener('click', () => {
-      const ok = checkVictory();
-      if (!ok) {
-        statusEl.textContent = `TARGET: ${currentTargetName}  |  ПРИКОЛ НЕ СОБРАН`;
-        setTimeout(()=> statusEl.textContent = `TARGET: ${currentTargetName}  |  Q/Й = lock/unlock selected node`, 1400);
-      }
-    });
-
-    resetBtn.addEventListener('click', () => {
-      for (const n of nodes) { n.locked = false; n.selected = false; n.drag = false; }
-      selectedNode = null; draggingNode = null;
-      respawnNodes();
-    });
-
+    // ----- Анимация и рендер -----
     function update(dt) {
       tick++;
       const now = performance.now();
@@ -504,11 +392,44 @@
       roundRect(mctx, 0, 0, w, h, 8*DPR);
       mctx.fill();
 
-      const vig = mctx.createRadialGradient(w/2, h/2, Math.min(w,h)*0.06, w/2, h/2, Math.max(w,h)*0.9);
+            const vig = mctx.createRadialGradient(w/2, h/2, Math.min(w,h)*0.06, w/2, h/2, Math.max(w,h)*0.9);
       vig.addColorStop(0, 'rgba(0,0,0,0)');
       vig.addColorStop(1, 'rgba(0,0,0,0.14)');
       mctx.fillStyle = vig;
       mctx.fillRect(0,0,w,h);
+
+      // ----- ОТЛАДОЧНЫЕ ВИЗУАЛЬНЫЕ МАРКЕРЫ -----
+      if (DEBUG_MODE) {
+        // Красный крестик на позиции мыши (undistorted)
+        if (mouse.down) {
+          mctx.strokeStyle = '#FF0000';
+          mctx.lineWidth = 2 * DPR;
+          mctx.beginPath();
+          mctx.moveTo(mouse.x - 10 * DPR, mouse.y);
+          mctx.lineTo(mouse.x + 10 * DPR, mouse.y);
+          mctx.moveTo(mouse.x, mouse.y - 10 * DPR);
+          mctx.lineTo(mouse.x, mouse.y + 10 * DPR);
+          mctx.stroke();
+          
+          // Желтый круг hit radius
+          mctx.strokeStyle = '#FFFF00';
+          mctx.lineWidth = 1 * DPR;
+          mctx.globalAlpha = 0.5;
+          mctx.beginPath();
+          mctx.arc(mouse.x, mouse.y, HIT_RADIUS, 0, Math.PI*2);
+          mctx.stroke();
+          mctx.globalAlpha = 1;
+        }
+        
+        // Зеленый круг вокруг ближайшей узловой точки
+        if (debugNearestNode) {
+          mctx.strokeStyle = '#00FF00';
+          mctx.lineWidth = 2 * DPR;
+          mctx.beginPath();
+          mctx.arc(debugNearestNode.x, debugNearestNode.y, HIT_RADIUS + 5 * DPR, 0, Math.PI*2);
+          mctx.stroke();
+        }
+      }
 
       mctx.strokeStyle = `rgba(${COLOR.r},${COLOR.g},${COLOR.b},0.10)`;
       mctx.lineWidth = 1 * DPR;
@@ -547,6 +468,7 @@
       }
       mctx.restore();
 
+      // Рисуем узлы
       for (const n of nodes) {
         const pulse = 0.5 + 0.5 * Math.sin((n.id + tick*0.02) * 1.2);
         const intensity = n.selected ? 1.4 : (n.locked ? 1.2 : 1.0);
@@ -605,20 +527,9 @@
     resize();
     raf = requestAnimationFrame(loop);
 
-    // Экспорт в window для отладки
-    window.netGrid = window.netGrid || {};
-    window.netGrid.nodes = nodes;
-    window.netGrid.lockAll = function() {
-      for (const n of nodes) n.locked = true;
-    };
-    window.netGrid.unlockAll = function() {
-      for (const n of nodes) n.locked = false;
-    };
-    window.netGrid.getTargetName = () => currentTargetName;
-
-    console.info('netGrid_v5 loaded — PIXEL-PERFECT INTERACTIVE GRID');
+    console.log('[DEBUG] netGrid_v3-DEBUG loaded. Commands: netGridDebug.getMouseInfo(), netGridDebug.getNodeInfo(id), netGridDebug.toggleVisualDebug(), netGridDebug.testHit(id)');
 
   } catch (err) {
-    console.error('netGrid_v5 critical error:', err);
+    console.error('[DEBUG] CRITICAL ERROR:', err);
   }
 })();
