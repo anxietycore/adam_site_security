@@ -1,709 +1,615 @@
-// netGrid_production.js
-// Production-grade replacement for netGrid
-// - Limited inverse-LUT (only mapRect region)
-// - Analytic fallback
-// - Pointer API + setPointerCapture
-// - Heavy math only on mousedown / LUT build
-// - Screen-space snap on drag (uses precomputed screenGrid)
-// - Debug APIs: netGrid_prod.debug(), netGrid_prod.rebuildLUT()
-//
-// Usage: Replace existing netGrid file with this file entirely, reload page (Ctrl+R).
-
+// netGrid_v4_fixed.js — FULL FIX for netGrid (replaces netGrid_v3.js)
+// Key changes:
+//  - Removed heavy inverseLUT / buildInverseLUT / applyInverseCRT
+//  - Added robust mapping: screen (overlay) -> terminal texture -> mapCanvas local device pixels
+//  - Uses terminalCanvas.size to compute exact device-pixel mapping (no guesswork)
+//  - Keeps all original behavior (grid, locking, autonomous moves) intact
 (() => {
-  'use strict';
+  try {
+    // ----- CONFIG -----
+    const DPR = Math.min(window.devicePixelRatio || 1, 1.5);
+    const SIZE_CSS = 300;
+    const COLOR = { r: 6, g: 160, b: 118 };
+    const MAP_Z = 40;
+    const STATUS_Z = 45;
+    const CELL_COUNT = 6;
+    const INTER_COUNT = CELL_COUNT + 1;
+    const NODE_COUNT = 10;
+    const AUTONOMOUS_MOVE_COOLDOWN = 800;
 
-  // ---------- CONFIG ----------
-  const DPR = Math.min(window.devicePixelRatio || 1, 1.5);
-  const CSS_SIZE = 300; // CSS px size of mini-map (keeps UI same)
-  const COLOR = { r: 6, g: 160, b: 118 };
-  const CELL_COUNT = 6;
-  const INTER_COUNT = CELL_COUNT + 1;
-  const NODE_COUNT = 10;
-  const DEFAULT_CRT_DISTORTION = 0.28; // must match crt_overlay shader uDist - change if different
-  const MAX_LUT_CELLS = 1600; // adaptive cap to keep LUT small
-  const CLICK_SAMPLE_OFFSETS = [[0,0],[-3,0],[3,0],[0,-3],[0,3]]; // neighbors to sample
-  const CLICK_THRESHOLD_MAP_PX = 12 * DPR; // tolerance in map-local pixels
-  const DEV = false; // set true to enable verbose console.debug
+    // Must match crt_overlay.js uDist
+    const CRT_DISTORTION = 0.28;
 
-  // ---------- DOM creation (non-invasive) ----------
-  const mapCanvas = document.createElement('canvas');
-  mapCanvas.id = 'netGrid_prod_map';
-  Object.assign(mapCanvas.style, {
-    position: 'fixed',
-    right: '20px',
-    bottom: '20px',
-    width: `${CSS_SIZE}px`,
-    height: `${CSS_SIZE}px`,
-    pointerEvents: 'auto',
-    zIndex: 99999,
-    borderRadius: '8px',
-    boxShadow: '0 18px 40px rgba(0,0,0,0.9)',
-    backgroundColor: 'rgba(0,10,6,0.28)'
-  });
-  document.body.appendChild(mapCanvas);
-  const ctx = mapCanvas.getContext('2d');
-
-  const statusEl = document.createElement('div');
-  Object.assign(statusEl.style, {
-    position: 'fixed',
-    left: '18px',
-    bottom: '12px',
-    fontFamily: 'Courier, monospace',
-    fontSize: '13px',
-    color: `rgba(${COLOR.r}, ${COLOR.g}, ${COLOR.b}, 1)`,
-    zIndex: 100000,
-    pointerEvents: 'none',
-    userSelect: 'none',
-    fontWeight: '700'
-  });
-  statusEl.textContent = 'netGrid — initializing...';
-  document.body.appendChild(statusEl);
-
-  const controls = document.createElement('div');
-  Object.assign(controls.style, {
-    position: 'fixed',
-    right: '20px',
-    bottom: `${20 + CSS_SIZE + 12}px`,
-    display: 'flex',
-    gap: '8px',
-    zIndex: 100000,
-    alignItems: 'center'
-  });
-  document.body.appendChild(controls);
-
-  const checkBtn = document.createElement('button');
-  checkBtn.textContent = 'ПРОВЕРИТЬ';
-  Object.assign(checkBtn.style, { padding: '6px 12px', borderRadius: '6px', cursor: 'pointer' });
-  controls.appendChild(checkBtn);
-
-  const resetBtn = document.createElement('button');
-  resetBtn.textContent = '⟳';
-  Object.assign(resetBtn.style, { padding: '6px 12px', borderRadius: '6px', cursor: 'pointer' });
-  controls.appendChild(resetBtn);
-
-  // ---------- State ----------
-  let w = 0, h = 0;
-  let gridPoints = []; // map-local coords [row][col] = {x,y}
-  let nodes = []; // node objects {id, gx, gy, x, y, locked, drag, selected, _screen}
-  let selectedNode = null;
-  let draggingNode = null;
-  let raf = null, lastTick = performance.now();
-
-  // cached terminal and map rects, LUT region and LUT
-  const cache = {
-    termRect: null, termW: 0, termH: 0,
-    mapRect: null,
-    lutRegion: null, // {sx, sy, sw, sh} in terminal backing pixels
-    inverseLUT: null, // 2D array [row][col] -> {x,y} tex coords (undistorted)
-    lutCols: 0, lutRows: 0,
-    lutStep: 1,
-    uDist: DEFAULT_CRT_DISTORTION
-  };
-
-  // cached screenGrid for intersections: screenGrid[r][c] = {cx, cy}
-  let screenGrid = null;
-  let lastScreenRecompute = 0;
-
-  // ---------- Utilities ----------
-  function log(...args) { if (DEV) console.debug('[netGrid_prod]', ...args); }
-  function defaultStatus() { return 'TARGET: GRID  |  Q/Й = lock/unlock selected node'; }
-  statusEl.textContent = defaultStatus();
-
-  function getTerminalCanvas() {
-    // typical id used in your project is 'terminalCanvas'; fallback to first canvas if not found
-    return document.getElementById('terminalCanvas') || document.querySelector('canvas') || null;
-  }
-
-  // ---------- Grid & Nodes ----------
-  function buildGrid() {
-    gridPoints = [];
-    const margin = 12 * DPR;
-    const innerW = w - margin * 2;
-    const innerH = h - margin * 2;
-    for (let r = 0; r < INTER_COUNT; r++) {
-      const row = [];
-      for (let c = 0; c < INTER_COUNT; c++) {
-        const x = margin + (c / CELL_COUNT) * innerW;
-        const y = margin + (r / CELL_COUNT) * innerH;
-        row.push({ x, y });
-      }
-      gridPoints.push(row);
-    }
-  }
-
-  function respawnNodes() {
-    const cells = [];
-    for (let r = 0; r < INTER_COUNT; r++) for (let c = 0; c < INTER_COUNT; c++) cells.push([r, c]);
-    for (let i = cells.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1)); [cells[i], cells[j]] = [cells[j], cells[i]];
-    }
-    const chosen = cells.slice(0, NODE_COUNT);
-    nodes = chosen.map((rc, idx) => {
-      const [r, c] = rc;
-      const p = gridPoints[r][c];
-      return { id: idx, gx: c, gy: r, x: p.x, y: p.y, targetGx: c, targetGy: r, locked: false, drag: false, selected: false, _screen: null };
+    // ----- DOM: canvas + status + victory + controls -----
+    const mapCanvas = document.createElement('canvas');
+    Object.assign(mapCanvas.style, {
+      position: 'fixed',
+      right: '20px',
+      bottom: '20px',
+      width: `${SIZE_CSS}px`,
+      height: `${SIZE_CSS}px`,
+      pointerEvents: 'auto',
+      zIndex: MAP_Z,
+      borderRadius: '8px',
+      boxShadow: '0 18px 40px rgba(0,0,0,0.9)',
+      backgroundColor: 'rgba(0,10,6,0.28)',
+      cursor: 'default'
     });
-    selectedNode = null; draggingNode = null;
-    log('nodes respawned', nodes.length);
-  }
+    document.body.appendChild(mapCanvas);
+    const mctx = mapCanvas.getContext('2d');
 
-  // ---------- Cached rects and LUT region ----------
-  function updateRects(force = false) {
-    const term = getTerminalCanvas();
-    if (!term) {
-      cache.termRect = null; cache.termW = 0; cache.termH = 0;
-      cache.mapRect = mapCanvas.getBoundingClientRect();
-      return;
-    }
-    const termRect = term.getBoundingClientRect();
-    const mapRect = mapCanvas.getBoundingClientRect();
-    const termW = term.width, termH = term.height;
-    const changed = force ||
-      !cache.termRect ||
-      cache.termRect.width !== termRect.width ||
-      cache.termRect.height !== termRect.height ||
-      !cache.mapRect ||
-      cache.mapRect.left !== mapRect.left ||
-      cache.mapRect.top !== mapRect.top ||
-      cache.termW !== termW || cache.termH !== termH;
-    if (changed) {
-      cache.termRect = termRect;
-      cache.mapRect = mapRect;
-      cache.termW = termW; cache.termH = termH;
-      // compute LUT region in terminal backing pixel coords that correspond to mapRect
-      const sx = Math.max(0, Math.round((mapRect.left - termRect.left) * (termW / termRect.width)));
-      const sy = Math.max(0, Math.round((mapRect.top - termRect.top) * (termH / termRect.height)));
-      const sw = Math.max(1, Math.round(mapRect.width * (termW / termRect.width)));
-      const sh = Math.max(1, Math.round(mapRect.height * (termH / termRect.height)));
-      cache.lutRegion = { sx, sy, sw, sh };
-      cache.inverseLUT = null; // invalidate LUT - will be rebuilt lazily
-      cache.lutCols = cache.lutRows = 0;
-      log('updateRects ->', cache.lutRegion);
-    }
-  }
+    const statusEl = document.createElement('div');
+    Object.assign(statusEl.style, {
+      position: 'fixed',
+      left: '18px',
+      bottom: '12px',
+      fontFamily: 'Courier, monospace',
+      fontSize: '13px',
+      color: `rgba(${COLOR.r}, ${COLOR.g}, ${COLOR.b}, 1)`,
+      textShadow: `0 0 10px rgba(${COLOR.r}, ${COLOR.g}, ${COLOR.b}, 0.9)`,
+      zIndex: STATUS_Z,
+      pointerEvents: 'none',
+      userSelect: 'none',
+      letterSpacing: '0.6px',
+      fontWeight: '700',
+      opacity: '1',
+    });
+    document.body.appendChild(statusEl);
 
-  // ---------- Build inverse LUT for region (adaptive step) ----------
-  function buildInverseLUT() {
-    if (!cache.termW || !cache.termH || !cache.lutRegion) return;
-    const { sx, sy, sw, sh } = cache.lutRegion;
-    // choose step so lutCols * lutRows <= MAX_LUT_CELLS
-    let step = 1;
-    let cols = Math.ceil(sw / step), rows = Math.ceil(sh / step);
-    if (cols * rows > MAX_LUT_CELLS) {
-      // increase step
-      const ratio = Math.sqrt((cols * rows) / MAX_LUT_CELLS);
-      step = Math.max(1, Math.floor(step * ratio));
-      cols = Math.ceil(sw / step); rows = Math.ceil(sh / step);
-    }
-    cache.lutStep = step;
-    cache.lutCols = cols; cache.lutRows = rows;
+    const victoryEl = document.createElement('div');
+    Object.assign(victoryEl.style, {
+      pointerEvents: 'none',
+      position: 'fixed',
+      left: '50%',
+      top: '50%',
+      transform: 'translate(-50%,-50%)',
+      color: `rgba(${COLOR.r}, ${COLOR.g}, ${COLOR.b}, 1)`,
+      fontSize: '36px',
+      fontWeight: '900',
+      textShadow: `0 0 18px rgba(${COLOR.r}, ${COLOR.g}, ${COLOR.b}, 0.85)`,
+      zIndex: 80,
+      display: 'none',
+      textAlign: 'center',
+      padding: '10px 20px',
+      borderRadius: '8px',
+      background: 'rgba(0,0,0,0.35)'
+    });
+    victoryEl.textContent = 'Ура, победил!';
+    document.body.appendChild(victoryEl);
 
-    const k = cache.uDist;
-    const lut = new Array(rows);
-    for (let ry = 0; ry < rows; ry++) {
-      const row = new Array(cols);
-      const py = sy + ry * step;
-      for (let cx = 0; cx < cols; cx++) {
-        const px = sx + cx * step;
-        // normalized distorted [-1,1]
-        const xd = (px / cache.termW) * 2 - 1;
-        const yd = (py / cache.termH) * 2 - 1;
-        const rd = Math.hypot(xd, yd);
-        // solve k*r^2 + (1-k)*r - rd = 0 for r
-        let r = rd;
-        if (k !== 0 && rd !== 0) {
-          // stable quadratic solve (choose positive root)
-          const a = k, b = (1 - k), c = -rd;
-          const disc = b * b - 4 * a * c;
-          if (disc >= 0) {
-            const root = (-b + Math.sqrt(disc)) / (2 * a);
-            if (root > 0) r = root;
-          }
+    const controls = document.createElement('div');
+    Object.assign(controls.style, {
+      position: 'fixed',
+      right: '20px',
+      bottom: `${20 + SIZE_CSS + 12}px`,
+      display: 'flex',
+      gap: '8px',
+      zIndex: MAP_Z + 1,
+      alignItems: 'center'
+    });
+    document.body.appendChild(controls);
+
+    const checkBtn = document.createElement('button');
+    checkBtn.textContent = 'ПРОВЕРИТЬ ПРИКОЛ';
+    Object.assign(checkBtn.style, {
+      padding: '8px 18px',
+      borderRadius: '6px',
+      border: `2px solid rgba(${COLOR.r},${COLOR.g},${COLOR.b},0.95)`,
+      background: 'rgba(0,0,0,0.5)',
+      color: `rgba(${COLOR.r},${COLOR.g},${COLOR.b},1)`,
+      fontFamily: 'Courier, monospace',
+      cursor: 'pointer',
+      fontWeight: '700',
+      letterSpacing: '1px'
+    });
+    controls.appendChild(checkBtn);
+
+    const resetBtn = document.createElement('button');
+    resetBtn.textContent = '⟳';
+    Object.assign(resetBtn.style, {
+      padding: '8px 12px',
+      borderRadius: '6px',
+      border: `2px solid rgba(${COLOR.r},${COLOR.g},${COLOR.b},0.95)`,
+      background: 'rgba(0,0,0,0.5)',
+      color: `rgba(${COLOR.r},${COLOR.g},${COLOR.b},1)`,
+      fontFamily: 'Courier, monospace',
+      cursor: 'pointer',
+      fontWeight: '700'
+    });
+    controls.appendChild(resetBtn);
+
+    // ----- internal state -----
+    let w = 0, h = 0;
+    let gridPoints = [];
+    let nodes = [];
+    let raf = null;
+    let tick = 0;
+
+    let selectedNode = null;
+    let draggingNode = null;
+    let mouse = { x: 0, y: 0, down: false };
+
+    const SYMBOLS = {
+      V: [
+        [0,0],[1,1],[2,2],[3,3],[4,4],[5,5],[6,6],
+        [6,0],[5,1],[4,2]
+      ],
+      I: [
+        [0,3],[1,3],[2,3],[3,3],[4,3],[5,3],[6,3]
+      ],
+      X: [
+        [0,0],[1,1],[2,2],[3,3],[4,4],[5,5],[6,6],
+        [0,6],[1,5],[2,4],[4,2],[5,1],[6,0]
+      ]
+    };
+    const symbolNames = Object.keys(SYMBOLS);
+    const currentTargetName = symbolNames[Math.floor(Math.random()*symbolNames.length)];
+    const currentTarget = SYMBOLS[currentTargetName];
+
+    statusEl.textContent = `TARGET: ${currentTargetName}  |  Q/Й = lock/unlock selected node`;
+
+    // ----- helpers -----
+    function glowColor(a=1){ return `rgba(${COLOR.r},${COLOR.g},${COLOR.b},${a})`; }
+    function redColor(a=1){ return `rgba(255,60,60,${a})`; }
+
+    function resize() {
+      const cssW = SIZE_CSS, cssH = SIZE_CSS;
+      mapCanvas.style.width = cssW + 'px';
+      mapCanvas.style.height = cssH + 'px';
+      // device pixels for map canvas
+      w = mapCanvas.width = Math.max(120, Math.floor(cssW * DPR));
+      h = mapCanvas.height = Math.max(120, Math.floor(cssH * DPR));
+
+      buildGrid();
+      resetNodesIfNeeded();
+      controls.style.bottom = `${20 + SIZE_CSS + 12}px`;
+    }
+
+    function buildGrid() {
+      gridPoints = [];
+      const margin = 12 * DPR;
+      const innerW = w - margin*2;
+      const innerH = h - margin*2;
+      for (let r=0; r<INTER_COUNT; r++){
+        const row = [];
+        for (let c=0; c<INTER_COUNT; c++){
+          const x = margin + (c / CELL_COUNT) * innerW;
+          const y = margin + (r / CELL_COUNT) * innerH;
+          row.push({x,y});
         }
-        const s = (1 - k) + k * r;
-        const ux = (s === 0 ? xd : xd / s);
-        const uy = (s === 0 ? yd : yd / s);
-        const texX = (ux + 1) * 0.5 * cache.termW;
-        const texY = (uy + 1) * 0.5 * cache.termH;
-        row[cx] = { x: texX, y: texY };
-      }
-      lut[ry] = row;
-    }
-    cache.inverseLUT = lut;
-    log('LUT built', { cols, rows, step });
-  }
-
-  // ---------- Apply inverse with bilinear interpolation inside LUT region ----------
-  function applyInverseAtTermPixel(px, py) {
-    if (!cache.inverseLUT) buildInverseLUT();
-    if (!cache.inverseLUT) return analyticInverse(px, py);
-    const { sx, sy, sw, sh } = cache.lutRegion;
-    const step = cache.lutStep;
-    const relX = px - sx, relY = py - sy;
-    if (relX < 0 || relY < 0 || relX > sw || relY > sh) return analyticInverse(px, py);
-    const fx = relX / step, fy = relY / step;
-    let cx = Math.floor(fx), cy = Math.floor(fy);
-    cx = Math.max(0, Math.min(cache.lutCols - 1, cx));
-    cy = Math.max(0, Math.min(cache.lutRows - 1, cy));
-    const cx1 = Math.min(cache.lutCols - 1, cx + 1);
-    const cy1 = Math.min(cache.lutRows - 1, cy + 1);
-    const tx00 = cache.inverseLUT[cy][cx], tx10 = cache.inverseLUT[cy][cx1];
-    const tx01 = cache.inverseLUT[cy1][cx], tx11 = cache.inverseLUT[cy1][cx1];
-    const fracX = Math.min(1, Math.max(0, fx - Math.floor(fx)));
-    const fracY = Math.min(1, Math.max(0, fy - Math.floor(fy)));
-    const topX = tx00.x * (1 - fracX) + tx10.x * fracX;
-    const topY = tx00.y * (1 - fracX) + tx10.y * fracX;
-    const botX = tx01.x * (1 - fracX) + tx11.x * fracX;
-    const botY = tx01.y * (1 - fracX) + tx11.y * fracX;
-    const finalX = topX * (1 - fracY) + botX * fracY;
-    const finalY = topY * (1 - fracY) + botY * fracY;
-    return { x: finalX, y: finalY };
-  }
-
-  // analytic inversion fallback (cheap)
-  function analyticInverse(termPxX, termPxY) {
-    if (!cache.termW || !cache.termH) return { x: termPxX, y: termPxY };
-    const nx = (termPxX / cache.termW) * 2 - 1;
-    const ny = (termPxY / cache.termH) * 2 - 1;
-    const rd = Math.hypot(nx, ny);
-    const k = cache.uDist;
-    let r = rd;
-    if (k !== 0 && rd !== 0) {
-      const a = k, b = (1 - k), c = -rd;
-      const disc = b * b - 4 * a * c;
-      if (disc >= 0) {
-        const root = (-b + Math.sqrt(disc)) / (2 * a);
-        if (root > 0) r = root;
+        gridPoints.push(row);
       }
     }
-    const s = (1 - k) + k * r;
-    const ux = (s === 0 ? nx : nx / s);
-    const uy = (s === 0 ? ny : ny / s);
-    return { x: (ux + 1) * 0.5 * cache.termW, y: (uy + 1) * 0.5 * cache.termH };
-  }
 
-  // ---------- Terminal texel -> map-local coords ----------
-  function terminalTexelToMapLocal(texX, texY) {
-    const tr = cache.termRect, mr = cache.mapRect;
-    if (!tr || !mr || !cache.termW || !cache.termH) return null;
-    const fracX = texX / cache.termW;
-    const fracY = texY / cache.termH;
-    const cssX = fracX * tr.width;
-    const cssY = fracY * tr.height;
-    const relCssX = cssX - (mr.left - tr.left);
-    const relCssY = cssY - (mr.top - tr.top);
-    const localX = relCssX * (mapCanvas.width / mr.width);
-    const localY = relCssY * (mapCanvas.height / mr.height);
-    // clamp
-    return { x: Math.max(0, Math.min(mapCanvas.width, localX)), y: Math.max(0, Math.min(mapCanvas.height, localY)) };
-  }
-
-  // ---------- forward mapping (mapLocal -> client screen) for screenGrid ----------
-  function textureF_to_screenNormalized(fx, fy) {
-    const fpx = fx;
-    const fpy = 1.0 - fy;
-    const dx = fpx * 2 - 1;
-    const dy = fpy * 2 - 1;
-    const rd = Math.hypot(dx, dy);
-    const k = cache.uDist;
-    if (rd === 0 || k === 0) return { sx: (dx + 1) * 0.5, sy: (dy + 1) * 0.5 };
-    const a = k, b = (1 - k), c = -rd;
-    const disc = b * b - 4 * a * c;
-    let r = rd;
-    if (disc >= 0) {
-      const root = (-b + Math.sqrt(disc)) / (2 * a);
-      if (root > 0) r = root;
-    }
-    const s = (1 - k) + k * r;
-    const uvx = dx / s, uvy = dy / s;
-    return { sx: (uvx + 1) * 0.5, sy: (uvy + 1) * 0.5 };
-  }
-
-  function mapLocalToClient(px_local, py_local) {
-    updateRects(false);
-    const tr = cache.termRect, mr = cache.mapRect;
-    if (!tr || !mr || !cache.termW || !cache.termH) {
-      const rect = mapCanvas.getBoundingClientRect();
-      return { cx: rect.left + (px_local / mapCanvas.width) * rect.width, cy: rect.top + (py_local / mapCanvas.height) * rect.height };
-    }
-    const fracX = px_local / mapCanvas.width;
-    const fracY = py_local / mapCanvas.height;
-    const cssX = (mr.left - tr.left) + fracX * mr.width;
-    const cssY = (mr.top - tr.top) + fracY * mr.height;
-    const fx = cssX / tr.width, fy = cssY / tr.height;
-    const s = textureF_to_screenNormalized(fx, fy);
-    const cx = tr.left + s.sx * tr.width, cy = tr.top + s.sy * tr.height;
-    return { cx, cy };
-  }
-
-  // ---------- Recompute screenGrid (throttled) ----------
-  function recomputeScreenGrid(force = false) {
-    const now = performance.now();
-    if (!force && (now - lastScreenRecompute) < 70) return; // throttle UI recomputes
-    lastScreenRecompute = now;
-    updateRects(false);
-    screenGrid = [];
-    for (let r = 0; r < INTER_COUNT; r++) {
-      const row = [];
-      for (let c = 0; c < INTER_COUNT; c++) {
-        const p = gridPoints[r][c];
-        row.push(mapLocalToClient(p.x, p.y));
-      }
-      screenGrid.push(row);
-    }
-    // update cached node screens
-    for (let i = 0; i < nodes.length; i++) {
-      nodes[i]._screen = mapLocalToClient(nodes[i].x, nodes[i].y);
-    }
-    log('screenGrid recomputed');
-  }
-
-  // ---------- Picking: sample neighborhood, inverse, map to map-local, choose nearest node ----------
-  function pickNodeAtClient(clientX, clientY) {
-    updateRects(false);
-    const term = getTerminalCanvas();
-    let best = { node: null, dist: Infinity, local: null };
-
-    if (term && cache.termRect) {
-      const termW = cache.termW, termH = cache.termH;
-      const tr = cache.termRect;
-      for (let i = 0; i < CLICK_SAMPLE_OFFSETS.length; i++) {
-        const [ox, oy] = CLICK_SAMPLE_OFFSETS[i];
-        const sx = clientX + ox, sy = clientY + oy;
-        // client -> terminal backing pixel
-        const termPxX = (sx - tr.left) * (termW / tr.width);
-        const termPxY = (sy - tr.top) * (termH / tr.height);
-        const und = applyInverseAtTermPixel(termPxX, termPxY);
-        const local = terminalTexelToMapLocalSafe(und.x, und.y);
-        if (!local) continue;
-        for (const n of nodes) {
-          const d = Math.hypot(local.x - n.x, local.y - n.y);
-          if (d < best.dist) best = { node: n, dist: d, local };
-        }
-      }
-      if (best.node && best.dist <= CLICK_THRESHOLD_MAP_PX) return best;
-    }
-
-    // fallback: direct mapCanvas coords (if terminal not found)
-    try {
-      const mr = cache.mapRect || mapCanvas.getBoundingClientRect();
-      const relX = (clientX - mr.left) * (mapCanvas.width / mr.width);
-      const relY = (clientY - mr.top) * (mapCanvas.height / mr.height);
-      for (const n of nodes) {
-        const d = Math.hypot(relX - n.x, relY - n.y);
-        if (d < best.dist) best = { node: n, dist: d, local: { x: relX, y: relY } };
-      }
-      if (best.node && best.dist <= CLICK_THRESHOLD_MAP_PX) return best;
-    } catch (e) { /* ignore */ }
-
-    return null;
-  }
-
-  // safe wrapper
-  function terminalTexelToMapLocalSafe(texX, texY) {
-    try { return terminalTexelToMapLocal(texX, texY); } catch (e) { return null; }
-  }
-
-  // ---------- terminalTexelToMapLocal uses cache above ----------
-  function terminalTexelToMapLocal(texX, texY) {
-    const tr = cache.termRect, mr = cache.mapRect;
-    if (!tr || !mr || !cache.termW || !cache.termH) return null;
-    const fracX = texX / cache.termW, fracY = texY / cache.termH;
-    const cssX = fracX * tr.width, cssY = fracY * tr.height;
-    const relCssX = cssX - (mr.left - tr.left);
-    const relCssY = cssY - (mr.top - tr.top);
-    const localX = relCssX * (mapCanvas.width / mr.width);
-    const localY = relCssY * (mapCanvas.height / mr.height);
-    return { x: Math.max(0, Math.min(mapCanvas.width, localX)), y: Math.max(0, Math.min(mapCanvas.height, localY)) };
-  }
-
-  // ---------- Snap to nearest screenGrid intersection during drag ----------
-  function snapNodeToScreen(clientX, clientY, node) {
-    if (!screenGrid) recomputeScreenGrid(true);
-    let best = { r: 0, c: 0, d: Infinity };
-    for (let r = 0; r < INTER_COUNT; r++) {
-      for (let c = 0; c < INTER_COUNT; c++) {
-        const sc = screenGrid[r][c];
-        const d = Math.hypot(clientX - sc.cx, clientY - sc.cy);
-        if (d < best.d) best = { r, c, d };
-      }
-    }
-    const p = gridPoints[best.r][best.c];
-    node.gx = best.c; node.gy = best.r;
-    node.x = p.x; node.y = p.y;
-    node._screen = mapLocalToClient(node.x, node.y);
-  }
-
-  // ---------- Events: pointer handling with capture ----------
-  function onPointerDown(ev) {
-    ev.preventDefault();
-    try { ev.target.setPointerCapture(ev.pointerId); } catch (e) {}
-    recomputeScreenGrid(true);
-    const found = pickNodeAtClient(ev.clientX, ev.clientY);
-    if (found && found.node) {
-      const n = found.node;
-      if (n.locked) {
-        if (selectedNode && selectedNode !== n) selectedNode.selected = false;
-        selectedNode = n; selectedNode.selected = true;
-        return;
-      }
-      draggingNode = n; draggingNode.drag = true;
-      if (selectedNode && selectedNode !== n) selectedNode.selected = false;
-      selectedNode = n; selectedNode.selected = true;
-    } else {
-      if (selectedNode) { selectedNode.selected = false; selectedNode = null; }
-    }
-  }
-
-  function onPointerMove(ev) {
-    if (!draggingNode) return;
-    // throttle: snap at pointer moves but low-cost
-    snapNodeToScreen(ev.clientX, ev.clientY, draggingNode);
-  }
-
-  function onPointerUp(ev) {
-    try { ev.target.releasePointerCapture(ev.pointerId); } catch (e) {}
-    if (draggingNode) {
-      // finalize snap (in case movement happened after last pointermove)
-      snapNodeToScreen(ev.clientX, ev.clientY, draggingNode);
-      draggingNode.drag = false;
-      draggingNode = null;
-    }
-  }
-
-  // keyboard lock/unlock
-  function onKeyDown(ev) {
-    if (!ev.key) return;
-    if (ev.key.toLowerCase() === 'q' || ev.key.toLowerCase() === 'й') {
-      const n = selectedNode;
-      if (!n) return;
-      const nearest = findNearestIntersection(n.x, n.y);
-      const occupied = nodes.some(other => other !== n && other.locked && other.gx === nearest.col && other.gy === nearest.row);
-      if (occupied) {
-        statusEl.textContent = '⚠ Место занято';
-        setTimeout(() => statusEl.textContent = defaultStatus(), 1200);
-        return;
-      }
-      n.gx = nearest.col; n.gy = nearest.row;
-      n.targetGx = n.gx; n.targetGy = n.gy;
-      n.locked = !n.locked; n.lastMoveAt = performance.now();
-      if (n.locked) {
-        const p = gridPoints[n.gy][n.gx];
-        n.x = p.x; n.y = p.y; n._screen = mapLocalToClient(n.x, n.y);
-      }
-    }
-  }
-
-  // ---------- Helpers ----------
-  function findNearestIntersection(px, py) {
-    let best = { r: 0, c: 0, d: Infinity };
-    for (let r = 0; r < INTER_COUNT; r++) {
-      for (let c = 0; c < INTER_COUNT; c++) {
-        const p = gridPoints[r][c];
-        const d = Math.hypot(px - p.x, py - p.y);
-        if (d < best.d) best = { r, c, d };
-      }
-    }
-    return { row: best.r, col: best.c, dist: best.d };
-  }
-
-  // ---------- Draw (very cheap) ----------
-  function draw() {
-    ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = 'rgba(2,18,12,0.66)';
-    roundRect(ctx, 0, 0, w, h, 8 * DPR);
-    ctx.fill();
-
-    // grid lines
-    ctx.strokeStyle = `rgba(${COLOR.r},${COLOR.g},${COLOR.b},0.10)`;
-    ctx.lineWidth = 1 * DPR;
-    ctx.beginPath();
-    for (let i = 0; i <= CELL_COUNT; i++) {
-      const x = gridPoints[0][0].x + (i / CELL_COUNT) * (gridPoints[0][CELL_COUNT].x - gridPoints[0][0].x);
-      ctx.moveTo(x, gridPoints[0][0].y); ctx.lineTo(x, gridPoints[INTER_COUNT - 1][0].y);
-    }
-    for (let j = 0; j <= CELL_COUNT; j++) {
-      const y = gridPoints[0][0].y + (j / CELL_COUNT) * (gridPoints[INTER_COUNT - 1][0].y - gridPoints[0][0].y);
-      ctx.moveTo(gridPoints[0][0].x, y); ctx.lineTo(gridPoints[0][INTER_COUNT - 1].x, y);
-    }
-    ctx.stroke();
-
-    // connections (cheap n^2 but n small)
-    ctx.save();
-    for (let i = 0; i < nodes.length; i++) {
-      for (let j = i + 1; j < nodes.length; j++) {
-        const A = nodes[i], B = nodes[j];
-        const d = Math.hypot(A.x - B.x, A.y - B.y);
-        if (d < (w * 0.32)) {
-          const baseAlpha = Math.max(0.10, 0.32 - (d / (w * 0.9)) * 0.22);
-          const grad = ctx.createLinearGradient(A.x, A.y, B.x, B.y);
-          grad.addColorStop(0, `rgba(${COLOR.r},${COLOR.g},${COLOR.b},${baseAlpha})`);
-          grad.addColorStop(1, `rgba(${COLOR.r},${COLOR.g},${COLOR.b},${baseAlpha * 0.45})`);
-          ctx.strokeStyle = grad; ctx.lineWidth = 1 * DPR; ctx.beginPath();
-          ctx.moveTo(A.x, A.y); ctx.lineTo(B.x, B.y); ctx.stroke();
-        }
-      }
-    }
-    ctx.restore();
-
-    // nodes
-    for (const n of nodes) {
-      const pulse = 0.5 + 0.5 * Math.sin((n.id + (performance.now() / 60)) * 0.02);
-      const intensity = n.selected ? 1.4 : (n.locked ? 1.2 : 1.0);
-      const glowR = (6 * DPR + pulse * 3 * DPR) * intensity;
-      const c = n.locked ? `rgba(255,60,60,${0.36 * intensity})` : `rgba(${COLOR.r},${COLOR.g},${COLOR.b},${0.36 * intensity})`;
-      const c2 = n.locked ? `rgba(255,60,60,${0.12 * intensity})` : `rgba(${COLOR.r},${COLOR.g},${COLOR.b},${0.12 * intensity})`;
-      const grd = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, glowR);
-      grd.addColorStop(0, c); grd.addColorStop(0.6, c2); grd.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = grd; ctx.fillRect(n.x - glowR, n.y - glowR, glowR * 2, glowR * 2);
-
-      ctx.beginPath();
-      const coreR = 2.2 * DPR + (n.selected ? 1.6 * DPR : 0);
-      ctx.fillStyle = n.locked ? `rgba(255,60,60,1)` : `rgba(${COLOR.r},${COLOR.g},${COLOR.b},1)`;
-      ctx.arc(n.x, n.y, coreR, 0, Math.PI * 2); ctx.fill();
-
-      ctx.beginPath(); ctx.lineWidth = 1 * DPR;
-      ctx.strokeStyle = n.locked ? `rgba(255,60,60,0.92)` : `rgba(${COLOR.r},${COLOR.g},${COLOR.b},0.92)`;
-      ctx.arc(n.x, n.y, coreR + 1.2 * DPR, 0, Math.PI * 2); ctx.stroke();
-    }
-
-    ctx.save();
-    ctx.font = `${10 * DPR}px monospace`;
-    ctx.fillStyle = `rgba(${COLOR.r},${COLOR.g},${COLOR.b},0.95)`;
-    ctx.textAlign = 'right';
-    ctx.fillText('VIGIL NET', w - 8 * DPR, 12 * DPR);
-    ctx.restore();
-  }
-
-  function roundRect(cnv, x, y, w, h, r) {
-    cnv.beginPath();
-    cnv.moveTo(x + r, y); cnv.arcTo(x + w, y, x + w, y + h, r);
-    cnv.arcTo(x + w, y + h, x, y + h, r); cnv.arcTo(x, y + h, x, y, r);
-    cnv.arcTo(x, y, x + w, y, r); cnv.closePath();
-  }
-
-  // ---------- Update loop ----------
-  function update(dt) {
-    // autonomous movement (keeps behavior)
-    const now = performance.now();
-    for (const n of nodes) {
-      if (n.drag) continue;
-      if (n.locked) {
-        const p = gridPoints[n.gy][n.gx];
-        n.x = p.x; n.y = p.y; n.targetGx = n.gx; n.targetGy = n.gy; continue;
-      }
-      const targetP = gridPoints[n.targetGy][n.targetGx];
-      const dist = Math.hypot(n.x - targetP.x, n.y - targetP.y);
-      if (dist < 1.4 * DPR) {
-        n.gx = n.targetGx; n.gy = n.targetGy;
-        if (now - n.lastMoveAt > 800 + Math.random() * 1200) {
-          const nb = pickNeighbor(n.gx, n.gy);
-          n.targetGx = nb.gx; n.targetGy = nb.gy; n.lastMoveAt = now;
-        }
+    function resetNodesIfNeeded() {
+      if (nodes.length === 0) {
+        respawnNodes();
       } else {
-        const t = Math.min(1, (0.002 + Math.random() * 0.004) * (dt / 16));
-        n.x += (targetP.x - n.x) * t; n.y += (targetP.y - n.y) * t;
-        n._screen = null; // mark screen cache dirty
+        for (const n of nodes) {
+          n.x = gridPoints[n.gy][n.gx].x;
+          n.y = gridPoints[n.gy][n.gx].y;
+          n.targetGx = n.gx; n.targetGy = n.gy;
+        }
       }
     }
-  }
 
-  function pickNeighbor(gx, gy) {
-    const candidates = [];
-    if (gy > 0) candidates.push({ gx, gy: gy - 1 });
-    if (gy < INTER_COUNT - 1) candidates.push({ gx, gy: gy + 1 });
-    if (gx > 0) candidates.push({ gx: gx - 1, gy });
-    if (gx < INTER_COUNT - 1) candidates.push({ gx: gx + 1, gy });
-    return candidates.length ? candidates[Math.floor(Math.random() * candidates.length)] : { gx, gy };
-  }
+    function respawnNodes() {
+      const positions = [];
+      for (let r=0;r<INTER_COUNT;r++){
+        for (let c=0;c<INTER_COUNT;c++) positions.push([r,c]);
+      }
+      for (let i=positions.length-1;i>0;i--){
+        const j = Math.floor(Math.random()*(i+1));
+        [positions[i],positions[j]] = [positions[j],positions[i]];
+      }
+      const chosen = positions.slice(0,NODE_COUNT);
+      nodes = chosen.map((rc,idx) => {
+        const [r,c] = rc;
+        const p = gridPoints[r][c];
+        return {
+          id: idx,
+          gx: c, gy: r,
+          x: p.x, y: p.y,
+          targetGx: c, targetGy: r,
+          speed: 0.002 + Math.random()*0.004,
+          locked: false,
+          lastMoveAt: performance.now() - Math.random()*1000,
+          drag: false,
+          selected: false
+        };
+      });
+      selectedNode = null;
+      draggingNode = null;
+      victoryEl.style.display = 'none';
+      victoryShown = false;
+    }
 
-  function loop() {
-    const now = performance.now();
-    const dt = now - lastTick; lastTick = now;
-    update(dt);
-    draw();
-    raf = requestAnimationFrame(loop);
-  }
+    function nearestIntersection(px, py){
+      let best = { r:0, c:0, d: Infinity };
+      for (let r=0;r<INTER_COUNT;r++){
+        for (let c=0;c<INTER_COUNT;c++){
+          const p = gridPoints[r][c];
+          const d = Math.hypot(px - p.x, py - p.y);
+          if (d < best.d) { best = {r, c, d}; }
+        }
+      }
+      return { row: best.r, col: best.c, dist: best.d };
+    }
 
-  // ---------- Events wiring ----------
-  function wireEvents() {
-    window.addEventListener('resize', () => { resize(); updateRects(true); recomputeScreenGrid(true); }, { passive: true });
-    window.addEventListener('scroll', () => { updateRects(true); recomputeScreenGrid(true); }, { passive: true });
-    window.addEventListener('orientationchange', () => { updateRects(true); recomputeScreenGrid(true); }, { passive: true });
+    function pickNeighbor(gx, gy) {
+      const candidates = [];
+      if (gy > 0) candidates.push({gx,gy:gy-1});
+      if (gy < INTER_COUNT-1) candidates.push({gx,gy:gy+1});
+      if (gx > 0) candidates.push({gx:gx-1,gy});
+      if (gx < INTER_COUNT-1) candidates.push({gx:gx+1,gy});
+      if (candidates.length === 0) return {gx,gy};
+      return candidates[Math.floor(Math.random()*candidates.length)];
+    }
 
-    // pointer events on mapCanvas
-    mapCanvas.addEventListener('pointerdown', onPointerDown, { passive: false });
-    mapCanvas.addEventListener('pointermove', onPointerMove, { passive: true });
-    mapCanvas.addEventListener('pointerup', onPointerUp, { passive: true });
-    mapCanvas.addEventListener('pointercancel', onPointerUp, { passive: true });
+    // --------- NEW: precise mapping from screen -> mapCanvas device-pixel coords ----------
+    // Strategy:
+    //  - If crtOverlay + terminalCanvas exist: emulate shader mapping in JS:
+    //      overlay screen (vUV) -> uv = vUV*2-1 -> d = uv * ((1-k) + k * r) -> f = (d+1)/2; f.y = 1 - f.y
+    //      terminalPixel = f * terminalCanvas.width/height (device px)
+    //      mapLocalDevicePx = transform terminalPixel into source rect of drawImage(mapCanvas,...)
+    //  - Fallback: direct mapping from event client coords into mapCanvas bounding rect (old behavior)
+    function getMousePosOnCanvas(ev) {
+      // prefer overlay+terminal mapping if both exist
+      const overlay = document.getElementById('crtOverlayCanvas');
+      const term = document.getElementById('terminalCanvas');
+      try {
+        if (overlay && term && overlay.getBoundingClientRect && term.width && term.height) {
+          // 1) take mouse relative to overlay (overlay is fullscreen in crt_overlay.js)
+          const oRect = overlay.getBoundingClientRect();
+          const vx = (ev.clientX - oRect.left) / oRect.width;
+          const vy = (ev.clientY - oRect.top) / oRect.height;
+          // clamp
+          const cx = Math.max(0, Math.min(1, vx));
+          const cy = Math.max(0, Math.min(1, vy));
 
-    window.addEventListener('keydown', onKeyDown, { passive: true });
+          // 2) emulate shader forward mapping
+          let uvx = cx * 2 - 1;
+          let uvy = cy * 2 - 1;
+          const rlen = Math.hypot(uvx, uvy);
+          const k = CRT_DISTORTION;
+          const s = (1 - k) + rlen * k;
+          const dx = uvx * s;
+          const dy = uvy * s;
+          let fx = (dx + 1) * 0.5;
+          let fy = (dy + 1) * 0.5;
+          // shader did: f.y = 1.0 - f.y
+          fy = 1.0 - fy;
+
+          // 3) terminal canvas device pixels
+          const termPxX = fx * term.width;
+          const termPxY = fy * term.height;
+
+          // 4) find where mapCanvas was drawn into terminalCanvas
+          // terminal_canvas drawImage used mapCanvas.getBoundingClientRect() values in CSS pixels
+          // convert that CSS rect into terminal device pixels using term.width / window.innerWidth
+          const termDPR = term.width / window.innerWidth; // exact device scale used by terminalCanvas
+          const rMap = mapCanvas.getBoundingClientRect();
+          const sx_dev = Math.round(rMap.left * termDPR);
+          const sy_dev = Math.round(rMap.top * termDPR);
+          const sw_dev = Math.round(rMap.width * termDPR);
+          const sh_dev = Math.round(rMap.height * termDPR);
+
+          // 5) convert terminalPx -> source mapCanvas device px
+          // mapCanvas.width/height are source device px sizes
+          let localX = (termPxX - sx_dev) * (mapCanvas.width / (sw_dev || 1));
+          let localY = (termPxY - sy_dev) * (mapCanvas.height / (sh_dev || 1));
+
+          // 6) clamp and return
+          if (!Number.isFinite(localX) || !Number.isFinite(localY)) {
+            // fallback to simple mapping if something is wrong
+            const rect = mapCanvas.getBoundingClientRect();
+            const rawX = (ev.clientX - rect.left) * (mapCanvas.width / rect.width);
+            const rawY = (ev.clientY - rect.top) * (mapCanvas.height / rect.height);
+            return { x: rawX, y: rawY };
+          }
+          localX = Math.max(0, Math.min(mapCanvas.width, localX));
+          localY = Math.max(0, Math.min(mapCanvas.height, localY));
+          return { x: localX, y: localY };
+        }
+      } catch (e) {
+        // fall through to fallback
+      }
+
+      // Fallback: direct conversion using mapCanvas bounding rect (original behavior)
+      const rect = mapCanvas.getBoundingClientRect();
+      const rawX = (ev.clientX - rect.left) * (mapCanvas.width / rect.width);
+      const rawY = (ev.clientY - rect.top) * (mapCanvas.height / rect.height);
+      return { x: rawX, y: rawY };
+    }
+
+    // ----- event handling (unchanged except using new getMousePosOnCanvas) -----
+    mapCanvas.addEventListener('mousedown', (ev) => {
+      const m = getMousePosOnCanvas(ev);
+      mouse.down = true;
+      mouse.x = m.x; mouse.y = m.y;
+      let found = null;
+      for (let i = nodes.length - 1; i >= 0; i--) {
+        const n = nodes[i];
+        const d = Math.hypot(m.x - n.x, m.y - n.y);
+        if (d < 12 * DPR) { found = n; break; }
+      }
+      if (found) {
+        if (found.locked) {
+          if (selectedNode && selectedNode !== found) selectedNode.selected = false;
+          selectedNode = found;
+          selectedNode.selected = true;
+          return;
+        }
+        draggingNode = found;
+        draggingNode.drag = true;
+        if (selectedNode && selectedNode !== found) selectedNode.selected = false;
+        selectedNode = found;
+        selectedNode.selected = true;
+      } else {
+        if (selectedNode) { selectedNode.selected = false; selectedNode = null; }
+      }
+    });
+
+    window.addEventListener('mousemove', (ev) => {
+      const m = getMousePosOnCanvas(ev);
+      mouse.x = m.x; mouse.y = m.y;
+
+      let hoveredNode = null;
+      for (const n of nodes) {
+        if (Math.hypot(m.x - n.x, m.y - n.y) < 12 * DPR) {
+          hoveredNode = n; break;
+        }
+      }
+
+      mapCanvas.style.cursor = (hoveredNode && hoveredNode.locked) ? 'not-allowed' :
+                               (hoveredNode) ? 'pointer' : 'default';
+
+      if (draggingNode && draggingNode.locked) {
+        draggingNode.drag = false;
+        draggingNode = null;
+      }
+
+      if (draggingNode) {
+        const nearest = nearestIntersection(mouse.x, mouse.y);
+        draggingNode.gx = nearest.col;
+        draggingNode.gy = nearest.row;
+        draggingNode.targetGx = nearest.col;
+        draggingNode.targetGy = nearest.row;
+        const p = gridPoints[nearest.row][nearest.col];
+        draggingNode.x = p.x;
+        draggingNode.y = p.y;
+      }
+    });
+
+    window.addEventListener('mouseup', (ev) => {
+      mouse.down = false;
+      if (draggingNode) {
+        const n = draggingNode;
+        const nearest = nearestIntersection(n.x, n.y);
+        n.gx = nearest.col; n.gy = nearest.row;
+        const p = gridPoints[n.gy][n.gx];
+        n.x = p.x; n.y = p.y;
+        n.drag = false;
+        draggingNode = null;
+      }
+    });
+
+    window.addEventListener('keydown', (ev) => {
+      if (ev.key && (ev.key.toLowerCase() === 'q' || ev.key.toLowerCase() === 'й')) {
+        const n = selectedNode || draggingNode;
+        if (!n) return;
+
+        const nearest = nearestIntersection(n.x, n.y);
+
+        const isOccupied = nodes.some(other =>
+          other !== n &&
+          other.locked &&
+          other.gx === nearest.col &&
+          other.gy === nearest.row
+        );
+
+        if (isOccupied) {
+          statusEl.textContent = `⚠ Место занято другим узлом`;
+          setTimeout(()=> statusEl.textContent = `TARGET: ${currentTargetName}  |  Q/Й = lock/unlock selected node`, 1500);
+          return;
+        }
+
+        n.gx = nearest.col;
+        n.gy = nearest.row;
+        n.targetGx = n.gx;
+        n.targetGy = n.gy;
+        n.locked = !n.locked;
+        n.lastMoveAt = performance.now();
+
+        if (n.locked) {
+          const p = gridPoints[n.gy][n.gx];
+          n.x = p.x;
+          n.y = p.y;
+        }
+
+        statusEl.textContent = `TARGET: ${currentTargetName}  |  Node ${n.id} ${n.locked ? 'locked' : 'unlocked'}`;
+        setTimeout(()=> statusEl.textContent = `TARGET: ${currentTargetName}  |  Q/Й = lock/unlock selected node`, 1200);
+      }
+    });
+
+    let victoryShown = false;
+    function checkVictory() {
+      const set = new Set(nodes.map(n => `${n.gy},${n.gx}`));
+      const allPresent = currentTarget.every(([r,c]) => set.has(`${r},${c}`));
+      if (allPresent) {
+        victoryShown = true;
+        victoryEl.style.display = 'block';
+        console.info('Victory matched:', currentTargetName);
+        return true;
+      } else {
+        return false;
+      }
+    }
 
     checkBtn.addEventListener('click', () => {
-      statusEl.textContent = 'ПРОВЕРКА...';
-      setTimeout(() => statusEl.textContent = defaultStatus(), 800);
+      const ok = checkVictory();
+      if (!ok) {
+        statusEl.textContent = `TARGET: ${currentTargetName}  |  ПРИКОЛ НЕ СОБРАН`;
+        setTimeout(()=> statusEl.textContent = `TARGET: ${currentTargetName}  |  Q/Й = lock/unlock selected node`, 1400);
+      }
     });
 
     resetBtn.addEventListener('click', () => {
-      for (const n of nodes) { n.locked = false; n.drag = false; n.selected = false; }
+      for (const n of nodes) { n.locked = false; n.selected = false; n.drag = false; }
+      selectedNode = null; draggingNode = null;
       respawnNodes();
-      recomputeScreenGrid(true);
     });
-  }
 
-  // ---------- Init / Resize ----------
-  function resize() {
-    const cssW = CSS_SIZE, cssH = CSS_SIZE;
-    mapCanvas.style.width = cssW + 'px';
-    mapCanvas.style.height = cssH + 'px';
-    w = mapCanvas.width = Math.max(120, Math.floor(cssW * DPR));
-    h = mapCanvas.height = Math.max(120, Math.floor(cssH * DPR));
-    buildGrid();
-    if (!nodes || nodes.length === 0) respawnNodes();
-    updateRects(true);
-    recomputeScreenGrid(true);
-    statusEl.textContent = defaultStatus();
-  }
+    function update(dt) {
+      tick++;
+      const now = performance.now();
+      for (const n of nodes) {
+        if (n.drag) continue;
+        if (n.locked) {
+          const pLock = gridPoints[n.gy][n.gx];
+          n.x = pLock.x; n.y = pLock.y;
+          n.targetGx = n.gx; n.targetGy = n.gy;
+          continue;
+        }
+        const targetP = gridPoints[n.targetGy][n.targetGx];
+        const dist = Math.hypot(n.x - targetP.x, n.y - targetP.y);
+        if (dist < 1.4 * DPR) {
+          n.gx = n.targetGx; n.gy = n.targetGy;
+          if (now - n.lastMoveAt > AUTONOMOUS_MOVE_COOLDOWN + Math.random()*1200) {
+            const nb = pickNeighbor(n.gx, n.gy);
+            n.targetGx = nb.gx;
+            n.targetGy = nb.gy;
+            n.lastMoveAt = now;
+          }
+        } else {
+          const p = targetP;
+          const t = Math.min(1, n.speed * (dt/16) * (1 + Math.random()*0.6));
+          n.x += (p.x - n.x) * t;
+          n.y += (p.y - n.y) * t;
+        }
+      }
+    }
 
-  // ---------- Debug API ----------
-  window.netGrid_prod = window.netGrid_prod || {};
-  window.netGrid_prod.debug = function() {
-    updateRects(false);
-    recomputeScreenGrid(true);
-    return {
-      termRect: cache.termRect,
-      termSize: { w: cache.termW, h: cache.termH },
-      mapRect: cache.mapRect,
-      lutRegion: cache.lutRegion,
-      lutCols: cache.lutCols,
-      lutRows: cache.lutRows,
-      lutStep: cache.lutStep,
-      nodes: JSON.parse(JSON.stringify(nodes.map(n => ({ id: n.id, x: n.x, y: n.y, gx: n.gx, gy: n.gy, locked: n.locked })))),
-      screenGridSample: screenGrid ? screenGrid.slice(0, 3) : null
-    };
-  };
-  window.netGrid_prod.rebuildLUT = function(force) {
-    if (force) cache.inverseLUT = null;
-    buildInverseLUT();
-    recomputeScreenGrid(true);
-    return { lutCols: cache.lutCols, lutRows: cache.lutRows, step: cache.lutStep };
-  };
-  window.netGrid_prod.getNodes = () => nodes;
+    function draw() {
+      mctx.clearRect(0,0,w,h);
+      mctx.fillStyle = 'rgba(2,18,12,0.66)';
+      roundRect(mctx, 0, 0, w, h, 8*DPR);
+      mctx.fill();
 
-  // ---------- Start ----------
-  try {
+      const vig = mctx.createRadialGradient(w/2, h/2, Math.min(w,h)*0.06, w/2, h/2, Math.max(w,h)*0.9);
+      vig.addColorStop(0, 'rgba(0,0,0,0)');
+      vig.addColorStop(1, 'rgba(0,0,0,0.14)');
+      mctx.fillStyle = vig;
+      mctx.fillRect(0,0,w,h);
+
+      mctx.strokeStyle = `rgba(${COLOR.r},${COLOR.g},${COLOR.b},0.10)`;
+      mctx.lineWidth = 1 * DPR;
+      mctx.beginPath();
+      for (let i=0;i<=CELL_COUNT;i++){
+        const x = gridPoints[0][0].x + (i/CELL_COUNT)*(gridPoints[0][CELL_COUNT].x - gridPoints[0][0].x);
+        mctx.moveTo(x, gridPoints[0][0].y);
+        mctx.lineTo(x, gridPoints[INTER_COUNT-1][0].y);
+      }
+      for (let j=0;j<=CELL_COUNT;j++){
+        const y = gridPoints[0][0].y + (j/CELL_COUNT)*(gridPoints[INTER_COUNT-1][0].y - gridPoints[0][0].y);
+        mctx.moveTo(gridPoints[0][0].x, y);
+        mctx.lineTo(gridPoints[0][INTER_COUNT-1].x, y);
+      }
+      mctx.stroke();
+
+      mctx.save();
+      mctx.lineCap = 'round';
+      for (let i=0;i<nodes.length;i++){
+        for (let j=i+1;j<nodes.length;j++){
+          const A = nodes[i], B = nodes[j];
+          const d = Math.hypot(A.x - B.x, A.y - B.y);
+          if (d < (w * 0.32)) {
+            const baseAlpha = Math.max(0.10, 0.32 - (d / (w*0.9)) * 0.22);
+            const grad = mctx.createLinearGradient(A.x, A.y, B.x, B.y);
+            grad.addColorStop(0, glowColor(baseAlpha));
+            grad.addColorStop(1, glowColor(baseAlpha * 0.45));
+            mctx.strokeStyle = grad;
+            mctx.lineWidth = 1 * DPR;
+            mctx.beginPath();
+            mctx.moveTo(A.x, A.y);
+            mctx.lineTo(B.x, B.y);
+            mctx.stroke();
+          }
+        }
+      }
+      mctx.restore();
+
+      for (const n of nodes) {
+        const pulse = 0.5 + 0.5 * Math.sin((n.id + tick*0.02) * 1.2);
+        const intensity = n.selected ? 1.4 : (n.locked ? 1.2 : 1.0);
+        const glowR = (6 * DPR + pulse*3*DPR) * intensity;
+        const c = n.locked ? `rgba(255,60,60,${0.36 * intensity})` : `rgba(${COLOR.r},${COLOR.g},${COLOR.b},${0.36 * intensity})`;
+        const c2 = n.locked ? `rgba(255,60,60,${0.12 * intensity})` : `rgba(${COLOR.r},${COLOR.g},${COLOR.b},${0.12 * intensity})`;
+        const grd = mctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, glowR);
+        grd.addColorStop(0, c);
+        grd.addColorStop(0.6, c2);
+        grd.addColorStop(1, 'rgba(0,0,0,0)');
+        mctx.fillStyle = grd;
+        mctx.fillRect(n.x - glowR, n.y - glowR, glowR*2, glowR*2);
+
+        mctx.beginPath();
+        const coreR = 2.2 * DPR + (n.selected ? 1.6*DPR : 0);
+        mctx.fillStyle = n.locked ? redColor(1) : glowColor(1);
+        mctx.arc(n.x, n.y, coreR, 0, Math.PI*2);
+        mctx.fill();
+
+        mctx.beginPath();
+        mctx.lineWidth = 1 * DPR;
+        mctx.strokeStyle = n.locked ? redColor(0.92) : glowColor(0.92);
+        mctx.arc(n.x, n.y, coreR + 1.2*DPR, 0, Math.PI*2);
+        mctx.stroke();
+      }
+
+      mctx.save();
+      mctx.font = `${10 * DPR}px monospace`;
+      mctx.fillStyle = glowColor(0.95);
+      mctx.textAlign = 'right';
+      mctx.fillText('VIGIL NET', w - 8*DPR, 12*DPR);
+      mctx.restore();
+    }
+
+    function roundRect(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+
+    let lastTime = performance.now();
+    function loop() {
+      const now = performance.now();
+      const dt = now - lastTime;
+      lastTime = now;
+      update(dt);
+      draw();
+      raf = requestAnimationFrame(loop);
+    }
+
+    window.addEventListener('resize', resize);
     resize();
-    wireEvents();
-    buildInverseLUT(); // build eagerly once - region may be unknown yet, will lazy rebuild if needed
     raf = requestAnimationFrame(loop);
-    log('netGrid_production started');
-    statusEl.textContent = defaultStatus();
-  } catch (err) {
-    console.error('netGrid_production fatal', err);
-    statusEl.textContent = 'netGrid error — see console';
-  }
 
-  // Expose a careful note: I will NOT patch crt_overlay.js unless you say "patch crt".
-  // If after this file you still see severe lag, say exactly: "crt" and I will provide
-  // a single-file safe, non-visual-changing optimization for crt_overlay.js.
+    window.netGrid = window.netGrid || {};
+    window.netGrid.nodes = nodes;
+    window.netGrid.lockAll = function() {
+      for (const n of nodes) n.locked = true;
+    };
+    window.netGrid.unlockAll = function() {
+      for (const n of nodes) n.locked = false;
+    };
+    window.netGrid.getTargetName = () => currentTargetName;
+
+    console.info('netGrid_v4_fixed loaded — INTERACTIVE GRID (nodes move only on intersections)');
+
+  } catch (err) {
+    console.error('netGrid_v4_fixed error', err);
+  }
 })();
