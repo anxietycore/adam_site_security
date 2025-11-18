@@ -1,8 +1,12 @@
-// netGrid_v3.js — FINAL FIX
-// Full replacement. Uses forward mapping of crt_overlay shader (no inversion/LUT).
+// netGrid_v3.js — Robust final fix (replacement)
+// Strategy:
+// 1) fast analytic forward-mapping of shader (O(1)) used in rAF to keep mouseLocal up-to-date
+// 2) on mousedown do a small screen-space sampling (center + 4 neighbors) to robustly map visible pixel -> texture -> map local
+// 3) cache getBoundingClientRect(), minimize work on mousemove (only capture client coords)
+// 4) do heavy checks only on click, not per-mousemove — avoids lag
 (() => {
   try {
-    // ----- CONFIG -----
+    // ---------- CONFIG ----------
     const DPR = Math.min(window.devicePixelRatio || 1, 1.5);
     const SIZE_CSS = 300;
     const COLOR = { r: 6, g: 160, b: 118 };
@@ -13,10 +17,23 @@
     const NODE_COUNT = 10;
     const AUTONOMOUS_MOVE_COOLDOWN = 800;
 
-    // MUST MATCH crt_overlay.js DISTORTION (the 'uDist' used in shader)
+    // MUST match crt_overlay.js DISTORTION
     const CRT_DISTORTION = 0.28;
 
-    // ----- DOM: map canvas + UI -----
+    // How many samples around click (center + 4) — keeps cost low but robust
+    const CLICK_SAMPLE_OFFSETS = [
+      [0,0],
+      [-6, 0],
+      [6, 0],
+      [0, -6],
+      [0, 6]
+    ];
+
+    // pick radius in map-backbuffer pixels to consider "on node"
+    const CLICK_RADIUS_PX = 12; // visual tolerance
+    const CLICK_RADIUS_PX_DPR = CLICK_RADIUS_PX * DPR;
+
+    // ---------- DOM ----------
     const mapCanvas = document.createElement('canvas');
     Object.assign(mapCanvas.style, {
       position: 'fixed',
@@ -47,7 +64,7 @@
       userSelect: 'none',
       letterSpacing: '0.6px',
       fontWeight: '700',
-      opacity: '1',
+      opacity: '1'
     });
     document.body.appendChild(statusEl);
 
@@ -82,7 +99,7 @@
     Object.assign(resetBtn.style, { padding: '6px 12px', borderRadius: '6px', cursor: 'pointer' });
     controls.appendChild(resetBtn);
 
-    // ----- state -----
+    // ---------- STATE ----------
     let w = 0, h = 0;
     let gridPoints = [];
     let nodes = [];
@@ -91,18 +108,19 @@
     let selectedNode = null;
     let draggingNode = null;
 
-    // mouse pipeline
+    // mouse pipeline: raw client coords stored at mousemove (cheap); processed once-per-frame
     let rawClient = { x: 0, y: 0, valid: false };
     let mouseLocal = { x: 0, y: 0, down: false };
     let mouseDirty = false;
+
+    // cached rects (term canvas and map canvas) to avoid frequent DOM reads
     let cachedRects = { termRect: null, mapRect: null };
 
-    // find terminal canvas (the one crt_overlay samples from)
     function getTerminalCanvas() {
       return document.getElementById('terminalCanvas') || null;
     }
 
-    // ----- grid / node helpers -----
+    // ---------- GRID & NODES ----------
     function buildGrid() {
       gridPoints = [];
       const margin = 12 * DPR;
@@ -122,13 +140,13 @@
     function respawnNodes() {
       const positions = [];
       for (let r = 0; r < INTER_COUNT; r++)
-        for (let c = 0; c < INTER_COUNT; c++)
-          positions.push([r, c]);
+        for (let c = 0; c < INTER_COUNT; c++) positions.push([r, c]);
 
       for (let i = positions.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [positions[i], positions[j]] = [positions[j], positions[i]];
       }
+
       const chosen = positions.slice(0, NODE_COUNT);
       nodes = chosen.map((rc, idx) => {
         const [r, c] = rc;
@@ -165,7 +183,7 @@
       return { row: best.r, col: best.c, dist: best.d };
     }
 
-    // ----- cached rects -----
+    // ---------- CACHED RECTS ----------
     function updateCachedRects(force = false) {
       const term = getTerminalCanvas();
       if (!term) {
@@ -187,77 +205,54 @@
       }
     }
 
-    // ----- core: shader-forward mapping (exact) -----
-    // This implements exactly the same forward transform used in crt_overlay.js:
-    // fs:
-    //   vec2 uv = vUV*2.0 - 1.0;
-    //   float r = length(uv);
-    //   vec2 d = mix(uv, uv*r, uDist);
-    //   vec2 f = (d + 1.0) * 0.5;
-    //   f.y = 1.0 - f.y;
-    //
-    // Given screen pixel in terminal pixel space (termPxX, termPxY),
-    // compute which texture texel (on terminalCanvas) the shader samples for that screen pixel.
+    // ---------- SHADER-FORWARD MAPPING ----------
+    // Implements forward mapping equivalent to crt_overlay shader:
+    // uv = vUV*2.0 - 1.0;
+    // r = length(uv);
+    // d = mix(uv, uv * r, uDist);
+    // f = (d + 1.0) * 0.5;
+    // f.y = 1.0 - f.y;
     function shaderForwardSampleCoord_fromScreen(termPxX, termPxY, termW, termH) {
-      // guard
       if (termW <= 0 || termH <= 0) return { x: termPxX, y: termPxY };
 
-      // vUV in [0..1]
       const vux = termPxX / termW;
       const vuy = termPxY / termH;
-
-      // uv in [-1..1]
       const ux = vux * 2 - 1;
       const uy = vuy * 2 - 1;
-
       const r = Math.hypot(ux, uy);
       const k = CRT_DISTORTION;
-
-      // d = uv * ( (1-k) + k * r )
+      // s = mix(1.0, r, k) = (1-k) + k*r
       const s = (1 - k) + k * r;
       const dx = ux * s;
       const dy = uy * s;
-
-      // f = (d + 1) * 0.5 ; then flip y
       let fx = (dx + 1) * 0.5;
       let fy = (dy + 1) * 0.5;
-      fy = 1.0 - fy;
-
-      // back to terminal texture pixel coords
+      fy = 1.0 - fy; // shader flips Y
       return { x: fx * termW, y: fy * termH };
     }
 
-    // Map a texture pixel (on terminalCanvas) to local pixel within mapCanvas (backing pixels).
+    // Map a texture pixel (on terminalCanvas) to local mapCanvas pixel coords (backing pixels)
     function terminalTexturePixel_to_localMap(texPx, texPy, termRect, mapRect, termW, termH) {
-      // fraction across terminal texture
       const fracX = texPx / termW;
       const fracY = texPy / termH;
-
-      // corresponding CSS px inside terminalRect
       const cssX = fracX * termRect.width;
       const cssY = fracY * termRect.height;
-
-      // relative css inside mapRect
       const relCssX = cssX - (mapRect.left - termRect.left);
       const relCssY = cssY - (mapRect.top - termRect.top);
-
-      // map to mapCanvas backing pixels
       const localX = relCssX * (mapCanvas.width / mapRect.width);
       const localY = relCssY * (mapCanvas.height / mapRect.height);
-
-      // clamp
       return {
         x: Math.max(0, Math.min(mapCanvas.width, localX)),
         y: Math.max(0, Math.min(mapCanvas.height, localY))
       };
     }
 
-    // ----- process mouse (called in rAF, not directly on mousemove) -----
+    // ---------- PROCESS MOUSE (rAF) ----------
+    // cheap analytic mapping executed once per frame if mouseDirty
     function processMousePosition() {
       mouseDirty = false;
       const term = getTerminalCanvas();
       if (!term) {
-        // fallback: map directly using mapCanvas rect (no shader)
         const rect = mapCanvas.getBoundingClientRect();
         const rawX = (rawClient.x - rect.left) * (mapCanvas.width / rect.width);
         const rawY = (rawClient.y - rect.top) * (mapCanvas.height / rect.height);
@@ -265,59 +260,101 @@
         mouseLocal.y = Math.max(0, Math.min(mapCanvas.height, rawY));
         return;
       }
-
-      const termW = term.width;
-      const termH = term.height;
-      // ensure cached rects valid
+      const termW = term.width, termH = term.height;
       if (!cachedRects.termRect || !cachedRects.mapRect) updateCachedRects(true);
-      const termRect = cachedRects.termRect;
-      const mapRect = cachedRects.mapRect;
-
-      // convert client -> terminal pixel coords
+      const termRect = cachedRects.termRect, mapRect = cachedRects.mapRect;
       const termPxX = (rawClient.x - termRect.left) * (termW / termRect.width);
       const termPxY = (rawClient.y - termRect.top) * (termH / termRect.height);
-
-      // use shader forward mapping to find which texture pixel is sampled
-      const texCoord = shaderForwardSampleCoord_fromScreen(termPxX, termPxY, termW, termH);
-
-      // map texture pixel to local mapCanvas pixel coords
-      const local = terminalTexturePixel_to_localMap(texCoord.x, texCoord.y, termRect, mapRect, termW, termH);
-
+      const tex = shaderForwardSampleCoord_fromScreen(termPxX, termPxY, termW, termH);
+      const local = terminalTexturePixel_to_localMap(tex.x, tex.y, termRect, mapRect, termW, termH);
       mouseLocal.x = local.x; mouseLocal.y = local.y;
     }
 
-    // ----- events -----
-    window.addEventListener('resize', () => {
-      resize();
-      updateCachedRects(true);
-    }, { passive: true });
+    // ---------- ROBUST CLICK MAPPING ----------
+    // On mousedown we sample a few neighboring screen pixels and map them to local coords,
+    // then choose the best node (closest) among samples. This improves hit detection when
+    // shader/rounding produce a slight offset between visual dot and exact math mapping.
+    function findNodeAtScreen(clientX, clientY) {
+      const term = getTerminalCanvas();
+      if (!term) {
+        // fallback: simple mapCanvas mapping
+        const rect = mapCanvas.getBoundingClientRect();
+        const localX = (clientX - rect.left) * (mapCanvas.width / rect.width);
+        const localY = (clientY - rect.top) * (mapCanvas.height / rect.height);
+        return findNodeNearLocal(localX, localY, CLICK_RADIUS_PX_DPR);
+      }
 
+      const termW = term.width, termH = term.height;
+      if (!cachedRects.termRect || !cachedRects.mapRect) updateCachedRects(true);
+      const termRect = cachedRects.termRect, mapRect = cachedRects.mapRect;
+
+      let best = { node: null, dist: Infinity, localX: null, localY: null };
+
+      for (let i = 0; i < CLICK_SAMPLE_OFFSETS.length; i++) {
+        const [ox, oy] = CLICK_SAMPLE_OFFSETS[i];
+        const sx = clientX + ox;
+        const sy = clientY + oy;
+        // project to terminal pixel space
+        const termPxX = (sx - termRect.left) * (termW / termRect.width);
+        const termPxY = (sy - termRect.top) * (termH / termRect.height);
+        // shader forward mapping
+        const tex = shaderForwardSampleCoord_fromScreen(termPxX, termPxY, termW, termH);
+        // to local map pixel
+        const local = terminalTexturePixel_to_localMap(tex.x, tex.y, termRect, mapRect, termW, termH);
+
+        // find nearest node to this local sample
+        for (const n of nodes) {
+          const d = Math.hypot(local.x - n.x, local.y - n.y);
+          if (d < best.dist) {
+            best = { node: n, dist: d, localX: local.x, localY: local.y };
+          }
+        }
+      }
+
+      if (best.node && best.dist <= CLICK_RADIUS_PX_DPR) {
+        return { node: best.node, localX: best.localX, localY: best.localY, dist: best.dist };
+      }
+      return null;
+    }
+
+    function findNodeNearLocal(localX, localY, radius) {
+      let best = { node: null, dist: Infinity };
+      for (const n of nodes) {
+        const d = Math.hypot(localX - n.x, localY - n.y);
+        if (d < best.dist) best = { node: n, dist: d };
+      }
+      if (best.node && best.dist <= radius) return { node: best.node, dist: best.dist };
+      return null;
+    }
+
+    // ---------- EVENTS ----------
+    window.addEventListener('resize', () => { resize(); updateCachedRects(true); }, { passive: true });
     window.addEventListener('scroll', () => updateCachedRects(true), { passive: true });
+    window.addEventListener('orientationchange', () => updateCachedRects(true), { passive: true });
 
     window.addEventListener('mousemove', (ev) => {
       rawClient.x = ev.clientX; rawClient.y = ev.clientY; rawClient.valid = true;
       mouseDirty = true;
     }, { passive: true });
 
+    // mousedown uses robust sample to determine node at screen location
     mapCanvas.addEventListener('mousedown', (ev) => {
       rawClient.x = ev.clientX; rawClient.y = ev.clientY; rawClient.valid = true;
-      processMousePosition(); // immediate so click feels snappy
+      // do robust find (samples) on click — expensive but only runs on click
+      const found = findNodeAtScreen(ev.clientX, ev.clientY);
       mouseLocal.down = true;
-      let found = null;
-      for (let i = nodes.length - 1; i >= 0; i--) {
-        const n = nodes[i];
-        if (Math.hypot(mouseLocal.x - n.x, mouseLocal.y - n.y) < 12 * DPR) { found = n; break; }
-      }
-      if (found) {
-        if (found.locked) {
-          if (selectedNode && selectedNode !== found) selectedNode.selected = false;
-          selectedNode = found; selectedNode.selected = true;
+      if (found && found.node) {
+        const n = found.node;
+        if (n.locked) {
+          if (selectedNode && selectedNode !== n) selectedNode.selected = false;
+          selectedNode = n; selectedNode.selected = true;
           return;
         }
-        draggingNode = found; draggingNode.drag = true;
-        if (selectedNode && selectedNode !== found) selectedNode.selected = false;
-        selectedNode = found; selectedNode.selected = true;
+        draggingNode = n; draggingNode.drag = true;
+        if (selectedNode && selectedNode !== n) selectedNode.selected = false;
+        selectedNode = n; selectedNode.selected = true;
       } else {
+        // no node found at click — deselect
         if (selectedNode) { selectedNode.selected = false; selectedNode = null; }
       }
     });
@@ -355,9 +392,8 @@
       }
     });
 
-    // ----- helpers & UI logic -----
+    // ---------- UI ----------
     function defaultStatus() { return `TARGET: GRID  |  Q/Й = lock/unlock selected node`; }
-
     checkBtn.addEventListener('click', () => {
       const ok = checkVictory();
       if (!ok) {
@@ -365,24 +401,24 @@
         setTimeout(() => statusEl.textContent = defaultStatus(), 1400);
       }
     });
-
     resetBtn.addEventListener('click', () => {
       for (const n of nodes) { n.locked = false; n.selected = false; n.drag = false; }
-      selectedNode = null; draggingNode = null;
-      respawnNodes();
+      selectedNode = null; draggingNode = null; respawnNodes();
     });
 
+    // ---------- UPDATE & DRAW ----------
     function update(dt) {
       tick++;
-      // process mouse once per frame (fast)
-      if (mouseDirty) processMousePosition();
+      if (mouseDirty) processMousePosition(); // cheap analytic mapping once per frame
 
-      // hovering detection (cheap)
-      let hovered = null;
+      // hover & dragging
+      let hoveredNode = null;
       for (const n of nodes) {
-        if (Math.hypot(mouseLocal.x - n.x, mouseLocal.y - n.y) < 12 * DPR) { hovered = n; break; }
+        if (Math.hypot(mouseLocal.x - n.x, mouseLocal.y - n.y) < 12 * DPR) {
+          hoveredNode = n; break;
+        }
       }
-      mapCanvas.style.cursor = (hovered && hovered.locked) ? 'not-allowed' : (hovered ? 'pointer' : 'default');
+      mapCanvas.style.cursor = (hoveredNode && hoveredNode.locked) ? 'not-allowed' : (hoveredNode ? 'pointer' : 'default');
 
       if (draggingNode && draggingNode.locked) {
         draggingNode.drag = false; draggingNode = null;
@@ -395,7 +431,7 @@
         draggingNode.x = p.x; draggingNode.y = p.y;
       }
 
-      // autonomous moves
+      // autonomous movement
       const now = performance.now();
       for (const n of nodes) {
         if (n.drag) continue;
@@ -425,7 +461,6 @@
       roundRect(mctx, 0, 0, w, h, 8 * DPR);
       mctx.fill();
 
-      // grid lines
       mctx.strokeStyle = `rgba(${COLOR.r},${COLOR.g},${COLOR.b},0.10)`;
       mctx.lineWidth = 1 * DPR;
       mctx.beginPath();
@@ -493,7 +528,6 @@
       ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
     }
 
-    // ----- main loop -----
     let lastTime = performance.now();
     function loop() {
       const now = performance.now();
@@ -503,7 +537,7 @@
       raf = requestAnimationFrame(loop);
     }
 
-    // ----- init / resize -----
+    // ---------- INIT ----------
     function resize() {
       const cssW = SIZE_CSS, cssH = SIZE_CSS;
       mapCanvas.style.width = cssW + 'px';
@@ -515,28 +549,20 @@
       updateCachedRects(true);
       statusEl.textContent = defaultStatus();
     }
-
     window.addEventListener('load', () => { resize(); raf = requestAnimationFrame(loop); });
     window.addEventListener('resize', resize);
-    // update cached rects also on layout-change events
-    window.addEventListener('orientationchange', () => updateCachedRects(true));
-
-    // initial
     resize();
 
-    // expose API
+    // ---------- API ----------
     window.netGrid = window.netGrid || {};
     window.netGrid.nodes = nodes;
-    window.netGrid.lockAll = function () { for (const n of nodes) n.locked = true; };
-    window.netGrid.unlockAll = function () { for (const n of nodes) n.locked = false; };
+    window.netGrid.lockAll = () => { for (const n of nodes) n.locked = true; };
+    window.netGrid.unlockAll = () => { for (const n of nodes) n.locked = false; };
     window.netGrid.getMouseLocal = () => ({ ...mouseLocal });
 
-    // simple victory placeholder
-    function checkVictory() {
-      return false;
-    }
+    function checkVictory() { return false; } // keep simple placeholder
 
-    console.info('netGrid_v3 final fix loaded — direct shader-forward mapping');
+    console.info('netGrid_v3 — robust final fix loaded');
 
   } catch (err) {
     console.error('netGrid_v3 fatal', err);
