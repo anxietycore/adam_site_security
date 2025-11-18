@@ -1,4 +1,4 @@
-// netGrid_v3-FINAL.js — ИСПРАВЛЕННАЯ ВЕРСИЯ
+// netGrid_v3-FIXED.js — ИСПРАВЛЕННЫЙ ПОРЯДОК ОБЪЯВЛЕНИЙ
 (() => {
   try {
     // ----- CONFIG -----
@@ -12,7 +12,17 @@
     const NODE_COUNT = 10;
     const AUTONOMOUS_MOVE_COOLDOWN = 800;
     const CRT_DISTORTION = 0.28;
-    const HIT_RADIUS = 30 * DPR; // ✅ УВЕЛИЧЕНО для теста
+    const HIT_RADIUS = 30 * DPR;
+
+    // ✅ СИМВОЛЫ ОБЪЯВЛЕНЫ ДО ИСПОЛЬЗОВАНИЯ
+    const SYMBOLS = {
+      V: [[0,0],[1,1],[2,2],[3,3],[4,4],[5,5],[6,6],[6,0],[5,1],[4,2]],
+      I: [[0,3],[1,3],[2,3],[3,3],[4,3],[5,3],[6,3]],
+      X: [[0,0],[1,1],[2,2],[3,3],[4,4],[5,5],[6,6],[0,6],[1,5],[2,4],[4,2],[5,1],[6,0]]
+    };
+    const symbolNames = Object.keys(SYMBOLS);
+    const currentTargetName = symbolNames[Math.floor(Math.random()*symbolNames.length)];
+    const currentTarget = SYMBOLS[currentTargetName];
 
     // ----- ОБРАТНАЯ ТРАНСФОРМАЦИЯ -----
     let inverseLUT = null;
@@ -94,7 +104,6 @@
       return { x: finalX, y: finalY };
     }
 
-    // ✅ ДОБАВЛЕНА ОТСУТСТВУЮЩАЯ ФУНКЦИЯ
     function pickNeighbor(gx, gy) {
       const candidates = [];
       if (gy > 0) candidates.push({gx, gy: gy-1});
@@ -122,7 +131,7 @@
     document.body.appendChild(mapCanvas);
     const mctx = mapCanvas.getContext('2d');
 
-    // ✅ КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: установка размеров ДО первого resize
+    // ✅ Установка размеров ДО resize
     mapCanvas.width = Math.floor(SIZE_CSS * DPR);
     mapCanvas.height = Math.floor(SIZE_CSS * DPR);
 
@@ -216,11 +225,6 @@
     let draggingNode = null;
     let mouse = { x: 0, y: 0, down: false };
 
-    const currentTargetName = 'V'; // Для теста фиксируем символ
-    const currentTarget = SYMBOLS[currentTargetName];
-
-    statusEl.textContent = `TARGET: ${currentTargetName}  |  Q/Й = lock/unlock selected node`;
-
     // ----- Вспомогательные функции -----
     function glowColor(a=1){ return `rgba(${COLOR.r},${COLOR.g},${COLOR.b},${a})`; }
     function redColor(a=1){ return `rgba(255,60,60,${a})`; }
@@ -234,7 +238,7 @@
       w = mapCanvas.width = Math.floor(cssW * DPR);
       h = mapCanvas.height = Math.floor(cssH * DPR);
       
-      console.log(`[DEBUG] Resize: canvas ${w}x${h}, CSS ${cssW}x${cssH}, DPR ${DPR}`);
+      console.log(`[DEBUG] Final canvas size: ${w}x${h}px (CSS: ${cssW}x${cssH})`);
       
       buildInverseLUT(w, h);
       buildGrid();
@@ -332,7 +336,7 @@
       
       for (const n of nodes) {
         const d = Math.hypot(m.x - n.x, m.y - n.y);
-        console.log(`[HITTEST] Node ${n.id}: ${d.toFixed(2)}px`);
+        console.log(`[HITTEST] Node ${n.id}: ${d.toFixed(2)}px (pos: ${n.x.toFixed(2)},${n.y.toFixed(2)})`);
         if (d < minDist) minDist = d;
         if (d < HIT_RADIUS) { found = n; break; }
       }
@@ -388,6 +392,7 @@
     });
 
     window.addEventListener('mouseup', (ev) => {
+      console.log('[MOUSE] UP');
       mouse.down = false;
       if (draggingNode) {
         const n = draggingNode;
@@ -518,6 +523,7 @@
       }
       mctx.restore();
 
+      // Рисуем узлы
       for (const n of nodes) {
         const pulse = 0.5 + 0.5 * Math.sin((n.id + tick*0.02) * 1.2);
         const intensity = n.selected ? 1.4 : (n.locked ? 1.2 : 1.0);
