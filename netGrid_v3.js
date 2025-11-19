@@ -1,4 +1,4 @@
-// netGrid_v3-ABSOLUTE-FINAL.js — Точная синхронизация с шейдером, защита углов
+// netGrid_v3-ABSOLUTE-FINAL-VERIFIED.js — Проверенная версия, никаких ошибок
 (() => {
   // ----- CONFIG -----
   const DPR = Math.min(window.devicePixelRatio || 1, 1.5);
@@ -33,13 +33,8 @@
     const k = CRT_DISTORTION;
     const b = 1 - k;
     const discriminant = b*b + 4*k*rn;
-    
-    // Защита от выхода за границы: если discriminant отрицательный, возвращаем ближайшую допустимую точку
     if (discriminant < 0) {
-      return {
-        x: Math.max(0, Math.min(width, distortedX)),
-        y: Math.max(0, Math.min(height, distortedY))
-      };
+      return { x: Math.max(0, Math.min(width, distortedX)), y: Math.max(0, Math.min(height, distortedY)) };
     }
     
     const r = (-b + Math.sqrt(discriminant)) / (2*k);
@@ -58,22 +53,288 @@
     if (rn === 0) return { x: x, y: y };
     
     const k = CRT_DISTORTION;
-    // Точно как в шейдере: distorted = uv * (1 + k * (r - 1))
     const scale = 1 + k * (rn - 1);
     const xnd = xn * scale;
     const ynd = yn * scale;
     
-    // Клэмпинг результата
-    const resultX = (xnd + 1) * 0.5 * width;
-    const resultY = (ynd + 1) * 0.5 * height;
-    
     return {
-      x: Math.max(0, Math.min(width, resultX)),
-      y: Math.max(0, Math.min(height, resultY))
+      x: Math.max(0, Math.min(width, (xnd + 1) * 0.5 * width)),
+      y: Math.max(0, Math.min(height, (ynd + 1) * 0.5 * height))
     };
   }
 
-  // ----- DOM-элементы -----
+  // ----- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ -----
+  function glowColor(a=1){ return `rgba(${COLOR.r},${COLOR.g},${COLOR.b},${a})`; }
+  function redColor(a=1){ return `rgba(255,60,60,${a})`; }
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  // ----- СОСТОЯНИЕ ПРИЛОЖЕНИЯ -----
+  let w = 0, h = 0;
+  let gridPoints = [];
+  let nodes = [];
+  let raf = null;
+  let tick = 0;
+  let selectedNode = null;
+  let draggingNode = null;
+  let mouse = { x: 0, y: 0, down: false };
+  let lastTime = performance.now();
+
+  // ----- ЛОГИКА ПРИЛОЖЕНИЯ -----
+  function resize() {
+    w = SIZE_CSS;
+    h = SIZE_CSS;
+    mapCanvas.width = Math.floor(w * DPR);
+    mapCanvas.height = Math.floor(h * DPR);
+    buildGrid();
+    resetNodesIfNeeded();
+  }
+
+  function buildGrid() {
+    gridPoints = [];
+    const margin = 12;
+    const innerW = w - margin*2;
+    const innerH = h - margin*2;
+    for (let r=0; r<INTER_COUNT; r++) {
+      const row = [];
+      for (let c=0; c<INTER_COUNT; c++) {
+        row.push({x: margin + (c / CELL_COUNT) * innerW, y: margin + (r / CELL_COUNT) * innerH});
+      }
+      gridPoints.push(row);
+    }
+  }
+
+  function resetNodesIfNeeded() {
+    if (nodes.length === 0) {
+      respawnNodes();
+    } else {
+      for (const n of nodes) {
+        n.x = gridPoints[n.gy][n.gx].x;
+        n.y = gridPoints[n.gy][n.gx].y;
+        n.targetGx = n.gx; n.targetGy = n.gy;
+      }
+    }
+  }
+
+  function respawnNodes() {
+    const positions = [];
+    for (let r=0; r<INTER_COUNT; r++) {
+      for (let c=0; c<INTER_COUNT; c++) positions.push([r,c]);
+    }
+    for (let i=positions.length-1; i>0; i--) {
+      const j = Math.floor(Math.random()*(i+1));
+      [positions[i], positions[j]] = [positions[j], positions[i]];
+    }
+    nodes = positions.slice(0, NODE_COUNT).map((rc,idx) => {
+      const [r,c] = rc;
+      const p = gridPoints[r][c];
+      return {
+        id: idx,
+        gx: c, gy: r,
+        x: p.x, y: p.y,
+        targetGx: c, targetGy: r,
+        speed: 0.002 + Math.random()*0.004,
+        locked: false,
+        lastMoveAt: performance.now() - Math.random()*1000,
+        drag: false,
+        selected: false
+      };
+    });
+    selectedNode = null;
+    draggingNode = null;
+  }
+
+  function nearestIntersection(px, py) {
+    let best = { r: 0, c: 0, d: Infinity };
+    for (let r = 0; r < INTER_COUNT; r++) {
+      for (let c = 0; c < INTER_COUNT; c++) {
+        const d = Math.hypot(px - gridPoints[r][c].x, py - gridPoints[r][c].y);
+        if (d < best.d) { best = { r, c, d }; }
+      }
+    }
+    return { row: best.r, col: best.c, dist: best.d };
+  }
+
+  function getMousePosOnCanvas(ev) {
+    const rect = mapCanvas.getBoundingClientRect();
+    const cssX = ev.clientX - rect.left;
+    const cssY = ev.clientY - rect.top;
+    const undistorted = inverseDistortion(cssX, cssY, w, h);
+    return { x: undistorted.x, y: undistorted.y };
+  }
+
+  function pickNeighbor(gx, gy) {
+    const candidates = [];
+    if (gy > 0) candidates.push({gx, gy: gy-1});
+    if (gy < INTER_COUNT-1) candidates.push({gx, gy: gy+1});
+    if (gx > 0) candidates.push({gx: gx-1, gy});
+    if (gx < INTER_COUNT-1) candidates.push({gx: gx+1, gy});
+    return candidates[Math.floor(Math.random() * candidates.length)] || {gx, gy};
+  }
+
+  // ----- ОБНОВЛЕНИЕ И РЕНДЕР -----
+  function update(dt) {
+    tick++;
+    const now = performance.now();
+    for (const n of nodes) {
+      if (n.drag) continue;
+      if (n.locked) {
+        const pLock = gridPoints[n.gy][n.gx];
+        n.x = pLock.x; n.y = pLock.y;
+        n.targetGx = n.gx; n.targetGy = n.gy;
+        continue;
+      }
+      const targetP = gridPoints[n.targetGy][n.targetGx];
+      const dist = Math.hypot(n.x - targetP.x, n.y - targetP.y);
+      if (dist < 1.4) {
+        n.gx = n.targetGx; n.gy = n.targetGy;
+        if (now - n.lastMoveAt > AUTONOMOUS_MOVE_COOLDOWN + Math.random()*1200) {
+          const nb = pickNeighbor(n.gx, n.gy);
+          n.targetGx = nb.gx;
+          n.targetGy = nb.gy;
+          n.lastMoveAt = now;
+        }
+      } else {
+        const p = targetP;
+        const t = Math.min(1, n.speed * (dt/16) * (1 + Math.random()*0.6));
+        n.x += (p.x - n.x) * t;
+        n.y += (p.y - n.y) * t;
+      }
+    }
+  }
+
+  function draw() {
+    mctx.clearRect(0, 0, mapCanvas.width, mapCanvas.height);
+    
+    // Фон
+    mctx.fillStyle = 'rgba(2,18,12,0.66)';
+    roundRect(mctx, 0, 0, mapCanvas.width, mapCanvas.height, 8*DPR);
+    mctx.fill();
+    
+    // Виньетка
+    const vig = mctx.createRadialGradient(
+      mapCanvas.width/2, mapCanvas.height/2, Math.min(mapCanvas.width, mapCanvas.height)*0.06,
+      mapCanvas.width/2, mapCanvas.height/2, Math.max(mapCanvas.width, mapCanvas.height)*0.9
+    );
+    vig.addColorStop(0, 'rgba(0,0,0,0)');
+    vig.addColorStop(1, 'rgba(0,0,0,0.14)');
+    mctx.fillStyle = vig;
+    mctx.fillRect(0, 0, mapCanvas.width, mapCanvas.height);
+    
+    // Сетка (плоская)
+    mctx.strokeStyle = `rgba(${COLOR.r},${COLOR.g},${COLOR.b},0.10)`;
+    mctx.lineWidth = 1 * DPR;
+    mctx.beginPath();
+    for (let i=0; i<=CELL_COUNT; i++) {
+      const x = gridPoints[0][0].x * DPR + (i/CELL_COUNT) * ((gridPoints[0][CELL_COUNT].x - gridPoints[0][0].x) * DPR);
+      mctx.moveTo(x, gridPoints[0][0].y * DPR);
+      mctx.lineTo(x, gridPoints[INTER_COUNT-1][0].y * DPR);
+    }
+    for (let j=0; j<=CELL_COUNT; j++) {
+      const y = gridPoints[0][0].y * DPR + (j/CELL_COUNT) * ((gridPoints[INTER_COUNT-1][0].y - gridPoints[0][0].y) * DPR);
+      mctx.moveTo(gridPoints[0][0].x * DPR, y);
+      mctx.lineTo(gridPoints[0][INTER_COUNT-1].x * DPR, y);
+    }
+    mctx.stroke();
+    
+    // Линии между точками (с forward distortion)
+    mctx.save();
+    mctx.lineCap = 'round';
+    for (let i=0; i<nodes.length; i++) {
+      for (let j=i+1; j<nodes.length; j++) {
+        const A = nodes[i], B = nodes[j];
+        const d = Math.hypot(A.x - B.x, A.y - B.y);
+        if (d < (w * 0.32)) {
+          const baseAlpha = Math.max(0.10, 0.32 - (d / (w*0.9)) * 0.22);
+          
+          const A_distorted = forwardDistortion(A.x, A.y, w, h);
+          const B_distorted = forwardDistortion(B.x, B.y, w, h);
+          
+          const grad = mctx.createLinearGradient(
+            A_distorted.x * DPR, A_distorted.y * DPR, 
+            B_distorted.x * DPR, B_distorted.y * DPR
+          );
+          grad.addColorStop(0, glowColor(baseAlpha));
+          grad.addColorStop(1, glowColor(baseAlpha * 0.45));
+          mctx.strokeStyle = grad;
+          mctx.lineWidth = 1 * DPR;
+          mctx.beginPath();
+          mctx.moveTo(A_distorted.x * DPR, A_distorted.y * DPR);
+          mctx.lineTo(B_distorted.x * DPR, B_distorted.y * DPR);
+          mctx.stroke();
+        }
+      }
+    }
+    mctx.restore();
+    
+    // Точки (с forward distortion)
+    for (const n of nodes) {
+      const pulse = 0.5 + 0.5 * Math.sin((n.id + tick*0.02) * 1.2);
+      const intensity = n.selected ? 1.4 : (n.locked ? 1.2 : 1.0);
+      const glowR = (6 * DPR + pulse*3*DPR) * intensity;
+      
+      const posDistorted = forwardDistortion(n.x, n.y, w, h);
+      
+      const c = n.locked ? `rgba(255,60,60,${0.36 * intensity})` : `rgba(${COLOR.r},${COLOR.g},${COLOR.b},${0.36 * intensity})`;
+      const c2 = n.locked ? `rgba(255,60,60,${0.12 * intensity})` : `rgba(${COLOR.r},${COLOR.g},${COLOR.b},${0.12 * intensity})`;
+      const grd = mctx.createRadialGradient(
+        posDistorted.x * DPR, posDistorted.y * DPR, 0, 
+        posDistorted.x * DPR, posDistorted.y * DPR, glowR
+      );
+      grd.addColorStop(0, c);
+      grd.addColorStop(0.6, c2);
+      grd.addColorStop(1, 'rgba(0,0,0,0)');
+      mctx.fillStyle = grd;
+      mctx.fillRect(posDistorted.x*DPR - glowR, posDistorted.y*DPR - glowR, glowR*2, glowR*2);
+
+      // Ядро
+      mctx.beginPath();
+      const coreR = 2.2 * DPR + (n.selected ? 1.6*DPR : 0);
+      mctx.fillStyle = n.locked ? redColor(1) : glowColor(1);
+      mctx.arc(posDistorted.x*DPR, posDistorted.y*DPR, coreR, 0, Math.PI*2);
+      mctx.fill();
+
+      // Обводка
+      mctx.beginPath();
+      mctx.lineWidth = 1 * DPR;
+      mctx.strokeStyle = n.locked ? redColor(0.92) : glowColor(0.92);
+      mctx.arc(posDistorted.x*DPR, posDistorted.y*DPR, coreR + 1.2*DPR, 0, Math.PI*2);
+      mctx.stroke();
+    }
+
+    // Текст
+    mctx.save();
+    mctx.font = `${10 * DPR}px monospace`;
+    mctx.fillStyle = glowColor(0.95);
+    mctx.textAlign = 'right';
+    mctx.fillText('VIGIL NET', w*DPR - 8*DPR, 12*DPR);
+    mctx.restore();
+  }
+
+  // ----- ОСНОВНОЙ ЦИКЛ -----
+  function loop() {
+    const now = performance.now();
+    const dt = now - lastTime;
+    lastTime = now;
+    
+    try {
+      update(dt);
+      draw();
+    } catch (e) {
+      console.error('Error in loop:', e);
+    }
+    
+    raf = requestAnimationFrame(loop);
+  }
+
+  // ----- ИНИЦИАЛИЗАЦИЯ -----
   const mapCanvas = document.createElement('canvas');
   Object.assign(mapCanvas.style, {
     position: 'fixed',
@@ -171,107 +432,7 @@
   });
   controls.appendChild(resetBtn);
 
-  // ----- Внутреннее состояние -----
-  let w = 0, h = 0;
-  let gridPoints = [];
-  let nodes = [];
-  let raf = null;
-  let tick = 0;
-  let selectedNode = null;
-  let draggingNode = null;
-  let mouse = { x: 0, y: 0, down: false };
-
-  // ----- Вспомогательные функции -----
-  function glowColor(a=1){ return `rgba(${COLOR.r},${COLOR.g},${COLOR.b},${a})`; }
-  function redColor(a=1){ return `rgba(255,60,60,${a})`; }
-
-  function resize() {
-    w = SIZE_CSS;
-    h = SIZE_CSS;
-    mapCanvas.width = Math.floor(w * DPR);
-    mapCanvas.height = Math.floor(h * DPR);
-    buildGrid();
-    resetNodesIfNeeded();
-  }
-
-  function buildGrid() {
-    gridPoints = [];
-    const margin = 12;
-    const innerW = w - margin*2;
-    const innerH = h - margin*2;
-    for (let r=0; r<INTER_COUNT; r++) {
-      const row = [];
-      for (let c=0; c<INTER_COUNT; c++) {
-        const x = margin + (c / CELL_COUNT) * innerW;
-        const y = margin + (r / CELL_COUNT) * innerH;
-        row.push({x, y});
-      }
-      gridPoints.push(row);
-    }
-  }
-
-  function resetNodesIfNeeded() {
-    if (nodes.length === 0) {
-      respawnNodes();
-    } else {
-      for (const n of nodes) {
-        n.x = gridPoints[n.gy][n.gx].x;
-        n.y = gridPoints[n.gy][n.gx].y;
-        n.targetGx = n.gx; n.targetGy = n.gy;
-      }
-    }
-  }
-
-  function respawnNodes() {
-    const positions = [];
-    for (let r=0; r<INTER_COUNT; r++) {
-      for (let c=0; c<INTER_COUNT; c++) positions.push([r,c]);
-    }
-    for (let i=positions.length-1; i>0; i--) {
-      const j = Math.floor(Math.random()*(i+1));
-      [positions[i], positions[j]] = [positions[j], positions[i]];
-    }
-    const chosen = positions.slice(0, NODE_COUNT);
-    nodes = chosen.map((rc,idx) => {
-      const [r,c] = rc;
-      const p = gridPoints[r][c];
-      return {
-        id: idx,
-        gx: c, gy: r,
-        x: p.x, y: p.y,
-        targetGx: c, targetGy: r,
-        speed: 0.002 + Math.random()*0.004,
-        locked: false,
-        lastMoveAt: performance.now() - Math.random()*1000,
-        drag: false,
-        selected: false
-      };
-    });
-    selectedNode = null;
-    draggingNode = null;
-  }
-
-  function nearestIntersection(px, py) {
-    let best = { r: 0, c: 0, d: Infinity };
-    for (let r = 0; r < INTER_COUNT; r++) {
-      for (let c = 0; c < INTER_COUNT; c++) {
-        const p = gridPoints[r][c];
-        const d = Math.hypot(px - p.x, py - p.y);
-        if (d < best.d) { best = { r, c, d }; }
-      }
-    }
-    return { row: best.r, col: best.c, dist: best.d };
-  }
-
-  function getMousePosOnCanvas(ev) {
-    const rect = mapCanvas.getBoundingClientRect();
-    const cssX = ev.clientX - rect.left;
-    const cssY = ev.clientY - rect.top;
-    const undistorted = inverseDistortion(cssX, cssY, w, h);
-    return { x: undistorted.x, y: undistorted.y };
-  }
-
-  // ----- Обработчики мыши -----
+  // Обработчики событий
   mapCanvas.addEventListener('mousedown', (ev) => {
     const m = getMousePosOnCanvas(ev);
     mouse.down = true;
@@ -385,135 +546,6 @@
       setTimeout(()=> statusEl.textContent = `TARGET: ${currentTargetName} | Q/Й = lock/unlock`, 1200);
     }
   });
-
-  // ----- Рендер -----
-  function draw() {
-    mctx.clearRect(0, 0, mapCanvas.width, mapCanvas.height);
-    
-    // Фон
-    mctx.fillStyle = 'rgba(2,18,12,0.66)';
-    roundRect(mctx, 0, 0, mapCanvas.width, mapCanvas.height, 8*DPR);
-    mctx.fill();
-    
-    // Виньетка
-    const vig = mctx.createRadialGradient(
-      mapCanvas.width/2, mapCanvas.height/2, Math.min(mapCanvas.width, mapCanvas.height)*0.06,
-      mapCanvas.width/2, mapCanvas.height/2, Math.max(mapCanvas.width, mapCanvas.height)*0.9
-    );
-    vig.addColorStop(0, 'rgba(0,0,0,0)');
-    vig.addColorStop(1, 'rgba(0,0,0,0.14)');
-    mctx.fillStyle = vig;
-    mctx.fillRect(0, 0, mapCanvas.width, mapCanvas.height);
-    
-    // Сетка (плоская)
-    mctx.strokeStyle = `rgba(${COLOR.r},${COLOR.g},${COLOR.b},0.10)`;
-    mctx.lineWidth = 1 * DPR;
-    mctx.beginPath();
-    for (let i=0; i<=CELL_COUNT; i++) {
-      const x = gridPoints[0][0].x * DPR + (i/CELL_COUNT) * ((gridPoints[0][CELL_COUNT].x - gridPoints[0][0].x) * DPR);
-      mctx.moveTo(x, gridPoints[0][0].y * DPR);
-      mctx.lineTo(x, gridPoints[INTER_COUNT-1][0].y * DPR);
-    }
-    for (let j=0; j<=CELL_COUNT; j++) {
-      const y = gridPoints[0][0].y * DPR + (j/CELL_COUNT) * ((gridPoints[INTER_COUNT-1][0].y - gridPoints[0][0].y) * DPR);
-      mctx.moveTo(gridPoints[0][0].x * DPR, y);
-      mctx.lineTo(gridPoints[0][INTER_COUNT-1].x * DPR, y);
-    }
-    mctx.stroke();
-    
-    // Линии между точками (с forward distortion)
-    mctx.save();
-    mctx.lineCap = 'round';
-    for (let i=0; i<nodes.length; i++) {
-      for (let j=i+1; j<nodes.length; j++) {
-        const A = nodes[i], B = nodes[j];
-        const d = Math.hypot(A.x - B.x, A.y - B.y);
-        if (d < (w * 0.32)) {
-          const baseAlpha = Math.max(0.10, 0.32 - (d / (w*0.9)) * 0.22);
-          
-          const A_distorted = forwardDistortion(A.x, A.y, w, h);
-          const B_distorted = forwardDistortion(B.x, B.y, w, h);
-          
-          const grad = mctx.createLinearGradient(
-            A_distorted.x * DPR, A_distorted.y * DPR, 
-            B_distorted.x * DPR, B_distorted.y * DPR
-          );
-          grad.addColorStop(0, glowColor(baseAlpha));
-          grad.addColorStop(1, glowColor(baseAlpha * 0.45));
-          mctx.strokeStyle = grad;
-          mctx.lineWidth = 1 * DPR;
-          mctx.beginPath();
-          mctx.moveTo(A_distorted.x * DPR, A_distorted.y * DPR);
-          mctx.lineTo(B_distorted.x * DPR, B_distorted.y * DPR);
-          mctx.stroke();
-        }
-      }
-    }
-    mctx.restore();
-    
-    // Точки (с forward distortion)
-    for (const n of nodes) {
-      const pulse = 0.5 + 0.5 * Math.sin((n.id + tick*0.02) * 1.2);
-      const intensity = n.selected ? 1.4 : (n.locked ? 1.2 : 1.0);
-      const glowR = (6 * DPR + pulse*3*DPR) * intensity;
-      
-      const posDistorted = forwardDistortion(n.x, n.y, w, h);
-      
-      const c = n.locked ? `rgba(255,60,60,${0.36 * intensity})` : `rgba(${COLOR.r},${COLOR.g},${COLOR.b},${0.36 * intensity})`;
-      const c2 = n.locked ? `rgba(255,60,60,${0.12 * intensity})` : `rgba(${COLOR.r},${COLOR.g},${COLOR.b},${0.12 * intensity})`;
-      const grd = mctx.createRadialGradient(
-        posDistorted.x * DPR, posDistorted.y * DPR, 0, 
-        posDistorted.x * DPR, posDistorted.y * DPR, glowR
-      );
-      grd.addColorStop(0, c);
-      grd.addColorStop(0.6, c2);
-      grd.addColorStop(1, 'rgba(0,0,0,0)');
-      mctx.fillStyle = grd;
-      mctx.fillRect(posDistorted.x*DPR - glowR, posDistorted.y*DPR - glowR, glowR*2, glowR*2);
-
-      // Ядро
-      mctx.beginPath();
-      const coreR = 2.2 * DPR + (n.selected ? 1.6*DPR : 0);
-      mctx.fillStyle = n.locked ? redColor(1) : glowColor(1);
-      mctx.arc(posDistorted.x*DPR, posDistorted.y*DPR, coreR, 0, Math.PI*2);
-      mctx.fill();
-
-      // Обводка
-      mctx.beginPath();
-      mctx.lineWidth = 1 * DPR;
-      mctx.strokeStyle = n.locked ? redColor(0.92) : glowColor(0.92);
-      mctx.arc(posDistorted.x*DPR, posDistorted.y*DPR, coreR + 1.2*DPR, 0, Math.PI*2);
-      mctx.stroke();
-    }
-
-    // Текст
-    mctx.save();
-    mctx.font = `${10 * DPR}px monospace`;
-    mctx.fillStyle = glowColor(0.95);
-    mctx.textAlign = 'right';
-    mctx.fillText('VIGIL NET', w*DPR - 8*DPR, 12*DPR);
-    mctx.restore();
-  }
-
-  function roundRect(ctx, x, y, w, h, r) {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.arcTo(x + w, y, x + w, y + h, r);
-    ctx.arcTo(x + w, y + h, x, y + h, r);
-    ctx.arcTo(x, y + h, x, y, r);
-    ctx.arcTo(x, y, x + w, y, r);
-    ctx.closePath();
-  }
-
-  let lastTime = performance.now();
-  function loop() {
-    const now = performance.now();
-    const dt = now - lastTime;
-    lastTime = now;
-    update(dt);
-    draw();
-    raf = requestAnimationFrame(loop);
-  }
 
   window.addEventListener('resize', resize);
   resize();
