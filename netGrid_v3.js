@@ -1,4 +1,4 @@
-// netGrid_v3-FINAL-FIXED.js — FORWARD DISTORTION для рендеринга, точный hit-test
+// netGrid_v3-FINAL-ABSOLUTE.js — Совершенная синхронизация с шейдером, клэмпинг углов
 (() => {
   // ----- CONFIG -----
   const DPR = Math.min(window.devicePixelRatio || 1, 1.5);
@@ -54,9 +54,13 @@
     const r = rn * (1 + k * (rn - 1));
     const scale = r / rn;
     
+    // Клэмпинг результата, чтобы не выходить за границы
+    const resultX = (xn * scale + 1) * 0.5 * width;
+    const resultY = (yn * scale + 1) * 0.5 * height;
+    
     return {
-      x: (xn * scale + 1) * 0.5 * width,
-      y: (yn * scale + 1) * 0.5 * height
+      x: Math.max(0, Math.min(width, resultX)),
+      y: Math.max(0, Math.min(height, resultY))
     };
   }
 
@@ -416,7 +420,7 @@
   function draw() {
     mctx.clearRect(0, 0, mapCanvas.width, mapCanvas.height);
     
-    // Прямоугольник фона
+    // Фон
     mctx.fillStyle = 'rgba(2,18,12,0.66)';
     roundRect(mctx, 0, 0, mapCanvas.width, mapCanvas.height, 8*DPR);
     mctx.fill();
@@ -431,7 +435,7 @@
     mctx.fillStyle = vig;
     mctx.fillRect(0, 0, mapCanvas.width, mapCanvas.height);
     
-    // Сетка
+    // Сетка (плоская, как и должна быть)
     mctx.strokeStyle = `rgba(${COLOR.r},${COLOR.g},${COLOR.b},0.10)`;
     mctx.lineWidth = 1 * DPR;
     mctx.beginPath();
@@ -447,7 +451,7 @@
     }
     mctx.stroke();
     
-    // Линии между точками
+    // Линии между точками (с forward distortion)
     mctx.save();
     mctx.lineCap = 'round';
     for (let i=0; i<nodes.length; i++) {
@@ -457,10 +461,11 @@
         if (d < (w * 0.32)) {
           const baseAlpha = Math.max(0.10, 0.32 - (d / (w*0.9)) * 0.22);
           
-          // Применяем forward distortion к координатам для линий
+          // Применяем forward distortion
           const A_distorted = forwardDistortion(A.x, A.y, w, h);
           const B_distorted = forwardDistortion(B.x, B.y, w, h);
           
+          // Умножаем на DPR для рисования
           const grad = mctx.createLinearGradient(
             A_distorted.x * DPR, A_distorted.y * DPR, 
             B_distorted.x * DPR, B_distorted.y * DPR
@@ -484,12 +489,16 @@
       const intensity = n.selected ? 1.4 : (n.locked ? 1.2 : 1.0);
       const glowR = (6 * DPR + pulse*3*DPR) * intensity;
       
-      // Применяем forward distortion к координатам точки
+      // Применяем forward distortion
       const posDistorted = forwardDistortion(n.x, n.y, w, h);
       
+      // Рисуем в DPR-координатах
       const c = n.locked ? `rgba(255,60,60,${0.36 * intensity})` : `rgba(${COLOR.r},${COLOR.g},${COLOR.b},${0.36 * intensity})`;
       const c2 = n.locked ? `rgba(255,60,60,${0.12 * intensity})` : `rgba(${COLOR.r},${COLOR.g},${COLOR.b},${0.12 * intensity})`;
-      const grd = mctx.createRadialGradient(posDistorted.x*DPR, posDistorted.y*DPR, 0, posDistorted.x*DPR, posDistorted.y*DPR, glowR);
+      const grd = mctx.createRadialGradient(
+        posDistorted.x * DPR, posDistorted.y * DPR, 0, 
+        posDistorted.x * DPR, posDistorted.y * DPR, glowR
+      );
       grd.addColorStop(0, c);
       grd.addColorStop(0.6, c2);
       grd.addColorStop(1, 'rgba(0,0,0,0)');
