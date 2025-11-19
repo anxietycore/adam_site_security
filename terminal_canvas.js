@@ -1,5 +1,5 @@
 // terminal_canvas_final.js
-// Полностью объединённый файл с командами сетки: netmode, net check, net status
+// Полностью объединённый файл с командами сетки: netmode, net check
 // + деградация сетки. Остальной функционал не тронут.
 (() => {
   // ---------- CONFIG ----------
@@ -148,6 +148,11 @@
       this.updateIndicator();
       this.updateEffects();
 
+      // Обновляем деградацию сетки
+      if (window.__netGrid) {
+        window.__netGrid.setSystemDegradation(this.level);
+      }
+
       // audio cues when thresholds crossed
       if (Math.floor(this.level / 5) > Math.floor(this.lastSoundLevel / 5)) {
         if (this.level >= 60 && this.level < 80) this.playAudio('sounds/reset_com.mp3');
@@ -254,6 +259,11 @@
       this.stopAutoCommands();
       this.ghostActive = false;
       this.autoActive = false;
+      // Сбрасываем деградацию сетки
+      if (window.__netGrid) {
+        window.__netGrid.addDegradation(-100);
+        window.__netGrid.setSystemDegradation(0);
+      }
       requestFullRedraw();
     }
 
@@ -700,7 +710,14 @@
     const command = parts[0];
     const args = parts.slice(1);
 
-    const commandWeights = { 'syst':1, 'syslog':1, 'net':1, 'dscr':2, 'subj':2, 'notes':1.5, 'deg':0 };
+    // Блокируем команды если активен режим сетки
+    if (window.__netGrid && window.__netGrid.isGridMode() && command !== 'netmode') {
+      addColoredText('ОШИБКА: Для ввода команд выйдите из режима сетки [ESC]', '#FF4444');
+      addInputLine();
+      return;
+    }
+
+    const commandWeights = { 'syst':1, 'syslog':1, 'net':1, 'dscr':2, 'subj':2, 'notes':1.5, 'deg':0, 'netmode':0.5 };
     if (commandWeights[command]) degradation.addDegradation(commandWeights[command]);
 
     switch(command){
@@ -718,6 +735,8 @@
         await typeText('  RESET        — сброс интерфейса', 'output', 10);
         await typeText('  EXIT         — завершить сессию', 'output', 10);
         await typeText('  CLEAR        — очистить терминал', 'output', 10);
+        await typeText('  NETMODE      — войти в режим управления сеткой', 'output', 10);
+        await typeText('  NET CHECK    — проверить конфигурацию узлов', 'output', 10);
         await typeText('  DEG          — установить уровень деградации (разработка)', 'output', 10);
         await typeText('------------------------------------', 'output', 10);
         await typeText('ПРИМЕЧАНИЕ: часть команд заблокирована или скрыта.', 'output', 18);
@@ -831,7 +850,7 @@
       case 'net':
         if (args.length === 0) {
           addColoredText('ОШИБКА: Укажите подкоманду', '#FF4444');
-          await typeText('Доступные подкоманды: check, status', 'output', 12);
+          await typeText('Доступные подкоманды: check', 'output', 12);
           break;
         }
         const sub = args[0];
@@ -844,7 +863,7 @@
             await showLoading(800, "Сканирование конфигурации узлов");
             const result = window.__netGrid.checkSolution();
             if (result.solved) {
-              addColoredText('>>> КОРЕКТНЫЙ КЛЕЙМО АКТИВИРОВАН <<<', '#00FF41');
+              addColoredText('>>> КЛЮЧ ПОДОШЁЛ <<<', '#00FF41');
               addColoredText('> Доступ к сектору OBSERVER-7 открыт', '#FFFF00');
               degradation.playAudio('sounds/success.mp3');
             } else {
@@ -853,17 +872,6 @@
               degradation.playAudio('sounds/reject.mp3');
               window.__netGrid.addDegradation(2);
             }
-            break;
-          case 'status':
-            if (!window.__netGrid) {
-              addColoredText('ОШИБКА: Система узлов недоступна', '#FF4444');
-              break;
-            }
-            const gridDegradation = window.__netGrid.getDegradation().toFixed(1);
-            await typeText('[СТАТУС СЕТКИ УЗЛОВ]', 'output', 12);
-            addColoredText('------------------------------------', '#00FF41');
-            window.__netGrid.status(); // Это вызовет вывод в статус-баре
-            await typeText(`Уровень деградации сетки: ${gridDegradation}%`, gridDegradation > 30 ? '#FF4444' : '#FFFF00');
             break;
           default:
             addColoredText(`ОШИБКА: Неизвестная подкоманда ${sub}`, '#FF4444');
@@ -904,8 +912,6 @@
             for (const m of resetMessages) { addOutput(m); await new Promise(r=>setTimeout(r,700)); }
             degradation.reset();
             if (window.__netGrid) {
-              // Сбрасываем и сетку
-              window.__netGrid.addDegradation(-100);
               window.__netGrid.setGridMode(false);
             }
             commandCount = 0;
@@ -959,6 +965,10 @@
   // ---------- key handling ----------
   document.addEventListener('keydown', function(e){
     if (isFrozen) return;
+    
+    // Блокируем ввод если активен режим сетки
+    if (window.__netGrid && window.__netGrid.isGridMode()) return;
+    
     const active = document.activeElement;
     if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
 
