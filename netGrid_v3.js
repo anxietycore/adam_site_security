@@ -3,24 +3,13 @@
   try {
     // ════════════════════════════════════════════════════════════════════
     // ЦЕЛЕВАЯ КОНФИГУРАЦИЯ ДЛЯ АКТИВАЦИИ КЛЕЙМА
-    // Формат: [[x,y], [x,y], ...] — координаты ПЕРЕСЕЧЕНИЙ, не пиксели!
     // ТЕСТОВЫЙ КЛЮЧ: буква "V" (10 точек)
-    // ASCII представление:
-    //   0 1 2 3 4 5 6
-    // 0 . . . . . . .
-    // 1 . . . . . . .
-    // 2 . . . . ● . .
-    // 3 . . . ● . ● .
-    // 4 . . ● . . . ●
-    // 5 . ● . . . . .
-    // 6 ● . . . . . .
     const TARGET_PATTERN = [
       [0,6], [1,5], [2,4], [3,3], [4,2],  // Левая ветвь V
       [6,6], [5,5], [4,4], [3,2], [2,1]   // Правая ветвь V (зеркально)
     ];
     // ════════════════════════════════════════════════════════════════════
 
-    // ----- CONFIG -----
     const DPR = Math.min(window.devicePixelRatio || 1, 1.5);
     const SIZE_CSS = 300;
     const COLOR = { r: 6, g: 160, b: 118 };
@@ -29,11 +18,8 @@
     const CELL_COUNT = 6;
     const INTER_COUNT = CELL_COUNT + 1;
     const NODE_COUNT = 10;
-    const AUTONOMOUS_MOVE_COOLDOWN = 800;
-    const CRT_DISTORTION = 0.28;
-    const MOVE_SPEED = 0.02; // Скорость плавного движения (0-1)
+    const MOVE_SPEED = 0.05;
 
-    // ----- DOM-элементы -----
     const mapCanvas = document.createElement('canvas');
     Object.assign(mapCanvas.style, {
       position: 'fixed',
@@ -41,7 +27,7 @@
       bottom: '20px',
       width: `${SIZE_CSS}px`,
       height: `${SIZE_CSS}px`,
-      pointerEvents: 'none', // Отключаем мышь полностью
+      pointerEvents: 'none',
       zIndex: MAP_Z,
       borderRadius: '8px',
       boxShadow: '0 18px 40px rgba(0,0,0,0.9)',
@@ -69,19 +55,6 @@
     });
     document.body.appendChild(statusEl);
 
-    const controls = document.createElement('div');
-    Object.assign(controls.style, {
-      position: 'fixed',
-      right: '20px',
-      bottom: `${20 + SIZE_CSS + 12}px`,
-      display: 'flex',
-      gap: '8px',
-      zIndex: MAP_Z + 1,
-      alignItems: 'center'
-    });
-    document.body.appendChild(controls);
-
-    // ----- Внутреннее состояние -----
     let w = 0, h = 0;
     let gridPoints = [];
     let nodes = [];
@@ -89,10 +62,9 @@
     let tick = 0;
     let selectedNode = null;
     let isGridMode = false;
-    let keyDegradation = 0; // Деградация сетки (0-100)
-    let systemDegradation = 0; // Деградация всей системы (0-100)
+    let keyDegradation = 0;
+    let systemDegradation = 0;
 
-    // ----- Вспомогательные функции -----
     function glowColor(a=1){ return `rgba(${COLOR.r},${COLOR.g},${COLOR.b},${a})`; }
     function redColor(a=1){ return `rgba(255,60,60,${a})`; }
 
@@ -152,7 +124,7 @@
           id: idx,
           gx: c, gy: r,
           x: p.x, y: p.y,
-          targetGx: c, targetGy: r, // Целевая позиция для плавного движения
+          targetGx: c, targetGy: r,
           locked: false,
           selected: false,
           lastMove: 0
@@ -161,7 +133,6 @@
       selectedNode = null;
     }
 
-    // ----- API для терминала -----
     window.__netGrid = {
       setGridMode(active){
         isGridMode = active;
@@ -201,7 +172,7 @@
         };
       },
       getDegradation: () => keyDegradation,
-      addDegradation: (v) => { keyDegradation = Math.max(0, Math.min(100, keyDegradation + v)); },
+      addDegradation: (v) => { keyDegradation = Math.max(0, Math.min(100, keyDegradation + Math.round(v))); },
       setSystemDegradation: (level) => { systemDegradation = level; }
     };
 
@@ -217,7 +188,6 @@
       const newGx = Math.max(0, Math.min(INTER_COUNT-1, selectedNode.gx + dx));
       const newGy = Math.max(0, Math.min(INTER_COUNT-1, selectedNode.gy + dy));
       
-      // Проверка занятости
       const occupied = nodes.some(n => 
         n !== selectedNode && 
         n.locked && 
@@ -231,39 +201,38 @@
         return;
       }
       
+      // МГНОВЕННОЕ ПЕРЕМЕЩЕНИЕ НА НОВУЮ ПОЗИЦИЮ
       selectedNode.gx = newGx;
       selectedNode.gy = newGy;
       selectedNode.targetGx = newGx;
       selectedNode.targetGy = newGy;
+      selectedNode.x = gridPoints[newGy][newGx].x;
+      selectedNode.y = gridPoints[newGy][newGx].y;
       updateStatusBar();
     }
 
     function toggleLockSelected(){
       if (!selectedNode) return;
       selectedNode.locked = !selectedNode.locked;
-      window.__netGrid.addDegradation(0.5); // +0.5% за каждое действие
+      window.__netGrid.addDegradation(1); // +1% за каждое действие
       
-      // Автоматическая проверка при достижении нужного кол-ва закреплений
       const lockedCount = nodes.filter(n => n.locked).length;
       if (lockedCount === TARGET_PATTERN.length) {
         setTimeout(() => {
           const result = window.__netGrid.checkSolution();
           if (result.solved) {
-            // Успех
             if (window.__TerminalCanvas) {
               window.__TerminalCanvas.addColoredText('>>> КЛЮЧ ПОДОШЁЛ <<<', '#00FF41');
               window.__TerminalCanvas.addColoredText('> Доступ к сектору OBSERVER-7 открыт', '#FFFF00');
             }
-            // Мигаем сеткой зелёным
             flashGridSuccess();
           } else {
-            // Неудача
             const wrong = lockedCount - result.correct;
             if (window.__TerminalCanvas) {
               window.__TerminalCanvas.addColoredText('> Конфигурация не соответствует протоколу', '#FF4444');
               window.__TerminalCanvas.addColoredText(`> Правильных узлов: ${result.correct}/${result.total} | Неправильных: ${wrong}`, '#FFFF00');
             }
-            window.__netGrid.addDegradation(2); // +2% деградация сетки
+            window.__netGrid.addDegradation(2);
           }
         }, 500);
       }
@@ -290,10 +259,9 @@
     }
 
     function flashGridSuccess(){
-      // Визуальный эффект: 3 быстрых вспышки зелёным
       let flashCount = 0;
       const flashInterval = setInterval(() => {
-        nodes.forEach(n => n.selected = !n.selected); // Мигаем выделением
+        nodes.forEach(n => n.selected = !n.selected);
         flashCount++;
         if (flashCount >= 6) {
           clearInterval(flashInterval);
@@ -303,31 +271,28 @@
       }, 100);
     }
 
-    // Обновление автономного движения точек
+    // Обновление автономного движения (ТОЛЬКО ПО ЛИНИЯМ СЕТКИ)
     function updateAutonomousMovement() {
       const now = Date.now();
       const degradation = systemDegradation;
       
       for (const n of nodes) {
-        // Если точка выбрана, закреплена или деградация 90-99% (хаос) - не двигаем
         if (n.selected || n.locked || (degradation >= 90 && degradation < 100)) {
           n.targetGx = n.gx;
           n.targetGy = n.gy;
           continue;
         }
         
-        // При высокой деградации (80-89%) - увеличиваем частоту движения и хаотичность
-        const moveChance = degradation > 80 ? 0.3 : 0.15;
-        const moveDelay = degradation > 80 ? 300 : AUTONOMOUS_MOVE_COOLDOWN;
+        const moveChance = degradation > 80 ? 0.3 : 0.1;
+        const moveDelay = degradation > 80 ? 300 : 1500;
         
         if (now - n.lastMove > moveDelay && Math.random() < moveChance) {
-          // Выбираем случайную соседнюю позицию на сетке
+          // Движение СТРОГО по линиям сетки (8 направлений)
           const dirs = [[0,1], [1,0], [0,-1], [-1,0], [1,1], [-1,-1], [1,-1], [-1,1]];
           const [dx, dy] = dirs[Math.floor(Math.random() * dirs.length)];
           const newGx = Math.max(0, Math.min(INTER_COUNT-1, n.gx + dx));
           const newGy = Math.max(0, Math.min(INTER_COUNT-1, n.gy + dy));
           
-          // Проверяем, не занята ли целевая позиция
           const occupied = nodes.some(other => 
             other !== n && 
             other.locked && 
@@ -348,29 +313,23 @@
         const targetX = gridPoints[n.targetGy][n.targetGx].x;
         const targetY = gridPoints[n.targetGy][n.targetGx].y;
         
-        // При деградации 90-99% - добавляем хаотичные смещения
         if (degradation >= 90 && degradation < 100) {
-          n.x += (Math.random() - 0.5) * 10;
-          n.y += (Math.random() - 0.5) * 10;
-          // Ограничиваем размерами canvas
-          n.x = Math.max(0, Math.min(w, n.x));
-          n.y = Math.max(0, Math.min(h, n.y));
+          // ГРЯЗНЫЙ ЭФФЕКТ: хаотичное мерцание и смещения
+          n.x = targetX + (Math.random() - 0.5) * 15;
+          n.y = targetY + (Math.random() - 0.5) * 15;
         } else {
-          // Плавное движение
           n.x += (targetX - n.x) * MOVE_SPEED;
           n.y += (targetY - n.y) * MOVE_SPEED;
         }
         
-        // Обновляем grid coordinates если близко к цели
-        const dist = Math.hypot(targetX - n.x, targetY - n.y);
-        if (dist < 1) {
+        if (Math.hypot(targetX - n.x, targetY - n.y) < 1) {
           n.gx = n.targetGx;
           n.gy = n.targetGy;
         }
       }
     }
 
-    // ----- Обработчики клавиатуры -----
+    // Обработчики клавиатуры
     document.addEventListener('keydown', (e) => {
       if (!isGridMode) return;
       
@@ -413,11 +372,10 @@
       }
     });
 
-    // ----- Анимация и рендер -----
+    // Рендер с эффектом деградации
     function draw() {
       mctx.clearRect(0,0,w,h);
       
-      // Обновляем автономное движение
       updateAutonomousMovement();
       
       // Фон
@@ -448,6 +406,31 @@
         mctx.lineTo(gridPoints[0][INTER_COUNT-1].x, y);
       }
       mctx.stroke();
+
+      // ГРЯЗНЫЙ ЭФФЕКТ при деградации 90-99%
+      if (systemDegradation >= 90 && systemDegradation < 100) {
+        mctx.save();
+        mctx.globalAlpha = 0.1 + (systemDegradation - 90) / 10 * 0.2;
+        mctx.fillStyle = '#222';
+        mctx.fillRect(0,0,w,h);
+        mctx.restore();
+        
+        // Помехи на линиях связей
+        mctx.save();
+        mctx.globalAlpha = 0.3;
+        mctx.strokeStyle = '#FF6600';
+        mctx.lineWidth = 0.5 * DPR;
+        for (let i=0;i<5;i++) {
+          const x = Math.random() * w;
+          const y = Math.random() * h;
+          const len = Math.random() * 50 + 20;
+          mctx.beginPath();
+          mctx.moveTo(x,y);
+          mctx.lineTo(x+len, y+len);
+          mctx.stroke();
+        }
+        mctx.restore();
+      }
 
       // Связи
       mctx.save();
@@ -503,37 +486,13 @@
         // ID узла
         if (n.selected || keyDegradation > 60) {
           mctx.save();
-          mctx.font = `${10 * DPR}px ${'monospace'}`;
+          mctx.font = `${10 * DPR}px monospace`;
           mctx.fillStyle = '#FFFFFF';
           mctx.textAlign = 'center';
           mctx.textBaseline = 'middle';
           mctx.fillText(String(n.id), n.x, n.y);
           mctx.restore();
         }
-      }
-
-      // ASCII-подсказка ключа (показывается при низкой деградации)
-      if (systemDegradation < 50) {
-        mctx.save();
-        mctx.font = `${8 * DPR}px monospace`;
-        mctx.fillStyle = glowColor(0.3);
-        mctx.textAlign = 'left';
-        mctx.textBaseline = 'top';
-        const ascii = [
-          'КЛЮЧ: Буква "V"',
-          '  0 1 2 3 4 5 6',
-          '0 . . . . . . .',
-          '1 . . . . . . .',
-          '2 . . . . ● . .',
-          '3 . . . ● . ● .',
-          '4 . . ● . . . ●',
-          '5 . ● . . . . .',
-          '6 ● . . . . . .'
-        ];
-        ascii.forEach((line, i) => {
-          mctx.fillText(line, 10 * DPR, 20 * DPR + i * 10 * DPR);
-        });
-        mctx.restore();
       }
 
       // Лейбл
@@ -545,7 +504,6 @@
       mctx.restore();
     }
 
-    // ----- Запуск -----
     window.addEventListener('resize', resize);
     resize();
     raf = requestAnimationFrame(function loop(){
