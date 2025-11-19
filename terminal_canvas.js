@@ -10,7 +10,7 @@
   const MAX_LINES = 10000;
   const DPR = Math.min(window.devicePixelRatio || 1, 2);
   const CANVAS_Z = 50;
-  const TYPING_SPEED_DEFAULT = 14; // ms per char
+  const TYPING_SPEED_DEFAULT = 14;
 
   // ---------- create main canvas ----------
   const canvas = document.createElement('canvas');
@@ -33,7 +33,6 @@
   if (origTerminal) {
     origTerminal.style.opacity = '0';
     origTerminal.style.pointerEvents = 'auto';
-    // keep DOM interactive but remove stray visual children to avoid duplication
     try {
       const mo = new MutationObserver(muts => {
         muts.forEach(m => {
@@ -72,7 +71,6 @@
   let vw = 0, vh = 0;
 
   // ---------- draw scheduling ----------
-  // CRITICAL: pendingRedraw must exist before any resize()/requestFullRedraw() calls
   let pendingRedraw = false;
   function requestFullRedraw(){
     if (!pendingRedraw) {
@@ -99,8 +97,8 @@
   resize();
 
   // ---------- terminal state ----------
-  const lines = []; // {text, color, _ephemeral}
-  let scrollOffset = 0; // 0 = bottom (latest)
+  const lines = [];
+  let scrollOffset = 0;
   let currentLine = '';
   let commandHistory = [];
   let historyIndex = -1;
@@ -114,10 +112,9 @@
   let ghostInputInterval = null;
   let autoCommandInterval = null;
 
-  // duplicate-guard (avoid double processing of same command quickly)
   let lastProcessed = { text: null, ts: 0 };
 
-  // ---------- Degradation system (robust version) ----------
+  // ---------- Degradation system ----------
   class DegradationSystem {
     constructor() {
       this.level = parseInt(localStorage.getItem('adam_degradation')) || 0;
@@ -126,7 +123,6 @@
       this.autoActive = false;
       this.effectsActive = false;
 
-      // Keep a DOM indicator hidden (compat); we draw indicator into canvas as visual source of truth.
       this.indicator = document.createElement('div');
       this.indicator.style.cssText = `position:fixed; top:20px; right:20px; opacity:0; pointer-events:none; font-family:${FONT_FAMILY};`;
       document.body.appendChild(this.indicator);
@@ -137,7 +133,6 @@
     }
 
     startTimer(){
-      // increment even if site idle; keep backgroundTick alive separately
       this._timer = setInterval(()=>{ if (!document.hidden && !isFrozen) this.addDegradation(1); }, 30000);
     }
 
@@ -148,12 +143,10 @@
       this.updateIndicator();
       this.updateEffects();
 
-      // Обновляем деградацию сетки
       if (window.__netGrid) {
         window.__netGrid.setSystemDegradation(this.level);
       }
 
-      // audio cues when thresholds crossed
       if (Math.floor(this.level / 5) > Math.floor(this.lastSoundLevel / 5)) {
         if (this.level >= 60 && this.level < 80) this.playAudio('sounds/reset_com.mp3');
         else if (this.level >= 80 && this.level < 95) this.playAudio('sounds/reset_com_reverse.mp3');
@@ -166,7 +159,6 @@
     }
 
     updateIndicator(){
-      // DOM indicator (hidden) for compatibility; canvas draws everything visible
       const color = this.level > 95 ? '#FF00FF' : this.level > 80 ? '#FF4444' : this.level > 60 ? '#FF8800' : this.level > 30 ? '#FFFF00' : '#00FF41';
       this.indicator.innerHTML = `
         <div style="color:${color};font-weight:700">ДЕГРАДАЦИЯ СИСТЕМЫ</div>
@@ -179,7 +171,6 @@
     }
 
     updateEffects(){
-      // manage ghost typing and auto-commands
       if (this.level >= 80 && !this.ghostActive) {
         this.startGhostInput();
         this.ghostActive = true;
@@ -196,7 +187,6 @@
         this.autoActive = false;
       }
 
-      // body classes kept for compatibility (if CSS relies on them)
       document.body.classList.remove('degradation-2','degradation-3','degradation-4','degradation-5','degradation-glitch');
       if (this.level >= 30 && this.level < 60) document.body.classList.add('degradation-2');
       else if (this.level >= 60 && this.level < 80) document.body.classList.add('degradation-3');
@@ -207,12 +197,10 @@
       requestFullRedraw();
     }
 
-    // more robust audio: try list of possible filenames (case-insensitive fallback)
     playAudio(file){
       try {
         if (currentAudio){ try { currentAudio.pause(); currentAudio.currentTime = 0; } catch(e){} }
         const audioFiles = [file];
-        // also fallback lower/upper if exists logic desired
         const tryPlayAudio = (index) => {
           if (index >= audioFiles.length) return;
           try {
@@ -225,7 +213,6 @@
     }
 
     triggerGlitchApocalypse(){
-      // freeze input, play glitch sound, flash effects and reset after timeout
       isFrozen = true;
       this.playAudio('sounds/glitch_e.MP3');
       this.applyGlitchEffects();
@@ -233,7 +220,6 @@
     }
 
     applyGlitchEffects(){
-      // apply temporary body filter (kept minimal) but avoid permanent changes
       try {
         document.body.style.transition = 'filter 120ms';
         document.body.style.filter = 'contrast(1.2) saturate(0.8)';
@@ -259,7 +245,6 @@
       this.stopAutoCommands();
       this.ghostActive = false;
       this.autoActive = false;
-      // Сбрасываем деградацию сетки
       if (window.__netGrid) {
         window.__netGrid.addDegradation(-100);
         window.__netGrid.setSystemDegradation(0);
@@ -331,13 +316,11 @@
     ctx.setTransform(1,0,0,1,0,0);
     ctx.scale(DPR, DPR);
 
-    // shader-canvas (background) - behind everything
     const shaderCanvas = document.getElementById('shader-canvas');
     if (shaderCanvas && shaderCanvas.width > 0) {
-      try { ctx.drawImage(shaderCanvas, 0, 0, vw, vh); } catch(e){ /* ignore */ }
+      try { ctx.drawImage(shaderCanvas, 0, 0, vw, vh); } catch(e){}
     }
 
-    // netGrid map - draw before glass so visible under glass
     if (mapCanvas && mapCanvas.width > 0 && mapCanvas.height > 0) {
       try {
         const r = mapCanvas.getBoundingClientRect();
@@ -349,7 +332,6 @@
       } catch(e){}
     }
 
-    // glassFX - subtle noise under text (prevent blinding white)
     if (glassFX && glassFX.width > 0 && glassFX.height > 0) {
       try {
         ctx.globalAlpha = 0.12;
@@ -385,7 +367,6 @@
       ctx.fillStyle = color;
       const text = String(item.text);
 
-      // wrap by words
       if (ctx.measureText(text).width <= maxW) {
         ctx.fillText(text, PADDING, y);
         y += LINE_HEIGHT;
@@ -410,7 +391,6 @@
   }
 
   function drawDegradationIndicator(){
-    // draw indicator box to top-right inside canvas and clamp to viewport
     const wBox = Math.min(360, Math.floor(vw * 0.34));
     const hBox = 62;
     const x = Math.max(10, vw - wBox - 20);
@@ -462,7 +442,6 @@
 
   // ---------- main draw ----------
   function draw(){
-    // clear base
     ctx.save();
     ctx.setTransform(1,0,0,1,0,0);
     ctx.scale(DPR, DPR);
@@ -470,12 +449,10 @@
     ctx.fillRect(0,0,vw,vh);
     ctx.restore();
 
-    // compose
     drawMapAndGlass();
     drawTextLines();
     drawDegradationIndicator();
 
-    // optional freeze/glitch overlay
     if (isFrozen) {
       ctx.save();
       ctx.setTransform(1,0,0,1,0,0);
@@ -558,7 +535,7 @@
     requestFullRedraw();
   }
 
-  // ---------- dossiers & notes (ПОЛНОЕ СОДЕРЖИМОЕ БЕЗ ИЗМЕНЕНИЙ ----------
+  // ---------- dossiers & notes (ПОЛНОЕ СОДЕРЖИМОЕ БЕЗ ИЗМЕНЕНИЙ) ----------
   const dossiers = {
     '0X001': { name: 'ERICH VAN KOSS', role: 'Руководитель программы VIGIL-9 / Исследователь миссии MARS', status: 'СВЯЗЬ ОТСУТСТВУЕТ', outcome: ['Зафиксирована несанкционированная передача данных внешним структурам (FBI).', 'Субъект предпринял попытку уничтожения маяка в секторе 3-D.', 'Телеметрия прервана, дальнейшее наблюдение невозможно.'], report: ['Классификация инцидента: SABOTAGE-3D.', 'Рекомендовано аннулирование личных протоколов и перенос архивов в OBSERVER.'], missions: 'MARS, OBSERVER', audio: 'sounds/dscr1.mp3', audioDescription: 'Последняя передача Эриха Ван Косса' },
     '0X2E7': { name: 'JOHAN VAN KOSS', role: 'Тестовый субъект V9-MR / Сын Эриха Ван Косса', status: 'СВЯЗЬ ОТСУТСТВУЕТ', outcome: ['После инцидента MARS зафиксировано устойчивое излучение из зоны криоструктуры.', 'Сигнатура нейроволн совпадает с профилем субъекта.', 'Инициирована установка маяка для фиксации остаточного сигнала.'], report: ['Активность нейросети перестала фиксироваться.'], missions: 'MARS, MONOLITH' },
@@ -691,12 +668,10 @@
     lastProcessed.text = cmdLine;
     lastProcessed.ts = now;
 
-    // history
     commandHistory.push(cmdLine);
     historyIndex = commandHistory.length;
     commandCount++;
 
-    // If prompt exists, replace with echoed white command to avoid duplicate prompt + command
     if (lines.length && String(lines[lines.length - 1].text).startsWith('adam@secure:~$')) {
       lines[lines.length - 1].text = 'adam@secure:~$ ' + cmdLine;
       lines[lines.length - 1].color = '#FFFFFF';
@@ -758,11 +733,10 @@
         await typeText('СЛОЙ БЕЗОПАСНОСТИ..............ВКЛЮЧЁН', 'output', 12);
         addColoredText('СЕТЕВЫЕ РЕЛЕЙНЫЕ УЗЛЫ..........ОГРАНИЧЕНЫ', '#FFFF00');
         addColoredText(`ДЕГРАДАЦИЯ: [${'█'.repeat(Math.floor(degradation.level/5))}${'▒'.repeat(20-Math.floor(degradation.level/5))}] ${degradation.level}%`, degradation.level > 60 ? '#FF4444' : '#FFFF00');
-        // Добавляем деградацию сетки если она активна
         if (window.__netGrid) {
           const gridDeg = window.__netGrid.getDegradation();
           if (gridDeg > 0) {
-            addColoredText(`СЕТЕВАЯ ДЕГРАДАЦИЯ: ${gridDeg.toFixed(1)}%`, gridDeg > 30 ? '#FF8800' : '#FFFF00');
+            addColoredText(`СЕТЕВАЯ ДЕГРАДАЦИЯ: ${gridDeg}%`, gridDeg > 30 ? '#FF8800' : '#FFFF00');
           }
         }
         await typeText('РЕКОМЕНДАЦИЯ: Поддерживать стабильность терминала', 'output', 18);
@@ -865,11 +839,9 @@
             if (result.solved) {
               addColoredText('>>> КЛЮЧ ПОДОШЁЛ <<<', '#00FF41');
               addColoredText('> Доступ к сектору OBSERVER-7 открыт', '#FFFF00');
-              degradation.playAudio('sounds/success.mp3');
             } else {
               addColoredText('> Конфигурация не соответствует протоколу', '#FF4444');
               addColoredText(`> Всего узлов: ${result.total} | Правильных позиций: ${result.correct} | Неправильных: ${result.lockedCount - result.correct}`, '#FFFF00');
-              degradation.playAudio('sounds/reject.mp3');
               window.__netGrid.addDegradation(2);
             }
             break;
@@ -1052,7 +1024,6 @@
     backgroundTick._acc += dt;
     if (backgroundTick._acc >= (1000 / 30)) {
       backgroundTick._acc = 0;
-      // keep degradation timer and other visuals alive even when user idle
       requestFullRedraw();
     }
     requestAnimationFrame(backgroundTick);
