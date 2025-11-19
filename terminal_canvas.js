@@ -1,10 +1,6 @@
 // terminal_canvas_final.js
-// Полностью объединённый файл на основе вашего terminal.js (old) + terminal_canvas.js (new).
-// - Содержит: полный набор команд, dossiers, notes, деградацию, аудио, ghost-input, auto-commands.
-// - Canvas терминал + интеграция shader-canvas, mapCanvas (netGrid), glassFX.
-// - Fixed: pendingRedraw init / duplicate prompt / frozen background / white glass / scroll / typing.
-// Usage: заменить прежний terminal.js / terminal_canvas.js этим файлом. crt_overlay.js — ПОСЛЕ него.
-
+// Полностью объединённый файл с командами сетки: netmode, net check, net status
+// + деградация сетки. Остальной функционал не тронут.
 (() => {
   // ---------- CONFIG ----------
   const FONT_FAMILY = "'Press Start 2P', monospace";
@@ -435,11 +431,11 @@
     ctx.fillStyle = color;
     ctx.fillRect(barX, barY, Math.round(barW * (degradation.level / 100)), barH);
 
-ctx.fillStyle = color;
-ctx.font = `12px ${FONT_FAMILY}`;
-let label = 'ДЕГРАДАЦИЯ СИСТЕМЫ';
-ctx.fillText(label, x + 10, y + 18);         // ✅ НОВОЕ - отступ 16px сверху
-ctx.fillText(degradation.level + '%', x + wBox - 46, y + 18);  // ✅ НОВОЕ
+    ctx.fillStyle = color;
+    ctx.font = `12px ${FONT_FAMILY}`;
+    let label = 'ДЕГРАДАЦИЯ СИСТЕМЫ';
+    ctx.fillText(label, x + 10, y + 18);
+    ctx.fillText(degradation.level + '%', x + wBox - 46, y + 18);
 
     ctx.restore();
   }
@@ -552,7 +548,7 @@ ctx.fillText(degradation.level + '%', x + wBox - 46, y + 18);  // ✅ НОВОЕ
     requestFullRedraw();
   }
 
-  // ---------- dossiers & notes (full content) ----------
+  // ---------- dossiers & notes (ПОЛНОЕ СОДЕРЖИМОЕ БЕЗ ИЗМЕНЕНИЙ ----------
   const dossiers = {
     '0X001': { name: 'ERICH VAN KOSS', role: 'Руководитель программы VIGIL-9 / Исследователь миссии MARS', status: 'СВЯЗЬ ОТСУТСТВУЕТ', outcome: ['Зафиксирована несанкционированная передача данных внешним структурам (FBI).', 'Субъект предпринял попытку уничтожения маяка в секторе 3-D.', 'Телеметрия прервана, дальнейшее наблюдение невозможно.'], report: ['Классификация инцидента: SABOTAGE-3D.', 'Рекомендовано аннулирование личных протоколов и перенос архивов в OBSERVER.'], missions: 'MARS, OBSERVER', audio: 'sounds/dscr1.mp3', audioDescription: 'Последняя передача Эриха Ван Косса' },
     '0X2E7': { name: 'JOHAN VAN KOSS', role: 'Тестовый субъект V9-MR / Сын Эриха Ван Косса', status: 'СВЯЗЬ ОТСУТСТВУЕТ', outcome: ['После инцидента MARS зафиксировано устойчивое излучение из зоны криоструктуры.', 'Сигнатура нейроволн совпадает с профилем субъекта.', 'Инициирована установка маяка для фиксации остаточного сигнала.'], report: ['Активность нейросети перестала фиксироваться.'], missions: 'MARS, MONOLITH' },
@@ -611,13 +607,6 @@ ctx.fillText(degradation.level + '%', x + wBox - 46, y + 18);  // ✅ НОВОЕ
         holder.innerHTML = `<audio id="${audioId}_el" src="${dossier.audio}" preload="metadata"></audio>`;
         document.body.appendChild(holder);
       }
-      // attempt to autoplay minimal audio cue if allowed (non-blocking)
-      try {
-        const el = document.getElementById(`${audioId}_el`);
-        if (el && el.paused) {
-          // do not force play; leave for user control or when degradation plays
-        }
-      } catch(e){}
     }
   }
 
@@ -750,6 +739,13 @@ ctx.fillText(degradation.level + '%', x + wBox - 46, y + 18);  // ✅ НОВОЕ
         await typeText('СЛОЙ БЕЗОПАСНОСТИ..............ВКЛЮЧЁН', 'output', 12);
         addColoredText('СЕТЕВЫЕ РЕЛЕЙНЫЕ УЗЛЫ..........ОГРАНИЧЕНЫ', '#FFFF00');
         addColoredText(`ДЕГРАДАЦИЯ: [${'█'.repeat(Math.floor(degradation.level/5))}${'▒'.repeat(20-Math.floor(degradation.level/5))}] ${degradation.level}%`, degradation.level > 60 ? '#FF4444' : '#FFFF00');
+        // Добавляем деградацию сетки если она активна
+        if (window.__netGrid) {
+          const gridDeg = window.__netGrid.getDegradation();
+          if (gridDeg > 0) {
+            addColoredText(`СЕТЕВАЯ ДЕГРАДАЦИЯ: ${gridDeg.toFixed(1)}%`, gridDeg > 30 ? '#FF8800' : '#FFFF00');
+          }
+        }
         await typeText('РЕКОМЕНДАЦИЯ: Поддерживать стабильность терминала', 'output', 18);
         break;
 
@@ -819,6 +815,64 @@ ctx.fillText(degradation.level + '%', x + wBox - 46, y + 18);  // ✅ НОВОЕ
         await showSubjectDossier(args[0]);
         break;
 
+      // ════════════════════════════════════════════════════════════════════
+      // КОМАНДЫ СЕТКИ (НОВЫЕ)
+      // ════════════════════════════════════════════════════════════════════
+      case 'netmode':
+        if (!window.__netGrid) {
+          addColoredText('ОШИБКА: Система управления узлами недоступна', '#FF4444');
+          break;
+        }
+        window.__netGrid.setGridMode(true);
+        await typeText('> Переход в режим управления сеткой...', 'output', 12);
+        await typeText('> Управление: [WASD/↑↓←→] Перемещение | [Tab] Выбор узла | [Space] Закрепить/Открепить | [ESC] Выход', 'output', 12);
+        break;
+
+      case 'net':
+        if (args.length === 0) {
+          addColoredText('ОШИБКА: Укажите подкоманду', '#FF4444');
+          await typeText('Доступные подкоманды: check, status', 'output', 12);
+          break;
+        }
+        const sub = args[0];
+        switch(sub) {
+          case 'check':
+            if (!window.__netGrid) {
+              addColoredText('ОШИБКА: Система узлов недоступна', '#FF4444');
+              break;
+            }
+            await showLoading(800, "Сканирование конфигурации узлов");
+            const result = window.__netGrid.checkSolution();
+            if (result.solved) {
+              addColoredText('>>> КОРЕКТНЫЙ КЛЕЙМО АКТИВИРОВАН <<<', '#00FF41');
+              addColoredText('> Доступ к сектору OBSERVER-7 открыт', '#FFFF00');
+              degradation.playAudio('sounds/success.mp3');
+            } else {
+              addColoredText('> Конфигурация не соответствует протоколу', '#FF4444');
+              addColoredText(`> Всего узлов: ${result.total} | Правильных позиций: ${result.correct} | Неправильных: ${result.lockedCount - result.correct}`, '#FFFF00');
+              degradation.playAudio('sounds/reject.mp3');
+              window.__netGrid.addDegradation(2);
+            }
+            break;
+          case 'status':
+            if (!window.__netGrid) {
+              addColoredText('ОШИБКА: Система узлов недоступна', '#FF4444');
+              break;
+            }
+            const gridDegradation = window.__netGrid.getDegradation().toFixed(1);
+            await typeText('[СТАТУС СЕТКИ УЗЛОВ]', 'output', 12);
+            addColoredText('------------------------------------', '#00FF41');
+            window.__netGrid.status(); // Это вызовет вывод в статус-баре
+            await typeText(`Уровень деградации сетки: ${gridDegradation}%`, gridDegradation > 30 ? '#FF4444' : '#FFFF00');
+            break;
+          default:
+            addColoredText(`ОШИБКА: Неизвестная подкоманда ${sub}`, '#FF4444');
+        }
+        break;
+      // ════════════════════════════════════════════════════════════════════
+      // КОНЕЦ КОМАНД СЕТКИ
+      // ════════════════════════════════════════════════════════════════════
+
       case 'deg':
         if (args.length === 0) {
           addColoredText(`Текущий уровень деградации: ${degradation.level}%`, '#00FF41');
@@ -849,6 +903,11 @@ ctx.fillText(degradation.level + '%', x + wBox - 46, y + 18);  // ✅ НОВОЕ
             const resetMessages = ["Завершение активных модулей [ЗАВЕРШЕНО]","Перезапуск интерфейса [ЗАВЕРШЕНО]","Восстановление базового состояния [ЗАВЕРШЕНО]","----------------------------------","[СИСТЕМА ГОТОВА К РАБОТЕ]"];
             for (const m of resetMessages) { addOutput(m); await new Promise(r=>setTimeout(r,700)); }
             degradation.reset();
+            if (window.__netGrid) {
+              // Сбрасываем и сетку
+              window.__netGrid.addDegradation(-100);
+              window.__netGrid.setGridMode(false);
+            }
             commandCount = 0;
             sessionStartTime = Date.now();
           } else {
