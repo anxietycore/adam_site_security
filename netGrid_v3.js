@@ -1,4 +1,4 @@
-// netGrid_v3-FINAL.js — УБРАНЫ ВСЕ ДЕБАГ-ЛОГИ, ИСПРАВЛЕНА ОБРАТНАЯ ТРАНСФОРМАЦИЯ, РАБОТА В CSS ПИКСЕЛЯХ
+// netGrid_v3-FINAL-FIXED.js — FORWARD DISTORTION для рендеринга, точный hit-test
 (() => {
   // ----- CONFIG -----
   const DPR = Math.min(window.devicePixelRatio || 1, 1.5);
@@ -23,21 +23,35 @@
   const currentTargetName = symbolNames[Math.floor(Math.random()*symbolNames.length)];
   const currentTarget = SYMBOLS[currentTargetName];
 
-  // ----- АНАЛИТИЧЕСКАЯ ОБРАТНАЯ ТРАНСФОРМАЦИЯ -----
+  // ----- АНАЛИТИЧЕСКИЕ ТРАНСФОРМАЦИИ -----
   function inverseDistortion(distortedX, distortedY, width, height) {
     const xn = (distortedX / width) * 2 - 1;
     const yn = (distortedY / height) * 2 - 1;
     const rn = Math.sqrt(xn*xn + yn*yn);
-    
     if (rn === 0) return { x: distortedX, y: distortedY };
     
     const k = CRT_DISTORTION;
     const b = 1 - k;
     const discriminant = b*b + 4*k*rn;
-    
     if (discriminant < 0) return { x: distortedX, y: distortedY };
     
     const r = (-b + Math.sqrt(discriminant)) / (2*k);
+    const scale = r / rn;
+    
+    return {
+      x: (xn * scale + 1) * 0.5 * width,
+      y: (yn * scale + 1) * 0.5 * height
+    };
+  }
+
+  function forwardDistortion(x, y, width, height) {
+    const xn = (x / width) * 2 - 1;
+    const yn = (y / height) * 2 - 1;
+    const rn = Math.sqrt(xn*xn + yn*yn);
+    if (rn === 0) return { x: x, y: y };
+    
+    const k = CRT_DISTORTION;
+    const r = rn * (1 + k * (rn - 1));
     const scale = r / rn;
     
     return {
@@ -402,10 +416,12 @@
   function draw() {
     mctx.clearRect(0, 0, mapCanvas.width, mapCanvas.height);
     
+    // Прямоугольник фона
     mctx.fillStyle = 'rgba(2,18,12,0.66)';
     roundRect(mctx, 0, 0, mapCanvas.width, mapCanvas.height, 8*DPR);
     mctx.fill();
     
+    // Виньетка
     const vig = mctx.createRadialGradient(
       mapCanvas.width/2, mapCanvas.height/2, Math.min(mapCanvas.width, mapCanvas.height)*0.06,
       mapCanvas.width/2, mapCanvas.height/2, Math.max(mapCanvas.width, mapCanvas.height)*0.9
@@ -415,6 +431,7 @@
     mctx.fillStyle = vig;
     mctx.fillRect(0, 0, mapCanvas.width, mapCanvas.height);
     
+    // Сетка
     mctx.strokeStyle = `rgba(${COLOR.r},${COLOR.g},${COLOR.b},0.10)`;
     mctx.lineWidth = 1 * DPR;
     mctx.beginPath();
@@ -430,6 +447,7 @@
     }
     mctx.stroke();
     
+    // Линии между точками
     mctx.save();
     mctx.lineCap = 'round';
     for (let i=0; i<nodes.length; i++) {
@@ -438,46 +456,62 @@
         const d = Math.hypot(A.x - B.x, A.y - B.y);
         if (d < (w * 0.32)) {
           const baseAlpha = Math.max(0.10, 0.32 - (d / (w*0.9)) * 0.22);
-          const grad = mctx.createLinearGradient(A.x*DPR, A.y*DPR, B.x*DPR, B.y*DPR);
+          
+          // Применяем forward distortion к координатам для линий
+          const A_distorted = forwardDistortion(A.x, A.y, w, h);
+          const B_distorted = forwardDistortion(B.x, B.y, w, h);
+          
+          const grad = mctx.createLinearGradient(
+            A_distorted.x * DPR, A_distorted.y * DPR, 
+            B_distorted.x * DPR, B_distorted.y * DPR
+          );
           grad.addColorStop(0, glowColor(baseAlpha));
           grad.addColorStop(1, glowColor(baseAlpha * 0.45));
           mctx.strokeStyle = grad;
           mctx.lineWidth = 1 * DPR;
           mctx.beginPath();
-          mctx.moveTo(A.x*DPR, A.y*DPR);
-          mctx.lineTo(B.x*DPR, B.y*DPR);
+          mctx.moveTo(A_distorted.x * DPR, A_distorted.y * DPR);
+          mctx.lineTo(B_distorted.x * DPR, B_distorted.y * DPR);
           mctx.stroke();
         }
       }
     }
     mctx.restore();
     
+    // Точки (с forward distortion)
     for (const n of nodes) {
       const pulse = 0.5 + 0.5 * Math.sin((n.id + tick*0.02) * 1.2);
       const intensity = n.selected ? 1.4 : (n.locked ? 1.2 : 1.0);
       const glowR = (6 * DPR + pulse*3*DPR) * intensity;
+      
+      // Применяем forward distortion к координатам точки
+      const posDistorted = forwardDistortion(n.x, n.y, w, h);
+      
       const c = n.locked ? `rgba(255,60,60,${0.36 * intensity})` : `rgba(${COLOR.r},${COLOR.g},${COLOR.b},${0.36 * intensity})`;
       const c2 = n.locked ? `rgba(255,60,60,${0.12 * intensity})` : `rgba(${COLOR.r},${COLOR.g},${COLOR.b},${0.12 * intensity})`;
-      const grd = mctx.createRadialGradient(n.x*DPR, n.y*DPR, 0, n.x*DPR, n.y*DPR, glowR);
+      const grd = mctx.createRadialGradient(posDistorted.x*DPR, posDistorted.y*DPR, 0, posDistorted.x*DPR, posDistorted.y*DPR, glowR);
       grd.addColorStop(0, c);
       grd.addColorStop(0.6, c2);
       grd.addColorStop(1, 'rgba(0,0,0,0)');
       mctx.fillStyle = grd;
-      mctx.fillRect(n.x*DPR - glowR, n.y*DPR - glowR, glowR*2, glowR*2);
+      mctx.fillRect(posDistorted.x*DPR - glowR, posDistorted.y*DPR - glowR, glowR*2, glowR*2);
 
+      // Ядро точки
       mctx.beginPath();
       const coreR = 2.2 * DPR + (n.selected ? 1.6*DPR : 0);
       mctx.fillStyle = n.locked ? redColor(1) : glowColor(1);
-      mctx.arc(n.x*DPR, n.y*DPR, coreR, 0, Math.PI*2);
+      mctx.arc(posDistorted.x*DPR, posDistorted.y*DPR, coreR, 0, Math.PI*2);
       mctx.fill();
 
+      // Обводка
       mctx.beginPath();
       mctx.lineWidth = 1 * DPR;
       mctx.strokeStyle = n.locked ? redColor(0.92) : glowColor(0.92);
-      mctx.arc(n.x*DPR, n.y*DPR, coreR + 1.2*DPR, 0, Math.PI*2);
+      mctx.arc(posDistorted.x*DPR, posDistorted.y*DPR, coreR + 1.2*DPR, 0, Math.PI*2);
       mctx.stroke();
     }
 
+    // Текст
     mctx.save();
     mctx.font = `${10 * DPR}px monospace`;
     mctx.fillStyle = glowColor(0.95);
@@ -509,5 +543,4 @@
   window.addEventListener('resize', resize);
   resize();
   raf = requestAnimationFrame(loop);
-
 })();
