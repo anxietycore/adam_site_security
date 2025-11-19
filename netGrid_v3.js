@@ -3,9 +3,17 @@
   try {
     // ════════════════════════════════════════════════════════════════════
     // ЦЕЛЕВАЯ КОНФИГУРАЦИЯ ДЛЯ АКТИВАЦИИ КЛЕЙМА
-    // Изменяйте координаты для создания новых головоломок
     // Формат: [[x,y], [x,y], ...] — координаты ПЕРЕСЕЧЕНИЙ, не пиксели!
     // ТЕСТОВЫЙ КЛЮЧ: буква "V" (10 точек)
+    // ASCII представление:
+    //   0 1 2 3 4 5 6
+    // 0 . . . . . . .
+    // 1 . . . . . . .
+    // 2 . . . . ● . .
+    // 3 . . . ● . ● .
+    // 4 . . ● . . . ●
+    // 5 . ● . . . . .
+    // 6 ● . . . . . .
     const TARGET_PATTERN = [
       [0,6], [1,5], [2,4], [3,3], [4,2],  // Левая ветвь V
       [6,6], [5,5], [4,4], [3,2], [2,1]   // Правая ветвь V (зеркально)
@@ -23,6 +31,7 @@
     const NODE_COUNT = 10;
     const AUTONOMOUS_MOVE_COOLDOWN = 800;
     const CRT_DISTORTION = 0.28;
+    const MOVE_SPEED = 0.02; // Скорость плавного движения (0-1)
 
     // ----- DOM-элементы -----
     const mapCanvas = document.createElement('canvas');
@@ -81,6 +90,7 @@
     let selectedNode = null;
     let isGridMode = false;
     let keyDegradation = 0; // Деградация сетки (0-100)
+    let systemDegradation = 0; // Деградация всей системы (0-100)
 
     // ----- Вспомогательные функции -----
     function glowColor(a=1){ return `rgba(${COLOR.r},${COLOR.g},${COLOR.b},${a})`; }
@@ -119,6 +129,8 @@
         for (const n of nodes) {
           n.x = gridPoints[n.gy][n.gx].x;
           n.y = gridPoints[n.gy][n.gy].y;
+          n.targetGx = n.gx;
+          n.targetGy = n.gy;
         }
       }
     }
@@ -140,8 +152,10 @@
           id: idx,
           gx: c, gy: r,
           x: p.x, y: p.y,
+          targetGx: c, targetGy: r, // Целевая позиция для плавного движения
           locked: false,
-          selected: false
+          selected: false,
+          lastMove: 0
         };
       });
       selectedNode = null;
@@ -187,7 +201,8 @@
         };
       },
       getDegradation: () => keyDegradation,
-      addDegradation: (v) => { keyDegradation = Math.min(100, keyDegradation + v); }
+      addDegradation: (v) => { keyDegradation = Math.max(0, Math.min(100, keyDegradation + v)); },
+      setSystemDegradation: (level) => { systemDegradation = level; }
     };
 
     function updateStatusBar(){
@@ -218,8 +233,8 @@
       
       selectedNode.gx = newGx;
       selectedNode.gy = newGy;
-      selectedNode.x = gridPoints[newGy][newGx].x;
-      selectedNode.y = gridPoints[newGy][newGx].y;
+      selectedNode.targetGx = newGx;
+      selectedNode.targetGy = newGy;
       updateStatusBar();
     }
 
@@ -235,15 +250,19 @@
           const result = window.__netGrid.checkSolution();
           if (result.solved) {
             // Успех
-            window.__TerminalCanvas.addColoredText('>>> КОРЕКТНЫЙ КЛЕЙМО АКТИВИРОВАН <<<', '#00FF41');
-            window.__TerminalCanvas.addColoredText('> Доступ к сектору OBSERVER-7 открыт', '#FFFF00');
+            if (window.__TerminalCanvas) {
+              window.__TerminalCanvas.addColoredText('>>> КЛЮЧ ПОДОШЁЛ <<<', '#00FF41');
+              window.__TerminalCanvas.addColoredText('> Доступ к сектору OBSERVER-7 открыт', '#FFFF00');
+            }
             // Мигаем сеткой зелёным
             flashGridSuccess();
           } else {
             // Неудача
             const wrong = lockedCount - result.correct;
-            window.__TerminalCanvas.addColoredText('> Конфигурация не соответствует протоколу', '#FF4444');
-            window.__TerminalCanvas.addColoredText(`> Правильных узлов: ${result.correct}/${result.total} | Неправильных: ${wrong}`, '#FFFF00');
+            if (window.__TerminalCanvas) {
+              window.__TerminalCanvas.addColoredText('> Конфигурация не соответствует протоколу', '#FF4444');
+              window.__TerminalCanvas.addColoredText(`> Правильных узлов: ${result.correct}/${result.total} | Неправильных: ${wrong}`, '#FFFF00');
+            }
             window.__netGrid.addDegradation(2); // +2% деградация сетки
           }
         }, 500);
@@ -284,6 +303,73 @@
       }, 100);
     }
 
+    // Обновление автономного движения точек
+    function updateAutonomousMovement() {
+      const now = Date.now();
+      const degradation = systemDegradation;
+      
+      for (const n of nodes) {
+        // Если точка выбрана, закреплена или деградация 90-99% (хаос) - не двигаем
+        if (n.selected || n.locked || (degradation >= 90 && degradation < 100)) {
+          n.targetGx = n.gx;
+          n.targetGy = n.gy;
+          continue;
+        }
+        
+        // При высокой деградации (80-89%) - увеличиваем частоту движения и хаотичность
+        const moveChance = degradation > 80 ? 0.3 : 0.15;
+        const moveDelay = degradation > 80 ? 300 : AUTONOMOUS_MOVE_COOLDOWN;
+        
+        if (now - n.lastMove > moveDelay && Math.random() < moveChance) {
+          // Выбираем случайную соседнюю позицию на сетке
+          const dirs = [[0,1], [1,0], [0,-1], [-1,0], [1,1], [-1,-1], [1,-1], [-1,1]];
+          const [dx, dy] = dirs[Math.floor(Math.random() * dirs.length)];
+          const newGx = Math.max(0, Math.min(INTER_COUNT-1, n.gx + dx));
+          const newGy = Math.max(0, Math.min(INTER_COUNT-1, n.gy + dy));
+          
+          // Проверяем, не занята ли целевая позиция
+          const occupied = nodes.some(other => 
+            other !== n && 
+            other.locked && 
+            other.gx === newGx && 
+            other.gy === newGy
+          );
+          
+          if (!occupied) {
+            n.targetGx = newGx;
+            n.targetGy = newGy;
+            n.lastMove = now;
+          }
+        }
+      }
+      
+      // Плавная интерполяция к целевой позиции
+      for (const n of nodes) {
+        const targetX = gridPoints[n.targetGy][n.targetGx].x;
+        const targetY = gridPoints[n.targetGy][n.targetGx].y;
+        
+        // При деградации 90-99% - добавляем хаотичные смещения
+        if (degradation >= 90 && degradation < 100) {
+          n.x += (Math.random() - 0.5) * 10;
+          n.y += (Math.random() - 0.5) * 10;
+          // Ограничиваем размерами canvas
+          n.x = Math.max(0, Math.min(w, n.x));
+          n.y = Math.max(0, Math.min(h, n.y));
+        } else {
+          // Плавное движение
+          n.x += (targetX - n.x) * MOVE_SPEED;
+          n.y += (targetY - n.y) * MOVE_SPEED;
+        }
+        
+        // Обновляем grid coordinates если близко к цели
+        const dist = Math.hypot(targetX - n.x, targetY - n.y);
+        if (dist < 1) {
+          n.gx = n.targetGx;
+          n.gy = n.targetGy;
+        }
+      }
+    }
+
     // ----- Обработчики клавиатуры -----
     document.addEventListener('keydown', (e) => {
       if (!isGridMode) return;
@@ -300,7 +386,9 @@
           break;
         case 'Escape':
           window.__netGrid.setGridMode(false);
-          window.__TerminalCanvas.addColoredText('> Выход из режима сетки', '#00FF41');
+          if (window.__TerminalCanvas) {
+            window.__TerminalCanvas.addColoredText('> Выход из режима сетки', '#00FF41');
+          }
           break;
         case 'w':
         case 'ArrowUp':
@@ -328,6 +416,9 @@
     // ----- Анимация и рендер -----
     function draw() {
       mctx.clearRect(0,0,w,h);
+      
+      // Обновляем автономное движение
+      updateAutonomousMovement();
       
       // Фон
       mctx.fillStyle = 'rgba(2,18,12,0.66)';
@@ -419,6 +510,30 @@
           mctx.fillText(String(n.id), n.x, n.y);
           mctx.restore();
         }
+      }
+
+      // ASCII-подсказка ключа (показывается при низкой деградации)
+      if (systemDegradation < 50) {
+        mctx.save();
+        mctx.font = `${8 * DPR}px monospace`;
+        mctx.fillStyle = glowColor(0.3);
+        mctx.textAlign = 'left';
+        mctx.textBaseline = 'top';
+        const ascii = [
+          'КЛЮЧ: Буква "V"',
+          '  0 1 2 3 4 5 6',
+          '0 . . . . . . .',
+          '1 . . . . . . .',
+          '2 . . . . ● . .',
+          '3 . . . ● . ● .',
+          '4 . . ● . . . ●',
+          '5 . ● . . . . .',
+          '6 ● . . . . . .'
+        ];
+        ascii.forEach((line, i) => {
+          mctx.fillText(line, 10 * DPR, 20 * DPR + i * 10 * DPR);
+        });
+        mctx.restore();
       }
 
       // Лейбл
