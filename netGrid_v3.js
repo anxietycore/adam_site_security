@@ -1,4 +1,4 @@
-// netGrid_v3-FINAL-ABSOLUTE.js — Совершенная синхронизация с шейдером, клэмпинг углов
+// netGrid_v3-ABSOLUTE-FINAL.js — Точная синхронизация с шейдером, защита углов
 (() => {
   // ----- CONFIG -----
   const DPR = Math.min(window.devicePixelRatio || 1, 1.5);
@@ -33,7 +33,14 @@
     const k = CRT_DISTORTION;
     const b = 1 - k;
     const discriminant = b*b + 4*k*rn;
-    if (discriminant < 0) return { x: distortedX, y: distortedY };
+    
+    // Защита от выхода за границы: если discriminant отрицательный, возвращаем ближайшую допустимую точку
+    if (discriminant < 0) {
+      return {
+        x: Math.max(0, Math.min(width, distortedX)),
+        y: Math.max(0, Math.min(height, distortedY))
+      };
+    }
     
     const r = (-b + Math.sqrt(discriminant)) / (2*k);
     const scale = r / rn;
@@ -51,12 +58,14 @@
     if (rn === 0) return { x: x, y: y };
     
     const k = CRT_DISTORTION;
-    const r = rn * (1 + k * (rn - 1));
-    const scale = r / rn;
+    // Точно как в шейдере: distorted = uv * (1 + k * (r - 1))
+    const scale = 1 + k * (rn - 1);
+    const xnd = xn * scale;
+    const ynd = yn * scale;
     
-    // Клэмпинг результата, чтобы не выходить за границы
-    const resultX = (xn * scale + 1) * 0.5 * width;
-    const resultY = (yn * scale + 1) * 0.5 * height;
+    // Клэмпинг результата
+    const resultX = (xnd + 1) * 0.5 * width;
+    const resultY = (ynd + 1) * 0.5 * height;
     
     return {
       x: Math.max(0, Math.min(width, resultX)),
@@ -377,46 +386,7 @@
     }
   });
 
-  // ----- Анимация и рендер -----
-  function update(dt) {
-    tick++;
-    const now = performance.now();
-    for (const n of nodes) {
-      if (n.drag) continue;
-      if (n.locked) {
-        const pLock = gridPoints[n.gy][n.gx];
-        n.x = pLock.x; n.y = pLock.y;
-        n.targetGx = n.gx; n.targetGy = n.gy;
-        continue;
-      }
-      const targetP = gridPoints[n.targetGy][n.targetGx];
-      const dist = Math.hypot(n.x - targetP.x, n.y - targetP.y);
-      if (dist < 1.4) {
-        n.gx = n.targetGx; n.gy = n.targetGy;
-        if (now - n.lastMoveAt > AUTONOMOUS_MOVE_COOLDOWN + Math.random()*1200) {
-          const nb = pickNeighbor(n.gx, n.gy);
-          n.targetGx = nb.gx;
-          n.targetGy = nb.gy;
-          n.lastMoveAt = now;
-        }
-      } else {
-        const p = targetP;
-        const t = Math.min(1, n.speed * (dt/16) * (1 + Math.random()*0.6));
-        n.x += (p.x - n.x) * t;
-        n.y += (p.y - n.y) * t;
-      }
-    }
-  }
-
-  function pickNeighbor(gx, gy) {
-    const candidates = [];
-    if (gy > 0) candidates.push({gx, gy: gy-1});
-    if (gy < INTER_COUNT-1) candidates.push({gx, gy: gy+1});
-    if (gx > 0) candidates.push({gx: gx-1, gy});
-    if (gx < INTER_COUNT-1) candidates.push({gx: gx+1, gy});
-    return candidates[Math.floor(Math.random() * candidates.length)] || {gx, gy};
-  }
-
+  // ----- Рендер -----
   function draw() {
     mctx.clearRect(0, 0, mapCanvas.width, mapCanvas.height);
     
@@ -435,7 +405,7 @@
     mctx.fillStyle = vig;
     mctx.fillRect(0, 0, mapCanvas.width, mapCanvas.height);
     
-    // Сетка (плоская, как и должна быть)
+    // Сетка (плоская)
     mctx.strokeStyle = `rgba(${COLOR.r},${COLOR.g},${COLOR.b},0.10)`;
     mctx.lineWidth = 1 * DPR;
     mctx.beginPath();
@@ -461,11 +431,9 @@
         if (d < (w * 0.32)) {
           const baseAlpha = Math.max(0.10, 0.32 - (d / (w*0.9)) * 0.22);
           
-          // Применяем forward distortion
           const A_distorted = forwardDistortion(A.x, A.y, w, h);
           const B_distorted = forwardDistortion(B.x, B.y, w, h);
           
-          // Умножаем на DPR для рисования
           const grad = mctx.createLinearGradient(
             A_distorted.x * DPR, A_distorted.y * DPR, 
             B_distorted.x * DPR, B_distorted.y * DPR
@@ -489,10 +457,8 @@
       const intensity = n.selected ? 1.4 : (n.locked ? 1.2 : 1.0);
       const glowR = (6 * DPR + pulse*3*DPR) * intensity;
       
-      // Применяем forward distortion
       const posDistorted = forwardDistortion(n.x, n.y, w, h);
       
-      // Рисуем в DPR-координатах
       const c = n.locked ? `rgba(255,60,60,${0.36 * intensity})` : `rgba(${COLOR.r},${COLOR.g},${COLOR.b},${0.36 * intensity})`;
       const c2 = n.locked ? `rgba(255,60,60,${0.12 * intensity})` : `rgba(${COLOR.r},${COLOR.g},${COLOR.b},${0.12 * intensity})`;
       const grd = mctx.createRadialGradient(
@@ -505,7 +471,7 @@
       mctx.fillStyle = grd;
       mctx.fillRect(posDistorted.x*DPR - glowR, posDistorted.y*DPR - glowR, glowR*2, glowR*2);
 
-      // Ядро точки
+      // Ядро
       mctx.beginPath();
       const coreR = 2.2 * DPR + (n.selected ? 1.6*DPR : 0);
       mctx.fillStyle = n.locked ? redColor(1) : glowColor(1);
