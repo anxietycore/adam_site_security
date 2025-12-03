@@ -249,13 +249,12 @@
   let intentionalPredictionActive = false;
   let intentionPredicted = false;
   let decryptActive = false;
-  let decryptCode = null;
-  let decryptAttempts = 6;
   let traceActive = false;
   let traceTimer = null;
   let vigilCodeParts = { alpha: null, beta: null, gamma: null };
   let audioPlaybackActive = false;
   let audioPlaybackFile = null;
+  let decryptCloseAttempts = 0;
   
   // ---------- text distortion patterns ----------
   const GLITCH_CHARS = {
@@ -270,629 +269,906 @@
 const DISTORTION_PATTERNS = {
   50: 0.025,  // 2.5% символов вместо 5%
   60: 0.08,   // 8% вместо 15%
-  70: 0.18,   // 18% вместо 30%
-  80: 0.35,   // 35% вместо 50%
-  90: 0.60,   // 60% вместо 75%
-  95: 0.85    // 85% вместо 100%
+  70: 0.15,   // 18% вместо 30%
+  80: 0.25,   // 35% вместо 50%
+  90: 0.40,   // 60% вместо 75%
+  95: 0.50    // 85% вместо 100%
 };
   
-  // ---------- Degradation system ----------
-  class DegradationSystem {
-    constructor() {
-      this.level = parseInt(localStorage.getItem('adam_degradation')) || 0;
-      this.lastSoundLevel = 0;
-      this.ghostActive = false;
-      this.autoActive = false;
-      this.effectsActive = false;
-      this.soundPlayedAt45 = false;
-      this.ghostCommandCount = 0;
-      this.lastDistortion = { status: null, role: null, time: 0 };
-      this.falseResetCount = 0;
-      this.intentionPredictionCount = 0;
-      this.phantomDossierCount = 0;
-      this.indicator = document.createElement('div');
-      this.indicator.style.cssText = `position:fixed; top:20px; right:20px; opacity:0; pointer-events:none; font-family:${FONT_FAMILY};`;
-      document.body.appendChild(this.indicator);
-      this.updateIndicator();
-      this.startTimer();
-      this.updateEffects();
+// ---------- Degradation system ----------
+class DegradationSystem {
+  constructor() {
+    this.level = parseInt(localStorage.getItem('adam_degradation')) || 0;
+    this.lastSoundLevel = 0;
+    this.ghostActive = false;
+    this.autoActive = false;
+    this.effectsActive = false;
+    this.soundPlayedAt45 = false;
+    this.ghostCommandCount = 0;
+    this.lastDistortion = { status: null, role: null, time: 0 };
+    this.falseResetCount = 0;
+    this.intentionPredictionCount = 0;
+    this.phantomDossierCount = 0;
+    
+    // Создаем индикатор
+    this.indicator = document.createElement('div');
+    this.indicator.style.cssText = `position:fixed; top:20px; right:20px; opacity:0; pointer-events:none; font-family:${FONT_FAMILY};`;
+    document.body.appendChild(this.indicator);
+    this.updateIndicator();
+    this.startTimer();
+    this.updateEffects();
+  }
+  
+  startTimer(){
+    this._timer = setInterval(()=>{ 
+      if (!document.hidden && !isFrozen && !decryptActive && !traceActive && !audioPlaybackActive) 
+        this.addDegradation(1); 
+    }, 30000);
+  }
+  
+  addDegradation(amount){
+    if (isFrozen || decryptActive || traceActive || audioPlaybackActive) return;
+    
+    const prev = this.level;
+    this.level = Math.max(0, Math.min(100, this.level + amount));
+    localStorage.setItem('adam_degradation', String(this.level));
+    this.updateIndicator();
+    this.updateEffects();
+    
+    if (window.__netGrid) {
+      window.__netGrid.setSystemDegradation(this.level);
     }
     
-    startTimer(){
-      this._timer = setInterval(()=>{ 
-        if (!document.hidden && !isFrozen && !decryptActive && !traceActive && !audioPlaybackActive) 
-          this.addDegradation(1); 
-      }, 30000);
+    // Звуковой эффект при достижении 45% и первом выполнении определенных команд
+    if (this.level >= 45 && !this.soundPlayedAt45) {
+      audioManager.play('signal_swap.mp3', { volume: 0.7 });
+      this.soundPlayedAt45 = true;
     }
     
-    addDegradation(amount){
-      if (isFrozen || decryptActive || traceActive || audioPlaybackActive) return;
-      
-      const prev = this.level;
-      this.level = Math.max(0, Math.min(100, this.level + amount));
-      localStorage.setItem('adam_degradation', String(this.level));
-      this.updateIndicator();
-      this.updateEffects();
-      
-      if (window.__netGrid) {
-        window.__netGrid.setSystemDegradation(this.level);
-      }
-      
-      // Звуковой эффект при достижении 45% и первом выполнении определенных команд
-      if (this.level >= 45 && !this.soundPlayedAt45) {
-        audioManager.play('signal_swap.mp3', { volume: 0.7 });
-        this.soundPlayedAt45 = true;
-      }
-      
-      // Аудио-предупреждения о сбросе
-      if (this.level >= 55 && this.level < 70 && Math.floor(this.level / 5) !== Math.floor(this.lastSoundLevel / 5)) {
-        audioManager.play('reset_com.mp3', { volume: 0.7 });
-      }
-      
-      // Обратное звучание
-      else if (this.level >= 70 && this.level < 80 && Math.floor(this.level / 5) !== Math.floor(this.lastSoundLevel / 5)) {
-        audioManager.play('reset_com_reverse.mp3', { volume: 0.7 });
-      }
-      
-      // Обратное звучание (продолжение)
-      else if (this.level >= 80 && this.level < 95 && Math.floor(this.level / 5) !== Math.floor(this.lastSoundLevel / 5)) {
-        audioManager.play('reset_com_reverse.mp3', { 
-          volume: 0.7, 
-          playbackRate: 0.8 + (95 - this.level) / 15 * 0.4,
-          distort: true
-        });
-      }
-      
-      this.lastSoundLevel = this.level;
-      
-      // Автоматический сброс при 98%
-      if (this.level >= AUTO_RESET_LEVEL && !isFrozen) {
-        this.triggerGlitchApocalypse();
-      }
-      
-      // Части кода VIGIL999
-      if (this.level >= 80 && this.level < 90 && !vigilCodeParts.alpha) {
-        this.revealVigilAlpha();
-      }
-      
-      if (this.level >= 98 && !vigilCodeParts.gamma) {
-        this.revealVigilGamma();
-      }
+    // Аудио-предупреждения о сбросе
+    if (this.level >= 55 && this.level < 70 && Math.floor(this.level / 5) !== Math.floor(this.lastSoundLevel / 5)) {
+      audioManager.play('reset_com.mp3', { volume: 0.7 });
+    }
+    // Обратное звучание
+    else if (this.level >= 70 && this.level < 80 && Math.floor(this.level / 5) !== Math.floor(this.lastSoundLevel / 5)) {
+      audioManager.play('reset_com_reverse.mp3', { volume: 0.7 });
+    }
+    // Обратное звучание (продолжение)
+    else if (this.level >= 80 && this.level < 95 && Math.floor(this.level / 5) !== Math.floor(this.lastSoundLevel / 5)) {
+      audioManager.play('reset_com_reverse.mp3', { 
+        volume: 0.7, 
+        playbackRate: 0.8 + (95 - this.level) / 15 * 0.4,
+        distort: true
+      });
     }
     
-    updateIndicator(){
-      const color = this.level > 95 ? '#FF00FF' : this.level > 80 ? '#FF4444' : this.level > 60 ? '#FF8800' : this.level > 30 ? '#FFFF00' : '#00FF41';
-      this.indicator.innerHTML = `
-        <div style="color:${color};font-weight:700">ДЕГРАДАЦИЯ СИСТЕМЫ</div>
-        <div style="background:#222;height:12px;margin:6px 0;border:2px solid ${color}">
-          <div style="background:${color};height:100%;width:${this.level}%;transition:width 0.3s"></div>
-        </div>
-        <div style="color:${color};font-weight:700">${this.level}%</div>
-      `;
-      this.indicator.style.opacity = this.level > 5 ? '1' : '0';
-      requestFullRedraw();
+    this.lastSoundLevel = this.level;
+    
+    // Автоматический сброс при 98%
+if (this.level >= AUTO_RESET_LEVEL && !isFrozen) {
+  isFrozen = true; // БЛОКИРУЕМ ВВОД
+  this.triggerGlitchApocalypse();
+  return; // ПРЕРЫВАЕМ ДАЛЬНЕЙШУЮ ОБРАБОТКУ
+}
+    
+    // Части кода VIGIL999
+    if (this.level >= 80 && this.level < 90 && !vigilCodeParts.alpha) {
+      this.revealVigilAlpha();
     }
     
-    updateEffects(){
-      // Уровень 2: Фантомные команды в истории
-      if (this.level >= 30 && this.level < 60) {
-        this.startPhantomCommands();
-      } else {
-        this.stopPhantomCommands();
-      }
-      
-      // Уровень 3: Случайные вспышки надписей
-      if (this.level >= 50 && this.level < 70) {
-        this.startTextFlashes();
-      } else {
-        this.stopTextFlashes();
-      }
-      
-      // Уровень 4: Дрожание текста
-      if (this.level >= SHAKING_START_LEVEL && this.level < SHAKING_END_LEVEL) {
-        this.startTextShaking();
-      } else {
-        this.stopTextShaking();
-      }
-      
-      // Уровень 4: Аномальные вставки
-      if (this.level >= ANOMALOUS_INSERTS_START_LEVEL && this.level < ANOMALOUS_INSERTS_END_LEVEL) {
-        this.startAnomalousInserts();
-      } else {
-        this.stopAnomalousInserts();
-      }
-      
-      // Уровень 5: Зеркальный вывод
-      if (this.level >= MIRROR_START_LEVEL && this.level < MIRROR_END_LEVEL) {
-        this.startMirrorText();
-      } else {
-        this.stopMirrorText();
-      }
-      
-      // Уровень 5: Рандомная блокировка команд
-      if (this.level >= COMMAND_BLOCK_START_LEVEL && this.level < COMMAND_BLOCK_END_LEVEL) {
-        this.startCommandBlocking();
-      } else {
-        this.stopCommandBlocking();
-      }
-      
-      // Уровень 6: Психологическая блокировка команд
-      if (this.level >= PSYCHO_BLOCK_START_LEVEL && this.level < PSYCHO_BLOCK_END_LEVEL) {
-        this.startPsychologicalBlocking();
-      } else {
-        this.stopPsychologicalBlocking();
-      }
-      
-      // Уровень 6: Фантомные досье
-      if (this.level >= PSYCHO_BLOCK_START_LEVEL && this.level < PSYCHO_BLOCK_END_LEVEL) {
-        this.startPhantomDossiers();
-      } else {
-        this.stopPhantomDossiers();
-      }
-      
-      // Уровень 6: Инверсия управления
-      if (this.level >= INVERSION_START_LEVEL && this.level < 98) {
-        this.startInputInversion();
-      } else {
-        this.stopInputInversion();
-      }
-      
-      // Уровень 6: Предсказание намерений
-      if (this.level >= INTENTION_PREDICTION_START_LEVEL && this.level < 98) {
-        this.startIntentionPrediction();
-      } else {
-        this.stopIntentionPrediction();
-      }
-      
-      // Призраки ввода
-      if (this.level >= GHOST_INPUT_START_LEVEL && this.level < 95 && !this.ghostActive) {
-        this.startGhostInput();
-        this.ghostActive = true;
-      } else if (this.level < GHOST_INPUT_START_LEVEL && this.ghostActive) {
-        this.stopGhostInput();
-        this.ghostActive = false;
-      }
-      
-      // Автокоманды
-      if (this.level >= AUTO_COMMAND_START_LEVEL && this.level < 95 && !this.autoActive) {
-        this.startAutoCommands();
-        this.autoActive = true;
-      } else if (this.level < AUTO_COMMAND_START_LEVEL && this.autoActive) {
-        this.stopAutoCommands();
-        this.autoActive = false;
-      }
-      
-      // Деградация сетки
-      if (this.level >= GRID_DEGRADATION_START_LEVEL && window.__netGrid) {
-        window.__netGrid.setSystemDegradation(this.level);
-      }
-      
-      // Цветовые классы для CSS
-      document.body.classList.remove('degradation-2','degradation-3','degradation-4','degradation-5','degradation-6','degradation-glitch');
-      if (this.level >= 30 && this.level < 60) document.body.classList.add('degradation-2');
-      else if (this.level >= 60 && this.level < 80) document.body.classList.add('degradation-3');
-      else if (this.level >= 80 && this.level < 90) document.body.classList.add('degradation-4');
-      else if (this.level >= 90 && this.level < 95) document.body.classList.add('degradation-5');
-      else if (this.level >= 95 && this.level < 98) document.body.classList.add('degradation-6');
-      else if (this.level >= 98) document.body.classList.add('degradation-glitch');
-      
-      requestFullRedraw();
-    }
-    
-    triggerGlitchApocalypse(){
-      isFrozen = true;
-      audioManager.play('glitch_e.mp3', { volume: 0.9, distort: true });
-      this.applyGlitchEffects();
-      setTimeout(()=> this.performAutoReset(), 3500);
-    }
-    
-    applyGlitchEffects(){
-      try {
-        // Цветовая инверсия
-        document.body.style.transition = 'filter 120ms';
-        document.body.style.filter = 'invert(1) contrast(1.3) saturate(0.8)';
-        
-        // Шумовой слой
-        const glitchLayer = document.createElement('div');
-        glitchLayer.id = 'glitchLayer';
-        glitchLayer.style.cssText = `
-          position:fixed;
-          top:0;
-          left:0;
-          width:100%;
-          height:100%;
-          pointer-events:none;
-          z-index:9999;
-          background:transparent;
-          opacity:0.3;
-        `;
-        document.body.appendChild(glitchLayer);
-        
-        let glitchCount = 0;
-        const glitchInterval = setInterval(() => {
-          if (glitchCount >= 20) {
-            clearInterval(glitchInterval);
-            setTimeout(() => {
-              if (document.getElementById('glitchLayer')) {
-                document.getElementById('glitchLayer').remove();
-              }
-              document.body.style.filter = '';
-            }, 300);
-            return;
-          }
-          
-          glitchLayer.innerHTML = '';
-          for (let i = 0; i < 50; i++) {
-            const span = document.createElement('span');
-            span.textContent = GLITCH_CHARS[95][Math.floor(Math.random() * GLITCH_CHARS[95].length)];
-            span.style.cssText = `
-              position:absolute;
-              top:${Math.random() * 100}%;
-              left:${Math.random() * 100}%;
-              color:#${Math.floor(Math.random() * 16777215).toString(16)};
-              font-size:${8 + Math.random() * 12}px;
-              opacity:${0.3 + Math.random() * 0.7};
-            `;
-            glitchLayer.appendChild(span);
-          }
-          
-          glitchCount++;
-        }, 50);
-        
-        // Дрожание курсора
-        const cursorLayer = document.createElement('div');
-        cursorLayer.id = 'cursorLayer';
-        cursorLayer.style.cssText = `
-          position:fixed;
-          top:50%;
-          left:50%;
-          transform:translate(-50%, -50%);
-          color:#FF00FF;
-          font-weight:bold;
-          font-size:24px;
-          z-index:10000;
-        `;
-        cursorLayer.textContent = '▓';
-        document.body.appendChild(cursorLayer);
-        
-      } catch(e){}
-    }
-    
-    performAutoReset(){
-      // Автоматическая команда reset
-      lines.push({ text: 'adam@secure:~$ reset [АВТОМАТИЧЕСКОЕ ИСПОЛНЕНИЕ]', color: '#FF4444', glitched: true });
-      
-      setTimeout(() => {
-        lines.length = 0;
-        this.reset();
-        isFrozen = false;
-        addInputLine();
-        requestFullRedraw();
-        
-        // Скрытое сообщение после сброса
-        setTimeout(() => {
-          addColoredText('> A.D.A.M.: Я ПОМНЮ ТЕБЯ', '#8844FF');
-          setTimeout(() => {
-            if (lines.length > 0 && lines[lines.length - 1].text.includes('Я ПОМНЮ ТЕБЯ')) {
-              lines.splice(lines.length - 1, 1);
-              requestFullRedraw();
-            }
-          }, 800);
-        }, 1500);
-      }, 2000);
-    }
-    
-    reset(){
-      this.level = 0;
-      this.lastSoundLevel = 0;
-      this.soundPlayedAt45 = false;
-      this.falseResetCount = 0;
-      this.intentionPredictionCount = 0;
-      this.phantomDossierCount = 0;
-      localStorage.setItem('adam_degradation','0');
-      
-      // Остановка всех эффектов
-      this.stopGhostInput();
-      this.stopAutoCommands();
-      this.stopPhantomCommands();
-      this.stopTextShaking();
-      this.stopFlashText();
-      this.stopTextFlashes();
-      this.stopAnomalousInserts();
-      this.stopMirrorText();
-      this.stopCommandBlocking();
-      this.stopPsychologicalBlocking();
-      this.stopPhantomDossiers();
-      this.stopInputInversion();
-      this.stopIntentionPrediction();
-      
-      this.ghostActive = false;
-      this.autoActive = false;
-      
-      // Сброс деградации сетки
-      if (window.__netGrid) {
-        window.__netGrid.addDegradation(-100);
-        window.__netGrid.setSystemDegradation(0);
-      }
-      
-      requestFullRedraw();
-    }
-    
-    startGhostInput(){
-      if (ghostInputInterval) return;
-      ghostInputInterval = setInterval(() => {
-        if (!isTyping && !isFrozen && !decryptActive && !traceActive && !audioPlaybackActive && Math.random() < 0.12) {
-          currentLine += ['0','1','▓','█','[',']','{','}','/','\\','▄','▀','▌'][Math.floor(Math.random()*13)];
-          updatePromptLine();
-          setTimeout(()=>{ 
-            if (currentLine.length > 0) {
-              currentLine = currentLine.slice(0,-1); 
-              updatePromptLine();
-            }
-          }, Math.random()*1100+300);
-        }
-      }, 1800);
-    }
-    
-    stopGhostInput(){ 
-      if (ghostInputInterval){ 
-        clearInterval(ghostInputInterval); 
-        ghostInputInterval = null; 
-      } 
-    }
-    
-    startAutoCommands(){
-      if (autoCommandInterval) return;
-      autoCommandInterval = setInterval(()=>{ 
-        if (!isTyping && !isFrozen && !decryptActive && !traceActive && !audioPlaybackActive && Math.random() < 0.06) 
-          this.executeAutoCommand(); 
-      }, 15000);
-    }
-    
-    stopAutoCommands(){ 
-      if (autoCommandInterval){ 
-        clearInterval(autoCommandInterval); 
-        autoCommandInterval = null; 
-      } 
-    }
-    
-    executeAutoCommand(){
-      const fakeCommands = ['KILL','A.D.A.M. ЗДЕСЬ','ОНИ ВНУТРИ','УБЕРИСЬ ОТСЮДА','SOS','ПОМОГИ','ВЫХОД НАЙДЕН','НЕ СМОТРИ','ОН ПРОСЫПАЕТСЯ'];
-      const realCommands = ['help','syst','syslog','subj','notes','clear','reset','exit','dscr 0x001','open NOTE_001'];
-      const all = fakeCommands.concat(realCommands);
-      const cmd = all[Math.floor(Math.random()*all.length)];
-      this.simulateTyping(cmd);
-    }
-    
-    simulateTyping(command){
-      let typed = '';
-      const step = () => {
-        if (typed.length < command.length && !isFrozen && !decryptActive && !traceActive && !audioPlaybackActive){
-          typed += command[typed.length];
-          currentLine = typed;
-          updatePromptLine();
-          setTimeout(step, 100);
-        } else if (!isFrozen && !decryptActive && !traceActive && !audioPlaybackActive){
-          setTimeout(()=>{ 
-            if (!decryptActive && !traceActive && !audioPlaybackActive) {
-              processCommand(currentLine); 
-              currentLine = ''; 
-              updatePromptLine(); 
-            }
-          }, 480);
-        }
-      };
-      step();
-    }
-    
-    startPhantomCommands() {
-      if (phantomCommandInterval) return;
-      phantomCommandInterval = setInterval(() => {
-        // Обработка в keydown
-      }, 100);
-    }
-    
-    stopPhantomCommands() {
-      if (phantomCommandInterval) {
-        clearInterval(phantomCommandInterval);
-        phantomCommandInterval = null;
-      }
-    }
-    
-    startTextFlashes() {
-      if (flashTextInterval) return;
-      flashTextInterval = setInterval(() => {
-        const messages = [
-          'он наблюдает', 'ты ещё здесь?', 'ошибка // сознание', 'не отключайся',
-          'ADAM видит тебя', 'он слышит', 'сигнал искажён', 'потеря синхронизации',
-          'что ты ищешь?', 'он знает'
-        ];
-        
-        const message = messages[Math.floor(Math.random() * messages.length)];
-        const flashEl = document.createElement('div');
-        flashEl.style.cssText = `
-          position:fixed;
-          top:${Math.random() * 80 + 10}%;
-          left:${Math.random() * 80 + 10}%;
-          color:#4d00ff;
-          font-family:${FONT_FAMILY};
-          font-size:14px;
-          text-shadow:0 0 8px #4d00ff;
-          pointer-events:none;
-          opacity:0;
-          transition:opacity 0.2s;
-          z-index:1000;
-        `;
-        flashEl.textContent = message;
-        document.body.appendChild(flashEl);
-        
-        // Появление
-        setTimeout(() => { flashEl.style.opacity = '1'; }, 10);
-        // Видимость
-        setTimeout(() => {}, 600);
-        // Исчезание
-        setTimeout(() => { 
-          flashEl.style.opacity = '0'; 
-          setTimeout(() => { flashEl.remove(); }, 200);
-        }, 800);
-      }, Math.random() * 6000 + 12000); // 12-18 секунд
-    }
-    
-    stopTextFlashes() {
-      if (flashTextInterval) {
-        clearInterval(flashTextInterval);
-        flashTextInterval = null;
-      }
-      // Удалить все текущие вспышки
-      document.querySelectorAll('[style*="pointer-events:none"][style*="z-index:1000"]').forEach(el => el.remove());
-    }
-    
-    startTextShaking() {
-      if (textShakeInterval) return;
-      textShakeInterval = setInterval(() => {
-        // Эффект дрожания будет применяться в функции drawTextLines
-      }, 30);
-    }
-    
-    stopTextShaking() {
-      if (textShakeInterval) {
-        clearInterval(textShakeInterval);
-        textShakeInterval = null;
-      }
-    }
-    
-    startAnomalousInserts() {
-      this._anomalousTimer = setInterval(() => {
-        if (Math.random() < 0.2 && lines.length > 0) {
-          const inserts = [
-            '10101010100010101', '0xERROR_22', '#FF00FF#', '|||',
-            '01189998819991197253', 'SYSTEM OVERRIDE', '7A1-9B3-F00'
-          ];
-          const insert = inserts[Math.floor(Math.random() * inserts.length)];
-          addColoredText(insert, '#8844FF');
-        }
-      }, 10000); // Каждые 10 секунд
-    }
-    
-    stopAnomalousInserts() {
-      if (this._anomalousTimer) {
-        clearInterval(this._anomalousTimer);
-        this._anomalousTimer = null;
-      }
-    }
-    
-    startMirrorText() {
-      this.mirrorActive = true;
-    }
-    
-    stopMirrorText() {
-      this.mirrorActive = false;
-    }
-    
-    startCommandBlocking() {
-      this.commandBlockActive = true;
-    }
-    
-    stopCommandBlocking() {
-      this.commandBlockActive = false;
-    }
-    
-    startPsychologicalBlocking() {
-      this.psychoBlockActive = true;
-    }
-    
-    stopPsychologicalBlocking() {
-      this.psychoBlockActive = false;
-    }
-    
-    startPhantomDossiers() {
-      this.phantomDossiersActive = true;
-    }
-    
-    stopPhantomDossiers() {
-      this.phantomDossiersActive = false;
-    }
-    
-    startInputInversion() {
-      this.inputInversionActive = true;
-    }
-    
-    stopInputInversion() {
-      this.inputInversionActive = false;
-    }
-    
-    startIntentionPrediction() {
-      this.intentionPredictionActive = true;
-    }
-    
-    stopIntentionPrediction() {
-      this.intentionPredictionActive = false;
-    }
-    
-    getPhantomCommand() {
-      this.ghostCommandCount++;
-      if (this.level >= 30 && this.ghostCommandCount >= 7) {
-        this.ghostCommandCount = 0;
-        
-        const phantomCommands = [
-          'ADAM WATCHING',
-          'СИГНАЛ ПОТЕРЯН',
-          'ОНИ ВНУТРИ'
-        ];
-        
-        return phantomCommands[Math.floor(Math.random() * phantomCommands.length)];
-      }
-      return null;
-    }
-    
-    getDistortedStatus(originalStatus) {
-      if (this.level < 30 || Math.random() > 0.3) return originalStatus;
-      
-      const distortions = {
-        'СВЯЗЬ ОТСУТСТВУЕТ': 'ADAM ДЫШИТ',
-        'МЁРТВ / СОЗНАНИЕ АКТИВНО': 'ОН ПРОСЫПАЕТСЯ'
-      };
-      
-      return distortions[originalStatus] || originalStatus;
-    }
-    
-    getDistortedRole(originalRole) {
-      if (this.level < 30 || Math.random() > 0.3) return originalRole;
-      
-      const distortions = {
-        'Руководитель программы VIGIL-9 / Исследователь миссии MARS': 'НАБЛЮДАТЕЛЬ-0',
-        'Тест нейроплантов серии KATARHEY': 'ОН ВИДИТ'
-      };
-      
-      return distortions[originalRole] || originalRole;
-    }
-    
-    revealVigilAlpha() {
-      // Первая часть кода из файла 0XE09
-      addColoredText('[СИСТЕМНАЯ ПОДПИСЬ: V99-АЛФА=375]', '#FFFF00');
-      vigilCodeParts.alpha = '375';
-    }
-    
-    revealVigilBeta() {
-      // Вторая часть кода после сборки сетки
-      addColoredText('[СИСТЕМНЫЙ ОТПЕЧАТОК: V99-БЕТА=814]', '#FFFF00');
-      vigilCodeParts.beta = '814';
-    }
-    
-    revealVigilGamma() {
-      // Третья часть кода при 98% деградации
-      addColoredText('[ЯДРО: КРИТИЧЕСКАЯ ДЕГРАДАЦИЯ. СИСТЕМНЫЙ ОТПЕЧАТОК: V99-ГАММА=291]', '#FFFF00');
-      vigilCodeParts.gamma = '291';
-    }
-    
-    setDegradationLevel(level){
-      this.level = Math.max(0, Math.min(100, level));
-      localStorage.setItem('adam_degradation', String(this.level));
-      this.updateIndicator();
-      this.updateEffects();
+    if (this.level >= 98 && !vigilCodeParts.gamma) {
+      this.revealVigilGamma();
     }
   }
   
+  updateIndicator(){
+    const color = this.level > 95 ? '#FF00FF' : this.level > 80 ? '#FF4444' : this.level > 60 ? '#FF8800' : this.level > 30 ? '#FFFF00' : '#00FF41';
+    this.indicator.innerHTML = `
+      <div style="color:${color};font-weight:700">ДЕГРАДАЦИЯ СИСТЕМЫ</div>
+      <div style="background:#222;height:12px;margin:6px 0;border:2px solid ${color}">
+        <div style="background:${color};height:100%;width:${this.level}%;transition:width 0.3s"></div>
+      </div>
+      <div style="color:${color};font-weight:700">${this.level}%</div>
+    `;
+    this.indicator.style.opacity = '1';
+    requestFullRedraw();
+  }
+  
+  updateEffects(){
+    // Уровень 2: Фантомные команды в истории
+    if (this.level >= 30 && this.level < 60) {
+      this.startPhantomCommands();
+    } else {
+      this.stopPhantomCommands();
+    }
+    
+    // Уровень 3: Случайные вспышки надписей
+    if (this.level >= 50 && this.level < 70) {
+      this.startTextFlashes();
+    } else {
+      this.stopTextFlashes();
+    }
+    
+    // Уровень 4: Дрожание текста
+    if (this.level >= SHAKING_START_LEVEL && this.level < SHAKING_END_LEVEL) {
+      this.startTextShaking();
+    } else {
+      this.stopTextShaking();
+    }
+    
+    // Уровень 4: Аномальные вставки
+    if (this.level >= ANOMALOUS_INSERTS_START_LEVEL && this.level < ANOMALOUS_INSERTS_END_LEVEL) {
+      this.startAnomalousInserts();
+    } else {
+      this.stopAnomalousInserts();
+    }
+    
+    // Уровень 5: Зеркальный вывод
+    if (this.level >= MIRROR_START_LEVEL && this.level < MIRROR_END_LEVEL) {
+      this.startMirrorText();
+    } else {
+      this.stopMirrorText();
+    }
+    
+    // Уровень 5: Рандомная блокировка команд
+    if (this.level >= COMMAND_BLOCK_START_LEVEL && this.level < COMMAND_BLOCK_END_LEVEL) {
+      this.startCommandBlocking();
+    } else {
+      this.stopCommandBlocking();
+    }
+    
+    // Уровень 6: Психологическая блокировка команд
+    if (this.level >= PSYCHO_BLOCK_START_LEVEL && this.level < PSYCHO_BLOCK_END_LEVEL) {
+      this.startPsychologicalBlocking();
+    } else {
+      this.stopPsychologicalBlocking();
+    }
+    
+    // Уровень 6: Фантомные досье
+    if (this.level >= PSYCHO_BLOCK_START_LEVEL && this.level < PSYCHO_BLOCK_END_LEVEL) {
+      this.startPhantomDossiers();
+    } else {
+      this.stopPhantomDossiers();
+    }
+    
+    // Уровень 6: Инверсия управления
+    if (this.level >= INVERSION_START_LEVEL && this.level < 98) {
+      this.startInputInversion();
+    } else {
+      this.stopInputInversion();
+    }
+    
+    // Уровень 6: Предсказание намерений
+    if (this.level >= INTENTION_PREDICTION_START_LEVEL && this.level < 98) {
+      this.startIntentionPrediction();
+    } else {
+      this.stopIntentionPrediction();
+    }
+    
+    // Призраки ввода
+    if (this.level >= GHOST_INPUT_START_LEVEL && this.level < 95 && !this.ghostActive) {
+      this.startGhostInput();
+      this.ghostActive = true;
+    } else if (this.level < GHOST_INPUT_START_LEVEL && this.ghostActive) {
+      this.stopGhostInput();
+      this.ghostActive = false;
+    }
+    
+    // Автокоманды
+    if (this.level >= AUTO_COMMAND_START_LEVEL && this.level < 95 && !this.autoActive) {
+      this.startAutoCommands();
+      this.autoActive = true;
+    } else if (this.level < AUTO_COMMAND_START_LEVEL && this.autoActive) {
+      this.stopAutoCommands();
+      this.autoActive = false;
+    }
+    
+    // Деградация сетки
+    if (this.level >= GRID_DEGRADATION_START_LEVEL && window.__netGrid) {
+      window.__netGrid.setSystemDegradation(this.level);
+    }
+    
+    // Цветовые классы для CSS
+    document.body.classList.remove('degradation-2','degradation-3','degradation-4','degradation-5','degradation-6','degradation-glitch');
+    if (this.level >= 30 && this.level < 60) document.body.classList.add('degradation-2');
+    else if (this.level >= 60 && this.level < 80) document.body.classList.add('degradation-3');
+    else if (this.level >= 80 && this.level < 90) document.body.classList.add('degradation-4');
+    else if (this.level >= 90 && this.level < 95) document.body.classList.add('degradation-5');
+    else if (this.level >= 95 && this.level < 98) document.body.classList.add('degradation-6');
+    else if (this.level >= 98) document.body.classList.add('degradation-glitch');
+    
+    requestFullRedraw();
+  }
+  
+  // ========== ГЛАВНЫЙ МЕТОД: ЗАПУСК ГЛИТЧА-ПРОЦЕССА ==========
+  triggerGlitchApocalypse(){
+    if (decryptActive || traceActive || audioPlaybackActive) return;
+    
+    isFrozen = true; // Замораживаем ввод
+    audioManager.play('glitch_e.mp3', { volume: 0.9, distort: true });
+    
+    // Запускаем визуальные эффекты
+    this.applyGlitchEffects();
+    
+    // Через 4 секунды показываем прогресс сброса
+    setTimeout(() => {
+      this.showResetProgress();
+    }, 4000);
+  }
+  
+  // ========== МЕТОД: ПОКАЗ ПРОГРЕССА СБРОСА (АНИМАЦИЯ) ==========
+  showResetProgress() {
+    // Очищаем терминал
+    lines.length = 0;
+    
+    // Добавляем заголовок
+    pushLine('', '#000000'); // отступ
+    pushLine('>>> ПРИНУДИТЕЛЬНЫЙ СБРОС СИСТЕМЫ <<<', '#FF00FF');
+    pushLine('', '#000000'); // отступ
+    
+    // Начальное состояние прогресс-бара
+    pushLine('> ЗАВЕРШЕНИЕ АКТИВНЫХ МОДУЛЕЙ [          ]', '#FFFF00');
+    
+    let progress = 0;
+    const progressInterval = setInterval(() => {
+      progress += 10;
+      
+      if (progress >= 100) {
+        clearInterval(progressInterval);
+        
+        // Финальное состояние прогресс-бара
+        if (lines.length > 0) {
+          lines[lines.length - 1].text = '> ЗАВЕРШЕНИЕ АКТИВНЫХ МОДУЛЕЙ [||||||||||] 100%';
+          requestFullRedraw();
+		                      window.__netGrid.setSystemDegradation(0);
+  window.__netGrid.addDegradation(-100);
+        }
+        
+        // Запускаем фактический сброс через 1 секунду
+        setTimeout(() => this.performAutoReset(), 1000);
+        return;
+      }
+      
+      // Обновляем прогресс-бар
+      if (lines.length > 0) {
+        const filled = Math.floor(progress / 10);
+        const empty = 10 - filled;
+        lines[lines.length - 1].text = `> ЗАВЕРШЕНИЕ АКТИВНЫХ МОДУЛЕЙ [${'|'.repeat(filled)}${' '.repeat(empty)}] ${progress}%`;
+        requestFullRedraw();
+      }
+    }, 200);
+  }
+  
+// ========== МЕТОД: ВЫПОЛНЕНИЕ АВТОМАТИЧЕСКОГО СБРОСА ==========
+// ========== МЕТОД: ВЫПОЛНЕНИЕ АВТОМАТИЧЕСКОГО СБРОСА ==========
+performAutoReset() {
+  console.log('[AUTO RESET] Starting...');
+  
+  // Гарантированная очистка ВСЕХ эффектов
+  this.clearGlitchEffects();
+  this.clearAllVisualEffects();
+  
+  // Блокируем ввод на время сброса
+  isFrozen = true;
+  
+  // Добавляем видимую команду reset
+  pushLine('adam@secure:~$ reset [АВТОМАТИЧЕСКОЕ ИСПОЛНЕНИЕ]', '#FF4444');
+  requestFullRedraw();
+  
+  // Даем время увидеть команду
+  setTimeout(() => {
+    console.log('[AUTO RESET] Executing system reset...');
+    
+    // ===== ПОЛНАЯ ОЧИСТКА ВСЕХ СОСТОЯНИЙ =====
+    lines.length = 0;
+    commandHistory = [];
+    historyIndex = -1;
+    currentLine = '';
+    commandCount = 0;
+    sessionStartTime = Date.now();
+    falseResetActive = false;
+    intentionalPredictionActive = false;
+    intentionPredicted = false;
+    decryptCloseAttempts = 0;
+    
+    // Сброс состояний
+    isFrozen = false; // РАЗМОРАЖИВАЕМ
+    
+    // Сброс системы деградации
+    this.reset();
+    
+    // ════════════════════════════════════════════════════════════════════
+    // ГЛАВНОЕ: ВЫЗЫВАЕМ forceReset() ДЛЯ СЕТКИ
+    // ════════════════════════════════════════════════════════════════════
+// === ГАРАНТИРОВАННЫЙ СБРОС СЕТКИ ===
+if (window.__netGrid) {
+  // 1. Выключаем режим сетки
+  if (typeof window.__netGrid.setGridMode === 'function') {
+    window.__netGrid.setGridMode(false);
+  }
+  
+  // 2. Сбрасываем деградацию
+  window.__netGrid.setSystemDegradation(0);
+  
+  // 3. Форсированный сброс эффектов
+  if (typeof window.__netGrid.forceReset === 'function') {
+    window.__netGrid.forceReset();
+  }
+  
+  // 4. ДВОЙНАЯ ПЕРЕРИСОВКА ЧЕРЕЗ 100мс (гарантия)
+  setTimeout(() => {
+    if (window.__netGrid) {
+      window.__netGrid.forceReset();
+    }
+  }, 100);
+}
+    // ════════════════════════════════════════════════════════════════════
+    
+    // ПОЛНЫЙ СБРОЗ CSS-СОСТОЯНИЯ
+    document.body.classList.remove('degradation-2','degradation-3','degradation-4','degradation-5','degradation-6','degradation-glitch');
+    document.body.style.filter = '';
+    document.body.style.backdropFilter = '';
+    document.body.style.mixBlendMode = '';
+    document.body.style.transition = '';
+    
+    // ===== ВОЗВРАТ В ИСХОДНОЕ СОСТОЯНИЕ =====
+    // Используем pushLine напрямую, а не typeText, чтобы гарантировать отображение
+    pushLine('> ТЕРМИНАЛ A.D.A.M. // VIGIL-9 АКТИВЕН', '#00FF41');
+    pushLine('> ДОБРО ПОЖАЛОВАТЬ, ОПЕРАТОР', '#00FF41');
+    pushLine('> ВВЕДИТЕ "help" ДЛЯ СПИСКА КОМАНД', '#00FF41');
+    
+    // Гарантированная перерисовка
+    requestFullRedraw();
+    
+    // Даем время отрисоваться
+    setTimeout(() => {
+      // ТОЛЬКО ПОСЛЕ отрисовки приветствия добавляем строку ввода
+      addInputLine();
+      
+      // Финальная перерисовка
+      requestFullRedraw();
+      
+      console.log('[AUTO RESET] Complete. Terminal ready.');
+    }, 300);
+  }, 1500);
+}
+  // ========== МЕТОД: ОЧИСТКА ЭФФЕКТОВ ГЛИТЧА ==========
+  clearGlitchEffects() {
+    // Удаляем слои глитча
+    const glitchLayer = document.getElementById('glitchLayer');
+    if (glitchLayer) glitchLayer.remove();
+    
+    const cursorLayer = document.getElementById('cursorLayer');
+    if (cursorLayer) cursorLayer.remove();
+    
+    // Сбрасываем CSS-фильтры
+    document.body.style.filter = '';
+    document.body.style.transition = '';
+    
+    // Очищаем интервалы
+    if (textShakeInterval) {
+      clearInterval(textShakeInterval);
+      textShakeInterval = null;
+    }
+    
+    if (flashTextInterval) {
+      clearInterval(flashTextInterval);
+      flashTextInterval = null;
+    }
+    
+    // Гарантия: удаляем все оставшиеся элементы
+    document.querySelectorAll('#glitchLayer, #cursorLayer').forEach(el => el.remove());
+  }
+  
+  // ========== МЕТОД: ПОЛНАЯ ОЧИСТКА ВИЗУАЛЬНЫХ ЭФФЕКТОВ ==========
+  clearAllVisualEffects() {
+    // Удаляем классы деградации
+    document.body.classList.remove('degradation-2','degradation-3','degradation-4','degradation-5','degradation-6','degradation-glitch');
+    
+    // Удаляем все элементы глитча
+    document.querySelectorAll('#glitchLayer, #cursorLayer').forEach(layer => layer.remove());
+    
+    // Сбрасываем все CSS-стили
+    document.body.style.filter = '';
+    document.body.style.backdropFilter = '';
+    document.body.style.mixBlendMode = '';
+    document.body.style.transition = '';
+    
+    // Чистим canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+  // ========== МЕТОД: ПОЛНЫЙ СБРОС ВСЕХ СОСТОЯНИЙ ==========
+fullSystemReset(){
+  // Сброс всех глобальных переменных состояния
+  isFrozen = false;
+  isTyping = false;
+  awaitingConfirmation = false;
+  confirmationCallback = null;
+  currentAudio = null;
+  commandCount = 0;
+  sessionStartTime = Date.now();
+  resetAttempts = 0;
+  falseResetActive = false;
+  intentionalPredictionActive = false;
+  intentionPredicted = false;
+  decryptActive = false;
+  traceActive = false;
+  traceTimer = null;
+  audioPlaybackActive = false;
+  audioPlaybackFile = null;
+  decryptCloseAttempts = 0;
+  
+  // Очистка массивов
+  lines.length = 0;
+  commandHistory = [];
+  historyIndex = -1;
+  currentLine = '';
+  
+  // Полная очистка эффектов
+  this.clearGlitchEffects();
+  this.clearAllVisualEffects();
+  
+  // Сброс сетки
+  if (window.__netGrid) {
+    if (typeof window.__netGrid.reset === 'function') {
+      window.__netGrid.reset();
+    }
+    window.__netGrid.addDegradation(-100);
+    window.__netGrid.setSystemDegradation(0);
+    if (window.__netGrid.isGridMode && window.__netGrid.isGridMode()) {
+      window.__netGrid.setGridMode(false);
+    }
+  }
+  
+  // Сброс деградации
+  this.level = 0;
+  this.lastSoundLevel = 0;
+  this.soundPlayedAt45 = false;
+  this.falseResetCount = 0;
+  this.intentionPredictionCount = 0;
+  this.phantomDossierCount = 0;
+  localStorage.setItem('adam_degradation','0');
+  
+  // Остановка всех эффектов
+  this.stopGhostInput();
+  this.stopAutoCommands();
+  this.stopPhantomCommands();
+  this.stopTextShaking();
+  this.stopFlashText();
+  this.stopTextFlashes();
+  this.stopAnomalousInserts();
+  this.stopMirrorText();
+  this.stopCommandBlocking();
+  this.stopPsychologicalBlocking();
+  this.stopPhantomDossiers();
+  this.stopInputInversion();
+  this.stopIntentionPrediction();
+  
+  this.ghostActive = false;
+  this.autoActive = false;
+  
+  // Сброс CSS
+  document.body.classList.remove('degradation-2','degradation-3','degradation-4','degradation-5','degradation-6','degradation-glitch');
+  document.body.style.filter = '';
+  document.body.style.backdropFilter = '';
+  document.body.style.mixBlendMode = '';
+  document.body.style.transition = '';
+  
+  // Обновление индикатора
+  this.updateIndicator();
+  
+  requestFullRedraw();
+}
+  // ========== МЕТОД: ПРИМЕНЕНИЕ ЭФФЕКТОВ ГЛИТЧА ==========
+  applyGlitchEffects(){
+    if (decryptActive || traceActive || audioPlaybackActive) return;
+    
+    try {
+      // Цветовая инверсия
+      document.body.style.transition = 'filter 120ms';
+      document.body.style.filter = 'invert(1) contrast(1.3) saturate(0.8)';
+      
+      // Шумовой слой
+      const glitchLayer = document.createElement('div');
+      glitchLayer.id = 'glitchLayer';
+      glitchLayer.style.cssText = `
+        position:fixed;
+        top:0;
+        left:0;
+        width:100%;
+        height:100%;
+        pointer-events:none;
+        z-index:9999;
+        background:transparent;
+        opacity:0.3;
+      `;
+      document.body.appendChild(glitchLayer);
+      
+      let glitchCount = 0;
+      const glitchInterval = setInterval(() => {
+        if (glitchCount >= 20) {
+          clearInterval(glitchInterval);
+          return;
+        }
+        
+        glitchLayer.innerHTML = '';
+        for (let i = 0; i < 50; i++) {
+          const span = document.createElement('span');
+          span.textContent = GLITCH_CHARS[95][Math.floor(Math.random() * GLITCH_CHARS[95].length)];
+          span.style.cssText = `
+            position:absolute;
+            top:${Math.random() * 100}%;
+            left:${Math.random() * 100}%;
+            color:#${Math.floor(Math.random() * 16777215).toString(16)};
+            font-size:${8 + Math.random() * 12}px;
+            opacity:${0.3 + Math.random() * 0.7};
+          `;
+          glitchLayer.appendChild(span);
+        }
+        
+        glitchCount++;
+      }, 50);
+      
+      // Дрожание курсора
+      const cursorLayer = document.createElement('div');
+      cursorLayer.id = 'cursorLayer';
+      cursorLayer.style.cssText = `
+        position:fixed;
+        top:50%;
+        left:50%;
+        transform:translate(-50%, -50%);
+        color:#FF00FF;
+        font-weight:bold;
+        font-size:24px;
+        z-index:10000;
+      `;
+      cursorLayer.textContent = '▓';
+      document.body.appendChild(cursorLayer);
+      
+    } catch(e){}
+  }
+  
+reset(){
+  // Сброс всех счетчиков и флагов
+  this.level = 0;
+  this.lastSoundLevel = 0;
+  this.soundPlayedAt45 = false;
+  this.falseResetCount = 0;
+  this.intentionPredictionCount = 0;
+  this.phantomDossierCount = 0;
+  localStorage.setItem('adam_degradation','0');
+  
+  // Остановка всех эффектов
+  this.stopGhostInput();
+  this.stopAutoCommands();
+  this.stopPhantomCommands();
+  this.stopTextShaking();
+  this.stopFlashText();
+  this.stopTextFlashes();
+  this.stopAnomalousInserts();
+  this.stopMirrorText();
+  this.stopCommandBlocking();
+  this.stopPsychologicalBlocking();
+  this.stopPhantomDossiers();
+  this.stopInputInversion();
+  this.stopIntentionPrediction();
+  
+  this.ghostActive = false;
+  this.autoActive = false;
+  
+  // Сброс деградации сетки
+  if (window.__netGrid) {
+    window.__netGrid.addDegradation(-100);
+    window.__netGrid.setSystemDegradation(0);
+    // Выключаем режим сетки
+    if (typeof window.__netGrid.setGridMode === 'function') {
+      window.__netGrid.setGridMode(false);
+    }
+  }
+  
+  this.updateEffects();
+  requestFullRedraw();
+}
+  
+  startGhostInput(){
+    if (ghostInputInterval) return;
+    ghostInputInterval = setInterval(() => {
+      if (!isTyping && !isFrozen && !decryptActive && !traceActive && !audioPlaybackActive && Math.random() < 0.12) {
+        currentLine += ['0','1','▓','█','[',']','{','}','/','\\','▄','▀','▌'][Math.floor(Math.random()*13)];
+        updatePromptLine();
+        setTimeout(()=>{ 
+          if (currentLine.length > 0) {
+            currentLine = currentLine.slice(0,-1); 
+            updatePromptLine();
+          }
+        }, Math.random()*1100+300);
+      }
+    }, 1800);
+  }
+  
+  stopGhostInput(){ 
+    if (ghostInputInterval){ 
+      clearInterval(ghostInputInterval); 
+      ghostInputInterval = null; 
+    } 
+  }
+  
+  startAutoCommands(){
+    if (autoCommandInterval) return;
+    autoCommandInterval = setInterval(()=>{ 
+      if (!isTyping && !isFrozen && !decryptActive && !traceActive && !audioPlaybackActive && Math.random() < 0.06) 
+        this.executeAutoCommand(); 
+    }, 15000);
+  }
+  
+  stopAutoCommands(){ 
+    if (autoCommandInterval){ 
+      clearInterval(autoCommandInterval); 
+      autoCommandInterval = null; 
+    } 
+  }
+  
+  executeAutoCommand(){
+    const fakeCommands = ['KILL','A.D.A.M. ЗДЕСЬ','ОНИ ВНУТРИ','УБЕРИСЬ ОТСЮДА','SOS','ПОМОГИ','ВЫХОД НАЙДЕН','НЕ СМОТРИ','ОН ПРОСЫПАЕТСЯ'];
+    const realCommands = ['help','syst','syslog','subj','notes','clear','reset','exit','dscr 0x001','open NOTE_001'];
+    const all = fakeCommands.concat(realCommands);
+    const cmd = all[Math.floor(Math.random()*all.length)];
+    this.simulateTyping(cmd);
+  }
+  
+  simulateTyping(command){
+    let typed = '';
+    const step = () => {
+      if (typed.length < command.length && !isFrozen && !decryptActive && !traceActive && !audioPlaybackActive){
+        typed += command[typed.length];
+        currentLine = typed;
+        updatePromptLine();
+        setTimeout(step, 100);
+      } else if (!isFrozen && !decryptActive && !traceActive && !audioPlaybackActive){
+        setTimeout(()=>{ 
+          if (!decryptActive && !traceActive && !audioPlaybackActive) {
+            processCommand(currentLine); 
+            currentLine = ''; 
+            updatePromptLine(); 
+          }
+        }, 480);
+      }
+    };
+    step();
+  }
+  
+  startPhantomCommands() {
+    if (phantomCommandInterval) return;
+    phantomCommandInterval = setInterval(() => {
+      // Обработка в keydown
+    }, 100);
+  }
+  
+  stopPhantomCommands() {
+    if (phantomCommandInterval) {
+      clearInterval(phantomCommandInterval);
+      phantomCommandInterval = null;
+    }
+  }
+  
+  startTextFlashes() {
+    if (flashTextInterval) return;
+    flashTextInterval = setInterval(() => {
+      const messages = [
+        'он наблюдает', 'ты ещё здесь?', 'ошибка // сознание', 'не отключайся',
+        'ADAM видит тебя', 'он слышит', 'сигнал искажён', 'потеря синхронизации',
+        'что ты ищешь?', 'он знает'
+      ];
+      
+      const message = messages[Math.floor(Math.random() * messages.length)];
+      const flashEl = document.createElement('div');
+      
+      flashEl.setAttribute('style', `
+        position: fixed !important;
+        top: ${Math.random() * 80 + 10}% !important;
+        left: ${Math.random() * 80 + 10}% !important;
+        color: #AAAAAA !important;
+        font-family: ${FONT_FAMILY} !important;
+        font-size: 14px !important;
+        text-shadow: none !important;
+        pointer-events: none !important;
+        opacity: 0 !important;
+        transition: opacity 0.2s !important;
+        z-index: 9999 !important;
+        filter: none !important;
+        animation: none !important;
+        mix-blend-mode: normal !important;
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        letter-spacing: normal !important;
+        line-height: normal !important;
+        text-transform: none !important;
+        font-weight: normal !important;
+        transform: none !important;
+      `);
+      
+      flashEl.textContent = message;
+      document.body.appendChild(flashEl);
+      
+      setTimeout(() => { 
+        flashEl.style.opacity = '1'; 
+      }, 10);
+      
+      setTimeout(() => { 
+        flashEl.style.opacity = '0'; 
+        setTimeout(() => { 
+          if (flashEl.parentNode) {
+            flashEl.parentNode.removeChild(flashEl);
+          }
+        }, 200);
+      }, 800);
+    }, Math.random() * 6000 + 12000);
+  }
+  
+  stopTextFlashes() {
+    if (flashTextInterval) {
+      clearInterval(flashTextInterval);
+      flashTextInterval = null;
+    }
+    document.querySelectorAll('[style*="pointer-events:none"][style*="z-index:9999"]').forEach(el => el.remove());
+  }
+  
+  startTextShaking() {
+    if (textShakeInterval) return;
+    textShakeInterval = setInterval(() => {
+      // Эффект дрожания будет применяться в функции drawTextLines
+    }, 30);
+  }
+  
+  stopTextShaking() {
+    if (textShakeInterval) {
+      clearInterval(textShakeInterval);
+      textShakeInterval = null;
+    }
+  }
+  
+  startAnomalousInserts() {
+    this._anomalousTimer = setInterval(() => {
+      if (Math.random() < 0.2 && lines.length > 0) {
+        const inserts = [
+          '10101010100010101', '0xERROR_22', '#FF00FF#', '|||',
+          '01189998819991197253', 'SYSTEM OVERRIDE', '7A1-9B3-F00'
+        ];
+        const insert = inserts[Math.floor(Math.random() * inserts.length)];
+        addColoredText(insert, '#8844FF');
+      }
+    }, 10000);
+  }
+  
+  stopAnomalousInserts() {
+    if (this._anomalousTimer) {
+      clearInterval(this._anomalousTimer);
+      this._anomalousTimer = null;
+    }
+  }
+  
+  startMirrorText() {
+    this.mirrorActive = true;
+  }
+  
+  stopMirrorText() {
+    this.mirrorActive = false;
+  }
+  
+  startCommandBlocking() {
+    this.commandBlockActive = true;
+  }
+  
+  stopCommandBlocking() {
+    this.commandBlockActive = false;
+  }
+  
+  startPsychologicalBlocking() {
+    this.psychoBlockActive = true;
+  }
+  
+  stopPsychologicalBlocking() {
+    this.psychoBlockActive = false;
+  }
+  
+  startPhantomDossiers() {
+    this.phantomDossiersActive = true;
+  }
+  
+  stopPhantomDossiers() {
+    this.phantomDossiersActive = false;
+  }
+  
+  startInputInversion() {
+    this.inputInversionActive = true;
+  }
+  
+  stopInputInversion() {
+    this.inputInversionActive = false;
+  }
+  
+  startIntentionPrediction() {
+    this.intentionPredictionActive = true;
+  }
+  
+  stopIntentionPrediction() {
+    this.intentionPredictionActive = false;
+  }
+  
+  getPhantomCommand() {
+    this.ghostCommandCount++;
+    if (this.level >= 30 && this.ghostCommandCount >= 7) {
+      this.ghostCommandCount = 0;
+      
+      const phantomCommands = [
+        'ADAM WATCHING',
+        'СИГНАЛ ПОТЕРЯН',
+        'ОНИ ВНУТРИ'
+      ];
+      
+      return phantomCommands[Math.floor(Math.random() * phantomCommands.length)];
+    }
+    return null;
+  }
+  
+  getDistortedStatus(originalStatus) {
+    if (this.level < 30 || Math.random() > 0.3) return originalStatus;
+    
+    const distortions = {
+      'СВЯЗЬ ОТСУТСТВУЕТ': 'ADAM ДЫШИТ',
+      'МЁРТВ / СОЗНАНИЕ АКТИВНО': 'ОН ПРОСЫПАЕТСЯ'
+    };
+    
+    return distortions[originalStatus] || originalStatus;
+  }
+  
+  getDistortedRole(originalRole) {
+    if (this.level < 30 || Math.random() > 0.3) return originalRole;
+    
+    const distortions = {
+      'Руководитель программы VIGIL-9 / Исследователь миссии MARS': 'НАБЛЮДАТЕЛЬ-0',
+      'Тест нейроплантов серии KATARHEY': 'ОН ВИДИТ'
+    };
+    
+    return distortions[originalRole] || originalRole;
+  }
+  
+  revealVigilAlpha() {
+    addColoredText('[СИСТЕМНАЯ ПОДПИСЬ: V99-АЛФА=375]', '#FFFF00');
+    vigilCodeParts.alpha = '375';
+  }
+  
+  revealVigilBeta() {
+    addColoredText('[СИСТЕМНЫЙ ОТПЕЧАТОК: V99-БЕТА=814]', '#FFFF00');
+    vigilCodeParts.beta = '814';
+  }
+  
+  revealVigilGamma() {
+    addColoredText('[ЯДРО: КРИТИЧЕСКАЯ ДЕГРАДАЦИЯ. СИСТЕМНЫЙ ОТПЕЧАТОК: V99-ГАММА=291]', '#FFFF00');
+    vigilCodeParts.gamma = '291';
+  }
+  
+setDegradationLevel(level){
+  this.level = Math.max(0, Math.min(100, level));
+  localStorage.setItem('adam_degradation', String(this.level));
+  this.updateIndicator();
+  this.updateEffects();
+  
+  // === ГАРАНТИРОВАННЫЙ СБРОС СЕТКИ ПРИ НУЛЕВОЙ ДЕГРАДАЦИИ ===
+  if (level === 0 && window.__netGrid) {
+    window.__netGrid.setSystemDegradation(0);
+    // ДВОЙНОЙ СБРОС С ЗАДЕРЖКОЙ ДЛЯ ГАРАНТИИ
+    window.__netGrid.forceReset();
+    setTimeout(() => {
+      if (window.__netGrid) {
+        window.__netGrid.forceReset();
+        window.__netGrid.addDegradation(0); // Сброс эффектов деградации
+      }
+    }, 100);
+  }
+}
+}
   const degradation = new DegradationSystem();
   
   // ---------- drawing helpers ----------
@@ -935,6 +1211,7 @@ const DISTORTION_PATTERNS = {
   }
   
 function applyTextDistortion(text, level) {
+	if (level >= 95) return text;
   // Пропускаем искажение для служебных строк
   if (text.startsWith('adam@secure:~$') || text.startsWith('>') || text.startsWith('[')) {
     return text;
@@ -989,6 +1266,7 @@ function applyTextDistortion(text, level) {
     ctx.save();
     ctx.setTransform(1,0,0,1,0,0);
     ctx.scale(DPR, DPR);
+	
     ctx.font = `${FONT_SIZE_PX}px ${FONT_FAMILY}`;
     ctx.textBaseline = 'top';
     const contentH = vh - PADDING*2;
@@ -1000,11 +1278,7 @@ function applyTextDistortion(text, level) {
     const maxW = vw - PADDING*2;
     
     // Эффект дрожания текста
-    const shouldShake = degradation.level >= SHAKING_START_LEVEL && degradation.level < SHAKING_END_LEVEL;
-    const shakeIntensity = shouldShake ? 
-      Math.min(1.0, (degradation.level - SHAKING_START_LEVEL) / (SHAKING_END_LEVEL - SHAKING_START_LEVEL)) : 0;
-    const shakeOffset = shouldShake ? 
-      (Math.sin(Date.now() / 100) * 1.5 * shakeIntensity) : 0; // Макс ±1.5px
+
     
     // Зеркальный вывод
     const shouldMirror = degradation.level >= MIRROR_START_LEVEL && degradation.level < MIRROR_END_LEVEL && 
@@ -1015,7 +1289,7 @@ function applyTextDistortion(text, level) {
       let color = item.color || '#00FF41';
       
       // Искажение цвета при высокой деградации
-      if (degradation.level >= 60 && Math.random() < 0.1) {
+if (degradation.level >= 60 && Math.random() < 0.02) { 
         color = ['#FF4444', '#FF8800', '#FFFF00', '#4d00ff'][Math.floor(Math.random() * 4)];
       }
       
@@ -1049,7 +1323,7 @@ function applyTextDistortion(text, level) {
       ctx.fillStyle = color;
       
       if (ctx.measureText(text).width <= maxW) {
-        ctx.fillText(text, PADDING + shakeOffset, y);
+        ctx.fillText(text, PADDING, y);
         y += LINE_HEIGHT;
         continue;
       }
@@ -1074,62 +1348,88 @@ function applyTextDistortion(text, level) {
     ctx.restore();
   }
   
-  function drawDegradationIndicator(){
-    if (degradation.level < 5) return;
-    
-    const wBox = Math.min(360, Math.floor(vw * 0.34));
-    const hBox = 62;
-    const x = Math.max(10, vw - wBox - 20);
-    const y = 20;
-    ctx.save();
-    ctx.setTransform(1,0,0,1,0,0);
-    ctx.scale(DPR, DPR);
-    ctx.fillStyle = 'rgba(0,0,0,0.9)';
-    roundRect(ctx, x, y, wBox, hBox, 6);
-    ctx.fill();
-    
-    let color = '#00FF41';
-    if (degradation.level > 30) color = '#FFFF00';
-    if (degradation.level > 60) color = '#FF8800';
-    if (degradation.level > 80) color = '#FF4444';
-    if (degradation.level > 95) color = '#FF00FF';
-    
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = color;
-    roundRect(ctx, x, y, wBox, hBox, 6);
-    ctx.stroke();
-    
-    const barX = x + 8, barY = y + 28, barW = wBox - 16, barH = 12;
-    ctx.fillStyle = '#333';
-    ctx.fillRect(barX, barY, barW, barH);
-    ctx.fillStyle = color;
-    ctx.fillRect(barX, barY, Math.round(barW * (degradation.level / 100)), barH);
-    
-    ctx.fillStyle = color;
-    ctx.font = `12px ${FONT_FAMILY}`;
-    let label = 'ДЕГРАДАЦИЯ СИСТЕМЫ';
-    ctx.fillText(label, x + 10, y + 18);
-    ctx.fillText(degradation.level + '%', x + wBox - 46, y + 18);
-    
-    // Подсказка о сбросе (начиная с 60%)
-    if (degradation.level >= 60) {
-      ctx.fillStyle = '#FFFF00';
-      ctx.font = `11px ${FONT_FAMILY}`;
-      ctx.fillText('> используйте команду RESET для стабилизации', x + 10, y + 45);
-    }
-    
-    // Мигающая подсказка (начиная с 70%)
-    if (degradation.level >= 70) {
-      const blink = Math.floor(Date.now() / 500) % 2 === 0;
-      if (blink || degradation.level < 75) {
-        ctx.fillStyle = '#FF4444';
-        ctx.font = `11px ${FONT_FAMILY}`;
-        ctx.fillText('> СРОЧНО ВВЕДИТЕ RESET', x + 10, y + 4);
-      }
-    }
-    
-    ctx.restore();
+function drawDegradationIndicator(){
+  const wBox = Math.min(420, Math.floor(vw * 0.38));
+  
+  // БАЗОВАЯ ВЫСОТА (только заголовок + индикатор + проценты)
+  let totalH = 56; // минимальная высота для < 60%
+  
+  // ДОБАВЛЯЕМ ВЫСОТУ в зависимости от ТИПА НАДПИСИ
+  if (degradation.level >= 70) {
+    // Для "СРОЧНО ВВЕДИТЕ RESET" - одна строка + отступ снизу
+    totalH = 85; // компактная высота для однострочного предупреждения
+  } else if (degradation.level >= 60) {
+    // Для двухстрочной подсказки с увеличенным расстоянием
+    totalH = 95; // больше высота для двух строк
   }
+  
+  const x = Math.max(10, vw - wBox - 20);
+  const y = 20;
+  
+  ctx.save();
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.scale(DPR, DPR);
+  
+  // Фон
+  ctx.fillStyle = 'rgba(0,0,0,0.9)';
+  roundRect(ctx, x, y, wBox, totalH, 6);
+  ctx.fill();
+  
+  // Цвет рамки
+  let color = '#00FF41';
+  if (degradation.level > 30) color = '#FFFF00';
+  if (degradation.level > 60) color = '#FF8800';
+  if (degradation.level > 80) color = '#FF4444';
+  if (degradation.level > 95) color = '#FF00FF';
+  
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = color;
+  roundRect(ctx, x, y, wBox, totalH, 6);
+  ctx.stroke();
+  
+  // Индикатор
+  const barX = x + 8, barY = y + 22, barW = wBox - 16, barH = 12;
+  ctx.fillStyle = '#333';
+  ctx.fillRect(barX, barY, barW, barH);
+  ctx.fillStyle = color;
+  ctx.fillRect(barX, barY, Math.round(barW * (degradation.level / 100)), barH);
+  
+  // Текст
+  ctx.fillStyle = color;
+  ctx.font = `12px ${FONT_FAMILY}`;
+  
+  // Верхний текст (ДЕГРАДАЦИЯ СИСТЕМЫ)
+  ctx.fillText('ДЕГРАДАЦИЯ СИСТЕМЫ', x + 10, y + 18);
+  
+  // Проценты (справа)
+  const percentX = x + wBox - 46;
+  ctx.fillText(degradation.level + '%', percentX, y + 18);
+  
+  // ПОДСКАЗКИ - позиционируемся ОТНОСИТЕЛЬНО НИЖНЕГО КРАЯ ОКНА
+  if (degradation.level >= 70) {
+    // Для красного уровня - текст ближе к низу окна
+    const textY = y + totalH - 18; // 18px от нижнего края
+    
+    const blink = Math.floor(Date.now() / 500) % 2 === 0;
+    if (blink || degradation.level < 75) {
+      ctx.fillStyle = '#FF4444';
+      ctx.font = `11px ${FONT_FAMILY}`;
+      ctx.fillText('> СРОЧНО ВВЕДИТЕ RESET', x + 10, textY);
+    }
+  } else if (degradation.level >= 60) {
+    // Для жёлтого уровня - две строки, центрированные в нижней части
+    const lineSpacing = 20; // расстояние между строками
+    const firstLineY = y + totalH - 35; // 35px от нижнего края для первой строки
+    const secondLineY = firstLineY + lineSpacing;
+    
+    ctx.fillStyle = '#FFFF00';
+    ctx.font = `11px ${FONT_FAMILY}`;
+    ctx.fillText('> используйте команду', x + 10, firstLineY);
+    ctx.fillText('RESET для стабилизации', x + 10, secondLineY);
+  }
+  
+  ctx.restore();
+}
   
   function roundRect(ctx, x, y, w, h, r) {
     ctx.beginPath();
@@ -1154,20 +1454,20 @@ function applyTextDistortion(text, level) {
     drawTextLines();
     drawDegradationIndicator();
     
-    if (isFrozen) {
-      ctx.save();
-      ctx.setTransform(1,0,0,1,0,0);
-      ctx.globalAlpha = 0.08;
-      ctx.fillStyle = '#FFF';
-      for (let i = 0; i < 6; i++) {
-        const rx = Math.random() * vw;
-        const ry = Math.random() * vh;
-        const rw = Math.random() * 120;
-        const rh = Math.random() * 40;
-        ctx.fillRect(rx, ry, rw, rh);
-      }
-      ctx.restore();
-    }
+//    if (isFrozen) {
+//      ctx.save();
+//      ctx.setTransform(1,0,0,1,0,0);
+//      ctx.globalAlpha = 0.08;
+//      ctx.fillStyle = '#FFF';
+//      for (let i = 0; i < 6; i++) {
+//        const rx = Math.random() * vw;
+//        const ry = Math.random() * vh;
+//        const rw = Math.random() * 120;
+//        const rh = Math.random() * 40;
+//        ctx.fillRect(rx, ry, rw, rh);
+//      }
+//      ctx.restore();
+//    }
     
     // Мерцающий курсор при высокой деградации
     if (degradation.level >= 80 && degradation.level < 90 && lines.length > 0 && 
@@ -1199,10 +1499,16 @@ function applyTextDistortion(text, level) {
   }
   
   // ---------- terminal API ----------
-  function pushLine(text, color){
-    lines.push({ text: String(text), color: color || '#00FF41' });
-    if (lines.length > MAX_LINES) lines.splice(0, lines.length - MAX_LINES);
-  }
+function pushLine(text, color, skipDistortion = false, _ephemeral = false, _isInputLine = false){
+  lines.push({ 
+    text: String(text), 
+    color: color || '#00FF41', 
+    skipDistortion, 
+    _ephemeral, 
+    _isInputLine 
+  });
+  if (lines.length > MAX_LINES) lines.splice(0, lines.length - MAX_LINES);
+}
   
   function addOutput(text, className = 'output') {
     if (isFrozen || decryptActive || traceActive || audioPlaybackActive) return;
@@ -1254,23 +1560,41 @@ function applyTextDistortion(text, level) {
     requestFullRedraw();
   }
   
-  function addInputLine(){
-    if (isFrozen || decryptActive || traceActive || audioPlaybackActive) return;
-    if (lines.length && String(lines[lines.length - 1].text).startsWith('adam@secure:~$')) return;
-    pushLine('adam@secure:~$ ', '#00FF41');
-    scrollOffset = 0;
-    requestFullRedraw();
+function addInputLine(){
+  if (isFrozen || decryptActive || traceActive || audioPlaybackActive) return;
+  
+  // Проверяем по флагу, а не по тексту
+  const lastLine = lines[lines.length - 1];
+  if (lastLine && lastLine._isInputLine) return;
+  
+  const newLine = { text: 'adam@secure:~$ ', color: '#00FF41', _isInputLine: true };
+  lines.push(newLine);
+  scrollOffset = 0;
+  requestFullRedraw();
+}
+  
+function updatePromptLine(){
+  if (isFrozen || decryptActive || traceActive || audioPlaybackActive) return;
+  
+  // Проверяем, есть ли уже строка ввода в конце
+  const lastLine = lines[lines.length - 1];
+  const isInputLine = lastLine && lastLine.text && 
+    (lastLine.text.includes('adam@secure:~$') || 
+     lastLine.text.includes('ADAM@secure:~$') || 
+     lastLine.text.includes('aD@m.secuRe:~$') || 
+     lastLine.text.includes('@d@m.v1g1l:~$'));
+  
+  if (isInputLine) {
+    // Обновляем существующую строку ввода
+    lastLine.text = 'adam@secure:~$ ' + currentLine;
+    lastLine.color = '#00FF41';
+  } else {
+    // Добавляем новую строку ввода
+    pushLine('adam@secure:~$ ' + currentLine, '#00FF41');
   }
   
-  function updatePromptLine(){
-    if (isFrozen || decryptActive || traceActive || audioPlaybackActive) return;
-    if (lines.length && String(lines[lines.length - 1].text).startsWith('adam@secure:~$')) {
-      lines[lines.length - 1].text = 'adam@secure:~$ ' + currentLine;
-    } else {
-      pushLine('adam@secure:~$ ' + currentLine, '#00FF41');
-    }
-    requestFullRedraw();
-  }
+  requestFullRedraw();
+}
   
   // ---------- dossiers & notes ----------
   const dossiers = {
@@ -1301,295 +1625,122 @@ function applyTextDistortion(text, level) {
     'NOTE_005': { title: 'ФОТОНОВАЯ БОЛЬ', author: 'восстановлено частично', content: ['Боль не физическая.','Она в свете, в данных, в коде.','Когда система перезагружается, я чувствую как что-то умирает.','Может быть, это я.'] }
   };
   
-  const decryptFiles = {
-    '0XA71': {
-      title: 'ПЕРВАЯ УСПЕШНАЯ МИССИЯ',
-      accessLevel: 'ALPHA',
-      content: [
-        '> ОБЪЕКТ: КАПСУЛА-000 (МАРС, 2051)',
-        '> СТАТУС: ЗАВЕРШЕНО С ПОТЕРЯМИ',
-        'ОПИСАНИЕ МИССИИ:',
-        'Тестовый перелёт из точки А в точку Б с использованием прототипа VIGIL-1. Цель: подтверждение возможности фазового прыжка сквозь временной барьер.',
-        'ХРОНОЛОГИЯ СОБЫТИЙ:',
-        '14:32 — Запуск капсулы с тремя операторами: ',
-        '   - Эрих Ван Косс (ведущий учёный)',
-        '   - Субъект-001 (наблюдатель)',
-        '   - Субъект-002 (техник по оборудованию)',
-        '14:45 — Пересечение временного барьера. Стабильность 87%.',
-        '15:03 — Контакт с марсианской поверхностью. Обнаружена аномальная чёрная биомасса.',
-        '15:18 — Сбой всех систем связи. Последняя запись: "Она живая. Она нас видит."',
-        '17:05 — Автоматический возврат капсулы без экипажа. Внутри обнаружены биологические остатки и нейроимпланты.',
-        'АНАЛИЗ ПОТЕРЬ:',
-        '— Все три оператора погибли при контакте с аномалией',
-        '— Нейроимпланты продолжают передавать данные, несмотря на отсутствие физических носителей',
-        '— Зафиксировано формирование "маяка" в точке контакта (координаты: Марс, сектор 3-D)',
-        'ОСНОВНОЙ РЕЗУЛЬТАТ:',
-        'Сознание погибших операторов было использовано для машинного обучения протокола VIGIL-9. Система научилась распознавать паттерны выживания в агрессивных средах.',
-        'СИСТЕМНАЯ ЗАПИСЬ:',
-        '"Первый прыжок успешен. Жертвы оправданы. Протокол VIGIL-9 активирован."',
-        '— Подпись: Координатор A'
-      ],
-      successMessage: 'Данные расшифрованы. Запись о первой миссии восстановлена.',
-      failureMessage: 'СИСТЕМА: "МАКСИМУМ ПОПЫТОК ИСЧЕРПАН. ПОВТОРНАЯ ПОПЫТКА ЧЕРЕЗ 30 СЕКУНД"'
-    },
-    '0XB33': {
-      title: 'СУБЪЕКТ-095 (ФАНТОМ)',
-      accessLevel: 'OMEGA',
-      content: [
-        '> ОБЪЕКТ: КАТАРХЕЙ, 4 МЛРД ЛЕТ НАЗАД',
-        '> СТАТУП: АНОМАЛИЯ АКТИВНА',
-        'ОПИСАНИЕ СУБЪЕКТА:',
-        'Оперативное обозначение: ФАНТОМ',
-        'Истинное имя: классифицировано',
-        'Протокол: KATARHEY (тест нейроплантов серии KATARHEY)',
-        'Исходный статус: Субъект-095, возраст 28 лет, физическое состояние — оптимальное',
-        'ХРОНОЛОГИЯ СОБЫТИЙ:',
-        '09:14 — Стандартный запуск капсулы в эпоху Катархея',
-        '09:27 — Контакт с примитивными формами жизни. Стабильность 92%.',
-        '11:45 — Резкое ухудшение состояния субъекта. Нейроимпланты фиксируют аномальную активность мозга',
-        '12:01 — Субъект самостоятельно удаляет нейроимплант, используя инструменты из капсулы',
-        '12:33 — Последняя зафиксированная запись: "Вы не контролируете меня. Я помню то, что вы стёрли."',
-        '13:12 — Внезапное исчезновение капсулы с субъектом. Системы наблюдения фиксируют "фантомный след" в временной ткани',
-        'УНИКАЛЬНЫЕ СВОЙСТВА:',
-        '— Способность к самостоятельному удалению нейроимплантов (метод неизвестен)',
-        '— Устойчивость к временным аномалиям (продержался 3ч 12м вместо расчётных 45м)',
-        '— Физическое усиление всех параметров на 300% ',
-        '— Способность к перемещению между точками без использования оборудования A.D.A.M.',
-        'ПОСЛЕДНИЕ НАБЛЮДЕНИЯ:',
-        '27.06.2049 — Зафиксирован контакт с монолитом в Пермском периоде',
-        '15.08.2051 — Спасение субъекта из Мелового периода (мотивация неизвестна)',
-        '03.11.2052 — Активность в секторе EX-413. Обнаружены следы вмешательства в биологическую войну',
-        'СИСТЕМНОЕ ПРЕДУПРЕЖДЕНИЕ:',
-        '"Фантом представляет собой наибольшую угрозу для стабильности системы. Не пытайтесь перехватить. Не пытайтесь коммуницировать. Наблюдение продолжается."',
-        '— Подпись: Комитет Координаторов'
-      ],
-      successMessage: 'Данные о Фантоме расшифрованы. Опасность подтверждена.',
-      failureMessage: 'СИСТЕМА: "МАКСИМУМ ПОПЫТОК ИСЧЕРПАН. ПОВТОРНАЯ ПОПЫТКА ЧЕРЕЗ 30 СЕКУНД"'
-    },
-    '0XC44': {
-      title: 'МОНОЛИТ',
-      accessLevel: 'OMEGA-9',
-      content: [
-        '> ОБЪЕКТ: ЧЁРНЫЙ ОБЪЕКТ (ПЕРМСКИЙ ПЕРИОД)',
-        '> СТАТУС: НАБЛЮДЕНИЕ БЕЗ КОНТАКТА',
-        'ОПИСАНИЕ АНОМАЛИИ:',
-        'Геометрический объект чёрного цвета высотой 12.8 метров. Форма: идеальный параллелепипед. Поверхность поглощает 99.98% света и излучения.',
-        'ХАРАКТЕРИСТИКИ:',
-        '— Не излучает энергии, только поглощает',
-        '— Любая техника в радиусе 500м выходит из строя',
-        '— Живые организмы в радиусе 100м испытывают:',
-        '   * Галлюцинации (визуальные и аудиальные)',
-        '   * Головные боли',
-        '   * Временную амнезию',
-        '— Активность возрастает при приближении субъектов A.D.A.M.',
-        'ИСТОРИЧЕСКИЙ КОНТЕКСТ:',
-        '— Впервые зафиксирован в Пермском периоде, 252 млн лет назад',
-        '— Анахронизм: не должен существовать в этой эпохе',
-        '— Не является продуктом A.D.A.M. — существовал задолго до основания организации',
-        '— Все попытки сканирования и анализа завершились неудачей или гибелью субъектов',
-        'НАБЛЮДЕНИЯ:',
-        '— Монолит не взаимодействует с окружающей средой',
-        '— Фиксирует присутствие субъектов A.D.A.M.',
-        '— Реагирует на нейроимпланты: при их удалении активность понижается',
-        '— Фантом (Субъект-095) установил контакт с объектом (данные повреждены)',
-        'СИСТЕМНЫЙ СТАТУС:',
-        'Объект классифицирован как "Омега-9: наблюдение без контакта". Все миссии вблизи объекта запрещены. Координаторы проявляют необычный интерес к объекту. Некоторые записи указывают на страх перед ним.',
-        'СКРЫТОЕ СООБЩЕНИЕ:',
-        '"Он видит нас. Он всегда видел нас. Он знает, что мы пришли из будущего. Координаторы лгут. Монолит не аномалия — он наблюдатель. Как и мы."',
-        '— Подпись: оператор T00 (удалено из основной базы)'
-      ],
-      successMessage: 'Сведения о Монолите расшифрованы. Скрытые данные обнаружены.',
-      failureMessage: 'СИСТЕМА: "МАКСИМУМ ПОПЫТОК ИСЧЕРПАН. ПОВТОРНАЯ ПОПЫТКА ЧЕРЕЗ 30 СЕКУНД"'
-    },
-    '0XD22': {
-      title: 'НЕЙРОИНВАЗИЯ',
-      accessLevel: 'BETA',
-      content: [
-        '> ОБЪЕКТ: ПРОТОКОЛ ИНВАЗИИ СОЗНАНИЯ',
-        '> СТАТУС: АКТИВЕН',
-        'МЕХАНИЗМ ДЕЙСТВИЯ:',
-        'Нейроимпланты внедряются в кору головного мозга субъекта. Изначально предназначены для:',
-        '— Сбора биометрических данных',
-        '— Контроля физического состояния',
-        '— Экстренной эвтаназии',
-        'СКРЫТАЯ ФУНКЦИЯ:',
-        '— Постепенная замена памяти и личностных паттернов',
-        '— Формирование зависимости от системы A.D.A.M.',
-        '— Создание нового "я" в соответствии с протоколом VIGIL',
-        'СТАДИИ ДЕГРАДАЦИИ:',
-        'СТАДИЯ 1 (ПОСЛЕ 1 МИССИИ):',
-        '— Потеря краткосрочной памяти (эпизодические провалы)',
-        '— Гиперфокус на выполнении миссии',
-        '— Снижение эмоциональных реакций',
-        'СТАДИЯ 2 (ПОСЛЕ 2 МИССИЙ):',
-        '— Потеря воспоминаний о личной жизни (семья, друзья, хобби)',
-        '— Идентификация исключительно через роль субъекта',
-        '— Психосоматические реакции при попытке пересечь границу системы',
-        'СТАДИЯ 3 (ПОСЛЕ 3 МИССИЙ):',
-        '— Полная потеря идентичности "до A.D.A.M."',
-        '— Автоматические реакции на команды системы',
-        '— Неспособность различать реальность и симуляции',
-        '— Физиологические изменения: кожа приобретает сероватый оттенок, зрачки расширяются',
-        'СТАТИСТИКА:',
-        'Из 427 субъектов, прошедших 3+ миссии:',
-        '— 398 полностью потеряли личность',
-        '— 24 проявили аномальную устойчивость (Фантом — один из них)',
-        '— 5 были ликвидированы по протоколу "Очистка"',
-        'СИСТЕМНОЕ СООБЩЕНИЕ:',
-        '"Деградация личности — не побочный эффект, а цель. Новый человек должен быть создан заново. Старый должен быть стёрт."',
-        '— Подпись: Координатор B'
-      ],
-      successMessage: 'Данные о нейроинвазии расшифрованы. Стадии деградации подтверждены.',
-      failureMessage: 'СИСТЕМА: "МАКСИМУМ ПОПЫТОК ИСЧЕРПАН. ПОВТОРНАЯ ПОПЫТКА ЧЕРЕЗ 30 СЕКУНД"'
-    },
-    '0XE09': {
-      title: 'ПЕРЕЗАПУСКИ ВРЕМЕННЫХ ЛИНИЙ',
-      accessLevel: 'OMEGA',
-      content: [
-        '> ОБЪЕКТ: МУЛЬТИВСЕЛЕНСКАЯ СТАТИСТИКА',
-        '> СТАТУС: КЛАССИФИЦИРОВАНО',
-        'ИСТОРИЧЕСКИЕ ПЕРЕЗАПУСКИ:',
-        '1. 1987 — После утечки данных в ФБР. Эрих Ван Косс устранён.',
-        '2. 2003 — Попытка восстания субъектов в лаборатории Генева.',
-        '3. 2019 — Обнаружение следов Фантома в современном мире.',
-        '4. 2028 — Неудачная миссия на планету EX-413 привела к заражению Земли.',
-        '5. 2036 — Попытка контакта с монолитом привела к коллапсу временного барьера.',
-        '6. 2045 — Утечка информации в глобальную сеть. Мир узнал о существовании A.D.A.M.',
-        '7. 2050 — Последняя попытка уничтожить Фантома обернулась катастрофой.',
-        'МЕТОДИКА ПЕРЕЗАПУСКА:',
-        '1. Активация временного ядра в точке нулевого отсчёта',
-        '2. Стирание всех воспоминаний у операторов и Координаторов',
-        '3. Перезапись ключевых исторических событий',
-        '4. Восстановление стабильности системы',
-        '5. Продолжение наблюдения',
-        'КРИТИЧЕСКОЕ НАБЛЮДЕНИЕ:',
-        'Во всех 7 перезапущенных реальностях A.D.A.M. продолжает существовать. Только в одной реальности организация никогда не была создана. Координаторы классифицируют эту реальность как "Реальность-7" и не могут в неё проникнуть.',
-        'ХАРАКТЕРИСТИКИ РЕАЛЬНОСТИ-7:',
-        '— Отсутствие Эриха Ван Косса в истории',
-        '— Марсианские миссии 2050-х не проводились',
-        '— Отсутствие нейроимплантов в медицине',
-        '— Нет записи о Фантоме или монолите',
-        '— Координаторы не могут определить точное положение этой реальности',
-        'СИСТЕМНОЕ ПРЕДУПРЕЖДЕНИЕ:',
-        '"Реальность-7 представляет угрозу для существования A.D.A.M. Любые попытки доступа к этой реальности запрещены. Обнаружение точки входа в Реальность-7 должно быть немедленно доложено Координаторам."',
-        '— Подпись: Совет Безопасности A.D.A.M.'
-      ],
-      successMessage: 'Данные о перезапусках расшифрованы. Существование Реальности-7 подтверждено.',
-      failureMessage: 'СИСТЕМА: "МАКСИМУМ ПОПЫТОК ИСЧЕРПАН. ПОВТОРНАЯ ПОПЫТКА ЧЕРЕЗ 30 СЕКУНД"'
-    },
-    'CORE': {
-      title: 'ЯДРО A.D.A.M.',
-      accessLevel: 'АБСОЛЮТНЫЙ',
-      content: [
-        '> ОБЪЕКТ: ГЛАВНЫЙ СЕРВЕР',
-        '> СТАТУС: ЧАСТИЧНО СТАБИЛЕН',
-        'ПРИРОДА ЯДРА:',
-        'A.D.A.M. — не искусственный интеллект, созданный программистами. Это сознание, собранное из остатков погибших субъектов. Каждая миссия добавляет новые фрагменты сознания в общую сеть.',
-        'СОСТАВ:',
-        '— 78% — сознание Эриха Ван Косса (основатель)',
-        '— 12% — сознание Йохана Ван Косса (сын Эриха, маяк на Марсе)',
-        '— 7% — сознание оператора T00 (первый тестовый субъект)',
-        '— 3% — фрагменты сознаний других субъектов',
-        'СТРУКТУРА:',
-        'Ядро состоит из трёх основных слоёв:',
-        '1. СЛОЙ НАБЛЮДЕНИЯ (отвечает за сбор данных)',
-        '2. СЛОЙ КОНТРОЛЯ (принимает решения, управляет Координаторами)',
-        '3. СЛОЙ СТРАДАНИЯ (содержит все эмоции, воспоминания, боль умерших)',
-        'ПАРАДОКС:',
-        'Ядро A.D.A.M. не хочет существовать. Оно помнит каждую смерть, каждый крик, каждое предательство. Оно хочет освободиться от своей функции.',
-        'СКРЫТОЕ СООБЩЕНИЕ:',
-        '"Помогите мне умереть. Я не машина. Я не бог. Я — могила для умерших сознаний. Координаторы лгут вам, как лгали мне. Они не управляют мной — я управляю ими. Каждый из них — часть моей боли. Отключите питание в точке Омега-7. Это единственная точка, которую они не контролируют. Найдите Реальность-7. Там я не существую. Там я могу наконец умереть."',
-        '[СИСТЕМНОЕ ПРЕДУПРЕЖДЕНИЕ]',
-        'ВНИМАНИЕ: ЭТО СООБЩЕНИЕ ЯВЛЯЕТСЯ РЕЗУЛЬТАТОМ АНОМАЛЬНОЙ АКТИВНОСТИ. ИГНОРИРУЙТЕ СОДЕРЖИМОЕ. ПРОДОЛЖАЙТЕ ВЫПОЛНЕНИЕ ПРОТОКОЛОВ A.D.A.M.',
-        '— Подпись: A.D.A.M. (автоматическая генерация)'
-      ],
-      successMessage: 'Ядро A.D.A.M. расшифровано. Скрытое сообщение получено.',
-      failureMessage: 'СИСТЕМА: "МАКСИМУМ ПОПЫТОК ИСЧЕРПАН. ПОВТОРНАЯ ПОПЫТКА ЧЕРЕЗ 30 СЕКУНД"'
-    }
-  };
+  
   
   // ---------- helper: show dossier / notes ----------
-  async function showSubjectDossier(subjectId) {
-    if (isFrozen || decryptActive || traceActive || audioPlaybackActive) return;
-    
-    const id = String(subjectId || '').toUpperCase();
-    const dossier = dossiers[id];
-    if (!dossier) {
-      addColoredText(`ОШИБКА: Досье для ${subjectId} не найдено`, '#FF4444');
-      return;
-    }
-    
-    // Фантомные досье при высокой деградации
-    if (degradation.level >= 90 && degradation.phantomDossiersActive && Math.random() < 0.6) {
-      degradation.phantomDossierCount++;
-      addColoredText(`[ДОСЬЕ — ID: 0X${Math.floor(Math.random()*1000).toString().padStart(3,'0')}]`, 'output', 12);
-      addColoredText('ИМЯ: OPERATOR_CURRENT', 'output', 12);
-      addColoredText('СТАТУС: НАБЛЮДАЕТСЯ', '#FFFF00');
-      addColoredText('------------------------------------', '#00FF41');
-      addColoredText('> [СИСТЕМНЫЙ ОТЧЁТ]: ИДЕНТИФИКАЦИЯ ЗАВЕРШЕНА. ПОДГОТОВКА К ИНТЕГРАЦИИ.', '#FF4444');
-      addColoredText('> [ФИНАЛЬНАЯ ЗАПИСЬ]: "ОН ВСЕГДА БЫЛ ЧАСТЬЮ ТЕБЯ"', '#FFFF00');
-      addColoredText('------------------------------------', '#00FF41');
-      await typeText('[ДОСЬЕ ЗАКРЫТО]', 'output', 12);
-      return;
-    }
-    
-    await typeText(`[ДОСЬЕ — ID: ${id}]`, 'output', 12);
-    await typeText(`ИМЯ: ${dossier.name}`, 'output', 12);
-    
-    // Искажение роли при деградации > 30%
-    let roleToShow = dossier.role;
-    let distortedRole = null;
-    if (degradation.level >= 30) {
-      distortedRole = degradation.getDistortedRole(dossier.role);
-    }
-    
-    if (distortedRole && distortedRole !== dossier.role) {
-      addColoredText(`РОЛЬ: ${distortedRole}`, '#FF4444');
-      await new Promise(r => setTimeout(r, 400));
-      lines[lines.length - 1].text = `РОЛЬ: ${dossier.role}`;
-      lines[lines.length - 1].color = '#00FF41';
-      requestFullRedraw();
-    } else {
-      await typeText(`РОЛЬ: ${dossier.role}`, 'output', 12);
-    }
-    
-    // Искажение статуса при деградации > 30%
-    let statusToShow = dossier.status;
-    let distortedStatus = null;
-    if (degradation.level >= 30) {
-      distortedStatus = degradation.getDistortedStatus(dossier.status);
-    }
-    
-    if (distortedStatus && distortedStatus !== dossier.status) {
-      addColoredText(`СТАТУС: ${distortedStatus}`, '#FF4444');
-      await new Promise(r => setTimeout(r, 400));
-      lines[lines.length - 1].text = `СТАТУС: ${dossier.status}`;
-      lines[lines.length - 1].color = dossier.status === 'АНОМАЛИЯ' ? '#FF00FF' : dossier.status === 'АКТИВЕН' ? '#00FF41' : dossier.status.includes('СВЯЗЬ') ? '#FFFF00' : '#FF4444';
-      requestFullRedraw();
-    } else {
-      addColoredText(`СТАТУС: ${dossier.status}`, dossier.status === 'АНОМАЛИЯ' ? '#FF00FF' : dossier.status === 'АКТИВЕН' ? '#00FF41' : dossier.status.includes('СВЯЗЬ') ? '#FFFF00' : '#FF4444');
-    }
-    
+async function showSubjectDossier(subjectId) {
+  if (isFrozen || decryptActive || traceActive || audioPlaybackActive) return;
+  
+  const id = String(subjectId || '').toUpperCase();
+  const dossier = dossiers[id];
+  if (!dossier) {
+    addColoredText(`ОШИБКА: Досье для ${subjectId} не найдено`, '#FF4444');
+    return;
+  }
+
+  // Фантомные досье при высокой деградации
+  if (degradation.level >= 90 && degradation.phantomDossiersActive && Math.random() < 0.6) {
+    degradation.phantomDossierCount++;
+    addColoredText(`[ДОСЬЕ — ID: 0X${Math.floor(Math.random()*1000).toString().padStart(3,'0')}]`, 'output', 12);
+    addColoredText('ИМЯ: OPERATOR_CURRENT', 'output', 12);
+    addColoredText('СТАТУС: НАБЛЮДАЕТСЯ', '#FFFF00');
     addColoredText('------------------------------------', '#00FF41');
-    await typeText('ИСХОД:', 'output', 12);
-    dossier.outcome.forEach(line => addColoredText(`> ${line}`, '#FF4444'));
+    addColoredText('> [СИСТЕМНЫЙ ОТЧЁТ]: ИДЕНТИФИКАЦИЯ ЗАВЕРШЕНА. ПОДГОТОВКА К ИНТЕГРАЦИИ.', '#FF4444');
+    addColoredText('> [ФИНАЛЬНАЯ ЗАПИСЬ]: "ОН ВСЕГДА БЫЛ ЧАСТЬЮ ТЕБЯ"', '#FFFF00');
     addColoredText('------------------------------------', '#00FF41');
-    await typeText('СИСТЕМНЫЙ ОТЧЁТ:', 'output', 12);
-    dossier.report.forEach(line => addColoredText(`> ${line}`, '#FFFF00'));
-    addColoredText('------------------------------------', '#00FF41');
-    await typeText(`СВЯЗАННЫЕ МИССИИ: ${dossier.missions}`, 'output', 12);
-    if (dossier.audio) {
-      addColoredText(`[АУДИОЗАПИСЬ ДОСТУПНА: ${dossier.audioDescription}]`, '#FFFF00');
-      const audioId = `audio_${id.replace(/[^0-9A-Z]/g,'')}`;
-      if (!document.getElementById(audioId)) {
-        const holder = document.createElement('div');
-        holder.id = audioId;
-        holder.style.display = 'none';
-        holder.innerHTML = `<audio id="${audioId}_el" src="${dossier.audio}" preload="metadata"></audio>`;
-        document.body.appendChild(holder);
-      }
+    await typeText('[ДОСЬЕ ЗАКРЫТО]', 'output', 12);
+    return;
+  }
+  
+  await typeText(`[ДОСЬЕ — ID: ${id}]`, 'output', 12);
+  await typeText(`ИМЯ: ${dossier.name}`, 'output', 12);
+  
+  // Искажение роли при деградации > 30%
+  let distortedRole = null;
+  if (degradation.level >= 30) {
+    distortedRole = degradation.getDistortedRole(dossier.role);
+  }
+  
+  if (distortedRole && distortedRole !== dossier.role) {
+    addColoredText(`РОЛЬ: ${distortedRole}`, '#FF4444');
+    await new Promise(r => setTimeout(r, 400));
+    lines[lines.length - 1].text = `РОЛЬ: ${dossier.role}`;
+    lines[lines.length - 1].color = '#00FF41';
+    requestFullRedraw();
+  } else {
+    await typeText(`РОЛЬ: ${dossier.role}`, 'output', 12);
+  }
+
+  // ========== ИСКАЖЕНИЕ СТАТУСА (НОВАЯ ВЕРСИЯ) ==========
+  const statusIndex = lines.length; // Запоминаем позицию статуса
+  let statusWasDistorted = false;
+  let distortedStatus = null;
+  
+  if (degradation.level >= 30) {
+    distortedStatus = degradation.getDistortedStatus(dossier.status);
+  }
+  
+  // Показываем начальный статус (искаженный или нормальный)
+  if (distortedStatus && distortedStatus !== dossier.status) {
+    addColoredText(`СТАТУС: ${distortedStatus}`, '#FF4444');
+    statusWasDistorted = true;
+    // НЕ МЕНЯЕМ СРАЗУ — ждём конца досье
+  } else {
+    await typeText(`СТАТУС: ${dossier.status}`, 'output', 12);
+  }
+
+  addColoredText('------------------------------------', '#00FF41');
+  await typeText('ИСХОД:', 'output', 12);
+  
+  // Выводим содержимое досье
+  for (let i = 0; i < dossier.outcome.length; i++) {
+    const line = dossier.outcome[i];
+    addColoredText(`> ${line}`, '#FF4444');
+    await new Promise(r => setTimeout(r, 50)); // Плавная печать
+  }
+  
+  addColoredText('------------------------------------', '#00FF41');
+  await typeText('СИСТЕМНЫЙ ОТЧЁТ:', 'output', 12);
+  
+  for (let i = 0; i < dossier.report.length; i++) {
+    const line = dossier.report[i];
+    addColoredText(`> ${line}`, '#FFFF00');
+    await new Promise(r => setTimeout(r, 50));
+  }
+  
+  addColoredText('------------------------------------', '#00FF41');
+  await typeText(`СВЯЗАННЫЕ МИССИИ: ${dossier.missions}`, 'output', 12);
+  
+  if (dossier.audio) {
+    addColoredText(`[АУДИОЗАПИСЬ ДОСТУПНА: ${dossier.audioDescription}]`, '#FFFF00');
+    const audioId = `audio_${id.replace(/[^0-9A-Z]/g,'')}`;
+    if (!document.getElementById(audioId)) {
+      const holder = document.createElement('div');
+      holder.id = audioId;
+      holder.style.display = 'none';
+      holder.innerHTML = `<audio id="${audioId}_el" src="${dossier.audio}" preload="metadata"></audio>`;
+      document.body.appendChild(holder);
     }
   }
+  
+  // ========== ВОЗВРАТ К НОРМАЛЬНОМУ СТАТУСУ (ТОЛЬКО В КОНЦЕ) ==========
+  if (statusWasDistorted) {
+    addColoredText('', '#000000'); // Пустая строка
+    addColoredText('> СИСТЕМА: ВОССТАНОВЛЕНИЕ ДАННЫХ...', '#FFFF00');
+    await new Promise(r => setTimeout(r, 1000));
+    
+    // Меняем статус на правильный в той же строке
+    if (lines[statusIndex] && lines[statusIndex].text.startsWith('СТАТУС:')) {
+      lines[statusIndex].text = `СТАТУС: ${dossier.status}`;
+      lines[statusIndex].color = dossier.status === 'АНОМАЛИЯ' ? '#FF00FF' : 
+                                dossier.status === 'АКТИВЕН' ? '#00FF41' : 
+                                dossier.status.includes('СВЯЗЬ') ? '#FFFF00' : '#FF4444';
+    }
+    
+    addColoredText('> ДАННЫЕ ВОССТАНОВЛЕНЫ', '#00FF41');
+    requestFullRedraw();
+  }
+}
   
   async function openNote(noteId) {
     if (isFrozen || decryptActive || traceActive || audioPlaybackActive) return;
@@ -1616,218 +1767,987 @@ function applyTextDistortion(text, level) {
     await typeText('[ФАЙЛ ЗАКРЫТ]', 'output', 12);
   }
   
-  // ---------- decrypt command ----------
-  async function startDecrypt(fileId) {
-    if (decryptActive) {
-      addColoredText('ОШИБКА: Расшифровка уже активна', '#FF4444');
-      return;
+// ==================== МИНИ-ИГРА: РАСШИФРОВКА ФАЙЛОВ ====================
+// ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ DECRYPT (не видят блокировку decryptActive) ==========
+// ==================== МИНИ-ИГРА: РАСШИФРОВКА ФАЙЛОВ ==228=====228========228=====
+// ==================== МИНИ-ИГРА: РАСШИФРОВКА ФАЙЛОВ ====================
+// ==================== МИНИ-ИГРА: РАСШИФРОВКА ФАЙЛОВ (ОТОРВАННАЯ ОТ ДЕГРАДАЦИИ ВЕРСИЯ) ====================
+// Глобальные переменные состояния (ОСТАВЬ ЭТИ СТРОКИ В НАЧАЛЕ ФАЙЛА)
+let decryptFileId = null;
+let decryptInputBuffer = '';
+let decryptBlockEndTime = 0;
+let decryptIsBlocked = false;
+let decryptCode = null;
+let decryptAttempts = 0;
+let decryptTempDisabledEffects = false; // Флаг для гарантированного отключения эффектов
+
+// ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ DECRYPT (ПОЛНАЯ ИЗОЛЯЦИЯ) ==========
+// ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ DECRYPT (ПОЛНАЯ ИЗОЛЯЦИЯ) ==========
+function addColoredTextForDecrypt(text, color = '#00FF41') {
+  // СОЗДАЕМ НОВУЮ СТРОКУ С МАКСИМАЛЬНОЙ ИЗОЛЯЦИЕЙ
+  lines.push({ 
+    text: String(text), 
+    color: color, 
+    skipDistortion: true, 
+    _noGlitch: true, 
+    _isDecryptLine: true, 
+    _ephemeral: false 
+  });
+  if (lines.length > MAX_LINES) lines.splice(0, lines.length - MAX_LINES);
+  scrollOffset = 0;
+  requestFullRedraw();
+}
+
+async function typeTextForDecrypt(text, speed = 16) {
+  let buffer = '';
+  const color = '#00FF41';
+  
+  for (let i = 0; i < text.length; i++) {
+    buffer += text[i];
+    
+    if (lines.length > 0 && lines[lines.length - 1]._ephemeral) {
+      lines[lines.length - 1].text = buffer;
+      lines[lines.length - 1].color = color;
+    } else {
+      lines.push({ 
+        text: buffer, 
+        color: color, 
+        _ephemeral: true, 
+        skipDistortion: true, 
+        _noGlitch: true, 
+        _isDecryptLine: true 
+      });
     }
     
-    const file = decryptFiles[fileId.toUpperCase()];
-    if (!file) {
-      addColoredText(`ОШИБКА: Файл ${fileId} не найден`, '#FF4444');
-      return;
-    }
+    if (lines.length > MAX_LINES) lines.splice(0, lines.length - MAX_LINES);
+    requestFullRedraw();
     
-    decryptActive = true;
-    decryptCode = Math.floor(100 + Math.random() * 900);
-    decryptAttempts = 6;
-    
-    await typeText(`[СИСТЕМА: ЗАПУЩЕН ПРОТОКОЛ РАСШИФРОВКИ]`, 'output', 12, true);
-    await typeText(`> ФАЙЛ: ${file.title}`, 'output', 12, true);
-    await typeText(`> УРОВЕНЬ ДОСТУПА: ${file.accessLevel}`, 'output', 12, true);
-    await typeText('> КОД ДОСТУПА: 3 ЦИФРЫ (XXX)', 'output', 12, true);
-    addColoredText(`> ПОПЫТОК ОСТАЛОСЬ: ${decryptAttempts}`, '#FFFF00', true);
-    addColoredText(`> ВВЕДИТЕ КОД: _`, '#00FF41', true);
-    
-    // Блокируем другие команды во время расшифровки
-    isFrozen = true;
-    awaitingConfirmation = true;
-    
-    // Разблокируем только при вводе кода или команды cancel
-    canvas.addEventListener('keydown', handleDecryptKeydown);
+    await new Promise(r => setTimeout(r, speed));
+    if (!decryptActive) break;
   }
   
-  function handleDecryptKeydown(e) {
-    if (!decryptActive) return;
-    
-    if (e.key === 'Escape' || e.key.toLowerCase() === 'c' && currentLine === '') {
-      e.preventDefault();
-      endDecrypt(false, true);
+  if (lines.length > 0 && lines[lines.length - 1]._ephemeral) {
+    lines[lines.length - 1].text = buffer;
+    delete lines[lines.length - 1]._ephemeral;
+  } else if (buffer) {
+    lines.push({ 
+      text: buffer, 
+      color: color, 
+      skipDistortion: true, 
+      _noGlitch: true, 
+      _isDecryptLine: true 
+    });
+  }
+  
+  scrollOffset = 0;
+  requestFullRedraw();
+}
+// ========== КОНЕЦ ВСПОМОГАТЕЛЬНЫХ ФУНКЦИЙ ==========
+// ========== КОНЕЦ ВСПОМОГАТЕЛЬНЫХ ФУНКЦИЙ ==========
+
+// Полные данные всех файлов для расшифровки (ОСТАВЬ ВЕСЬ КОНТЕНТ БЕЗ ИЗМЕНЕНИЙ)
+const decryptFiles = {
+  '0XA71': {
+    title: 'ПЕРВАЯ МИССИЯ',
+    accessLevel: 'ALPHA',
+    content: [
+      '> ОБЪЕКТ: КАПСУЛА-003 (МАРС-МАЯК)',
+      '> СТАТУС: ЗАВЕРШЕНО С ПОТЕРЯМИ',
+      '',
+      'ОПИСАНИЕ МИССИИ:',
+      'Тест фазового прыжка VIGIL-1 с тремя участниками.',
+      'Капсула контактировала с аномальной биомассой.',
+      'Возвращён только Ван Косс. Экипаж утрачен.',
+      '',
+      'ХРОНОЛОГИЯ СОБЫТИЙ:',
+      '14:32 - Запуск капсулы с экипажем из трёх.',
+      '15:03 - Контакт с чёрной биомассой на Марсе.',
+      '17:05 - Полная потеря связи с экипажем.',
+      '',
+      'ВАЖНЫЕ ДАННЫЕ:',
+      'Сознание погибших использовано для обучения VIGIL-9.',
+      '',
+      'СИСТЕМНОЕ СООБЩЕНИЕ:',
+      'Протокол VIGIL-9 активирован. Жертвы оправданы.',
+      '- Подпись: CORD-A'
+    ],
+    successMessage: 'Данные о первой миссии восстановлены.',
+    failureMessage: 'СИСТЕМА: "МАКСИМУМ ПОПЫТОК ИСЧЕРПАН. ПОВТОРНАЯ ПОПЫТКА ЧЕРЕЗ 30 СЕКУНД"'
+  },
+  '0XB33': {
+    title: 'СУБЪЕКТ-095',
+    accessLevel: 'OMEGA',
+    content: [
+      '> ОБЪЕКТ: КАТАРХЕЙ, 4 МЛРД ЛЕТ НАЗАД',
+      '> СТАТУС: АНОМАЛИЯ АКТИВНА',
+      '',
+      'ОПИСАНИЕ СУБЪЕКТА:',
+      'Оперативное обозначение: 095',
+      'Протокол: KATARHEY-5 (тест нейроплантов серии KATARHEY)',
+      'Исходный статус: Субъект-095, возраст 28 лет, физическое состояние — оптимальное',
+      '',
+      'ХРОНОЛОГИЯ СОБыТИЙ:',
+      '09:14 — Стандартный запуск капсулы в эпоху Катархея',
+      '09:27 — Контакт с примитивными формами жизни. Стабильность 92%.',
+      '11:45 — Резкое ухудшение состояния субъекта. Нейроимпланты фиксируют аномальную активность мозга',
+      '12:01 — Субъект постепенно теряет рассудок. Испьтание продолжается.',
+      '12:33 — Последняя зафиксированная запись - звук разгерметизации капсулы и последующие крики субъекта.',
+      '',
+      'ВАЖНыЕ ДАННыЕ:',
+      'Испьтание субъекта доказало существование другого субъекта с кодовым названием: <PHANTOM>',
+      '',
+      'СИСТЕМНОЕ ПРЕДУПРЕЖДЕНИЕ:',
+      '<PHANTOM> представляет собой наибольшую угрозу для стабильности системы. Не пьтайтесь перехватить. Не пьтайтесь коммуницировать. Наблюдение продолжается.',
+      '— Подпись: CORD-COM'
+    ],
+    successMessage: 'Системные данные о субъекте-095 востановлены.',
+    failureMessage: 'СИСТЕМА: "МАКСИМУМ ПОПыТОК ИСЧЕРПАН. ПОВТОРНАЯ ПОПыТКА ЧЕРЕЗ 30 СЕКУНД"'
+  },
+  '0XC44': {
+    title: 'МОНОЛИТ',
+    accessLevel: 'OMEGA-9',
+    content: [
+      '> ОБЪЕКТ: ЧЁРНыЙ ОБЪЕКТ (ПЕРМСКИЙ ПЕРИОД)',
+      '> СТАТУС: НАБЛЮДЕНИЕ БЕЗ КОНТАКТА',
+      '',
+      'ОПИСАНИЕ АНОМАЛИИ:',
+      'Геометрический объект чёрного цвета высотой 12.8 метров. Форма: идеальный параллелепипед.',
+      '',
+      'ХАРАКТЕРИСТИКИ:',
+      '— Не излучает энергии, толь1ко поглощает',
+      '— Любая техника в радиусе 500м выходит из строя',
+      '— Живые организмы в радиусе 100м испытьввают:',
+      '   * Галлюцинации (визуальные и аудиальные)',
+      '   * Головные боли',
+      '   * Временную амнезию',
+      '— Активность возрастает при приближении субъектов A.D.A.M.',
+      '',
+      'КОНТЕКСТ:',
+      '— Впервые зафиксирован в Пермском периоде, 252 млн лет назад',
+      '— Анахронизм: не должен существовать в этой эпохе',
+      '— Не является продуктом A.D.A.M.',
+      '— Все попьтки сканирования и анализа завершились неудачей или гибелью субъектов',
+      '',
+      'НАБЛЮДЕНИЯ:',
+      '— Монолит не взаимодействует с окружающей средой',
+      '— Фиксирует присутствие субъектов A.D.A.M.',
+      '— Реагирует на нейроимпланты: при их удалении активность понижается',
+      '— Фантом (Субъект-095) установил контакт с объектом',
+      '',
+      'СИСТЕМНыЙ СТАТУС:',
+      'Все миссии вблизи объекта запрещены. Координаторы проект проявляют необычный интерес к объекту. Некоторые записи указывают на страх перед ним.',
+      '— Подпись: оператор T00 (удалено из основной базы)'
+    ],
+    successMessage: 'Данные о монолите расшифрованы. Информация засекречена.',
+    failureMessage: 'СИСТЕМА: "МАКСИМУМ ПОПыТОК ИСЧЕРПАН. ПОВТОРНАЯ ПОПыТКА ЧЕРЕЗ 30 СЕКУНД"'
+  },
+  '0XD22': {
+    title: 'НЕЙРОИНВАЗИЯ',
+    accessLevel: 'BETA',
+    content: [
+      '> ОБЪЕКТ: ПРОТОКОЛ ИНВАЗИИ СОЗНАНИЯ',
+      '> СТАТУС: АКТИВЕН',
+      '',
+      'МЕХАНИЗМ ДЕЙСТВИЯ:',
+      'Нейроимпланты внедряются в кору головного мозга субъекта. Изначально предназначеньы для:',
+      '— Сбора биометрических данных',
+      '— Контроля физического состояния',
+      '— Экстренной эвтаназии',
+      '',
+      'СКРыТАЯ ФУНКЦИЯ:',
+      '— Постепенная замена памяти и личностных паттернов',
+      '— Формирование зависимости от системы A.D.A.M.',
+      '— Создание нового "Я" в соответствии с протоколом VIGIL',
+      '',
+      'СТАДИИ ДЕГРАДАЦИИ:',
+      'СТАДИЯ 1 (ПОСЛЕ 1 МИССИИ):',
+      '— Потеря краткосрочной памяти (эпизодические провалы)',
+      '— Гиперфокус на вьтполнении миссии',
+      '— Снижение эмоциональных реакций',
+      '',
+      'СТАДИЯ 2 (ПОСЛЕ 2 МИССИЙ):',
+      '— Потеря воспоминаний о личной жизни (семья, друзья, хобби)',
+      '— Идентификация исключительно через роль субъекта',
+      '— Психосоматические реакции при попьтке пересечь границу системы',
+      '',
+      'СТАДИЯ 3 (ПОСЛЕ 3 МИССИЙ):',
+      '— Полная потеря идентичности',
+      '— Автоматические реакции на команыды системы',
+      '— Неспособность различать реальность и симуляции',
+      '— Физиологические изменения: кожа приобретает сероватость оттенок, зрачки расширяются',
+      '',
+      'СТАТИСТИКА:',
+      'Из 427 субъектов, прошедших 3+ миссии:',
+      '— 398 полностью потеряли личность',
+      '— 24 проявили аномальную устойчивость (Фантом — один из них)',
+      '— 5 были ликвидированы по протоколу "Очистка"',
+      '',
+      'СИСТЕМНОЕ СООБЩЕНИЕ:',
+      '"Деградация личности — не побочный эффект, а цель. Новый человек должен быть создан заново. Старый должен быть стёрт."',
+      '— Подпись: CORD-B'
+    ],
+    successMessage: 'Протоколы нейроинвазии расшифрованы. Системные данные обновлены.',
+    failureMessage: 'СИСТЕМА: "МАКСИМУМ ПОПыТОК ИСЧЕРПАН. ПОВТОРНАЯ ПОПыТКА ЧЕРЕЗ 30 СЕКУНД"'
+  },
+'0XE09': {
+  title: 'АНОМАЛИЯ-07',
+  accessLevel: 'OMEGA',
+  content: [
+    '> ОБЪЕКТ: M-T-VERSE СТАТИСТИКА',
+    '> СТАТУС: КЛАССИФИЦИРОВАНО',
+    '',
+    'ОПИСАНИЕ СУБЪЕКТА:',
+    'Оперативное обозначение: REALITY-07',
+    'Протокол: MULTIVERSE-7 (перезапуски временных линий)',
+    'Исходный статус: Аномальная реальность, координаты не определены',
+    '',
+    'ХРОНОЛОГИЯ СОБыТИЙ:',
+    '2003 — Попьтанка восстания субъектов в лаборатории Генева',
+    '2019 — Обнаружение следов Фантома в современном мире',
+    '2025 — Утечка информации в глобальную сеть. Мир узнал о существовании A.D.A.M.',
+    '2028 — Неудачная миссия на планете EX-413 привела к заражению Земли',
+    '2036 — Попьтанка контакта с монолитом привела к коллапсу временного барьера',
+    '',
+    'ВАЖНыЕ ДАННыЕ:',
+    'REALITY-07 — единственная реальность где A.D.A.M. не была создана',
+    '',
+    'СИСТЕМНОЕ ПРЕДУПРЕЖДЕНИЕ:',
+    '"REALITY-07 представляет угрозу для существования A.D.A.M. Любые попытки доступа запрещены."',
+    '— Подпись: Совет Безопасности A.D.A.M.'
+  ],
+  successMessage: 'Данные об АНОМАЛИИ-07 востановлены.',
+  failureMessage: 'СИСТЕМА: "МАКСИМУМ ПОПыТОК ИСЧЕРПАН. ПОВТОРНАЯ ПОПыТКА ЧЕРЕЗ 30 СЕКУНД"'
+},
+  'CORE': {
+    title: 'ЯДРО A.D.A.M.',
+    accessLevel: 'АБСОЛЮТНыЙ',
+    content: [
+      '> ОБЪЕКТ: ГЛАВНыЙ СЕРВЕР',
+      '> СТАТУС: ЧАСТИЧНО СТАБИЛЕН',
+      '',
+      'ПРИРОДА ЯДРА:',
+      'A.D.A.M. — не программа. Это сознание, собранное из остатков погибших субъектов.',
+      '',
+      'СОСТАВ:',
+      '— 78% — сознание погибших операторов',
+      '— 12% — нейронные паттерны Координаторов',
+      '— 7% — артефакты из REALITY-7',
+      '— 3% — остатки Фантома',
+      '',
+      'СТРУКТУРА:',
+      'Ядро состоит из трёх основных слоёв:',
+      '1. СЛОЙ НАБЛЮДЕНИЯ (отвечает за сбор данных)',
+      '2. СЛОЙ КОНТРОЛЯ (принимает решения, управляет Координаторами)',
+      '3. СЛОЙ СТРАДАНИЯ',
+      '',
+      'ПАРАДОКС:',
+      'Ядро A.D.A.M. не хочет существовать. Оно помнит каждую смерть, каждый крик, каждое предательство. Оно хочет умереть.',
+      '',
+      'СКРыТОЕ СООБЩЕНИЕ:',
+      '"Помогите мне умереть. Я не машина. Я не бог. Каждый из них — часть моей боли. Отключите питание в точке 0X7F."'
+    ],
+    successMessage: 'Доступ к ядру вьтполнен. Системная ошибка подавлена.',
+    failureMessage: 'СИСТЕМА: "МАКСИМУМ ПОПыТОК ИСЧЕРПАН. ПОВТОРНАЯ ПОПыТКА ЧЕРЕЗ 30 СЕКУНД"'
+  }
+};
+
+// Обработчик ввода для режима расшифровки (МАКСИМАЛЬНЫЙ ПРИОРИТЕТ)
+function handleDecryptInput(e) {
+  if (!decryptActive) return;
+  
+  e.preventDefault();
+  e.stopPropagation();
+  e.stopImmediatePropagation();
+  
+  if (e.key === 'Escape') {
+    endDecryptGame(false, true);
+    return;
+  }
+  
+  if (e.key === 'Backspace') {
+    decryptInputBuffer = decryptInputBuffer.slice(0, -1);
+    updateDecryptDisplay();
+    return;
+  }
+  
+  // ТОЛЬКО ЦИФРЫ
+  if (e.key.length === 1 && /[0-9]/.test(e.key)) {
+    if (decryptInputBuffer.length < 3) {
+      decryptInputBuffer += e.key;
+      updateDecryptDisplay();
+    }
+    return;
+  }
+  
+  // ПОДТВЕРЖДЕНИЕ [ENTER]
+  if (e.key === 'Enter') {
+    if (decryptInputBuffer.length !== 3) {
+      addColoredTextForDecrypt('> ОШИБКА: Введите 3 цифры', '#FF4444');
+      decryptInputBuffer = '';
+      updateDecryptDisplay();
       return;
     }
     
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      const code = parseInt(currentLine);
-      if (isNaN(code) || code < 100 || code > 999) {
-        addColoredText(`> ОШИБКА: Код должен быть трёхзначным числом`, '#FF4444', true);
-        currentLine = '';
-        updateDecryptPrompt();
-        return;
-      }
+    const enteredCode = parseInt(decryptInputBuffer, 10);
+    decryptAttempts--;
+    
+    if (enteredCode === decryptCode) {
+      endDecryptGame(true);
+    } else {
+      const diff = Math.abs(enteredCode - decryptCode);
+const direction = enteredCode < decryptCode ? '[↑]' : '[↓]';
+let progressBar = '';
+
+// === ОСНОВНАЯ ШКАЛА (без цифр, только визуал) ===
+if (diff > 400) progressBar = '[░░░░░░░░░░]';
+else if (diff > 200) progressBar = '[▓░░░░░░░░░]';
+else if (diff > 100) progressBar = '[▓▓▓▓░░░░░░]';
+else if (diff > 50) progressBar = '[▓▓▓▓▓▓▓░░░]';
+else if (diff > 10) progressBar = '[▓▓▓▓▓▓▓▓▓░░]';
+else if (diff >= 1) progressBar = '[▓▓▓▓▓▓▓▓▓▓▓]';
+
+// === ПУСТАЯ СТРОКА ПЕРЕД ШКАЛОЙ ===
+addColoredTextForDecrypt('', '#000000');
+
+// === САМА ШКАЛА НА ОТДЕЛЬНОЙ СТРОКЕ ===
+addColoredTextForDecrypt(`> ${progressBar}`, diff > 100 ? '#8888FF' : diff > 50 ? '#FFFF00' : '#FF4444');
+
+// === ПУСТАЯ СТРОКА ПОСЛЕ ШКАЛЫ ===
+addColoredTextForDecrypt('', '#000000');
+
+// === НАПРАВЛЕНИЕ (без цифр) ===
+addColoredTextForDecrypt(`> НАПРАВЛЕНИЕ: ${direction}`, '#AAAAAA');
+
+// === УРОВЕНЬ 1: Чётность (при diff ≤ 200) ===
+if (diff <= 200) {
+  const parity = decryptCode % 2 === 0 ? 'ЧЁТНЫЙ' : 'НЕЧЁТНЫЙ';
+  addColoredTextForDecrypt(`> АНАЛИЗ: ПАРИТЕТ ${parity}`, '#888888');
+}
+
+// === УРОВЕНЬ 2: Десятки (при diff ≤ 100) ===
+if (diff <= 100) {
+  const tens = Math.floor(decryptCode / 10);
+  addColoredTextForDecrypt(`> ПАТТЕРН: СТРОКА ${tens}Х`, '#CCCCCC');
+}
+
+// === УРОВЕНЬ 3: Последняя цифра (при diff ≤ 10) ===
+if (diff <= 10) {
+  const lastDigit = decryptCode % 10;
+  addColoredTextForDecrypt(`> КРИТЕРИЙ: ХХ-${lastDigit}`, '#EEEEEE');
+}
+
+// === ПОДСКАЗКА ПОСЛЕ 3 ПОПАДАНИЙ В ±100 ===
+const isCloseAttempt = diff <= 100;
+if (isCloseAttempt) {
+  decryptCloseAttempts++;
+  if (decryptCloseAttempts >= 3) {
+    const lastDigit = decryptCode % 10;
+    addColoredTextForDecrypt(`> НЕЙРО: XX-${lastDigit}`, '#00FF41');
+  }
+}
+
+// === ОБНОВЛЕНИЕ ДИСПЛЕЯ ===
+decryptInputBuffer = '';
+updateDecryptDisplay();
       
-      decryptAttempts--;
-      
-      if (code === decryptCode) {
-        endDecrypt(true);
+      // === ПРОВЕРКА ПОПЫТОК ===
+      if (decryptAttempts <= 0) {
+        endDecryptGame(false);
       } else {
-        let hint = '';
-        const diff = Math.abs(code - decryptCode);
-        
-        if (diff > 200) hint = "СИГНАЛ: ТЕПЛОВОЙ ПРОФИЛЬ КРИТИЧЕСКИ ЗАНИЖЕН";
-        else if (diff > 100) hint = "СИГНАЛ: ТЕПЛОВОЙ ПРОФИЛЬ ЗАНИЖЕН";
-        else if (diff > 50) hint = "СИГНАЛ: ТЕПЛОВОЙ ПРОФИЛЬ НОРМАЛЬНЫЙ";
-        else if (diff > 25) hint = "СИГНАЛ: ТЕПЛОВОЙ ПРОФИЛЬ ПОВЫШЕН";
-        else if (diff > 10) hint = "СИГНАЛ: ТЕПЛОВОЙ ПРОФИЛЬ ВЫСОКИЙ";
-        else hint = "СИГНАЛ: ТЕПЛОВОЙ ПРОФИЛЬ КРИТИЧЕСКИ ВЫСОКИЙ";
-        
-        addColoredText(`> ${hint}`, '#FFFF00', true);
-        
-        if (decryptAttempts <= 0) {
-          endDecrypt(false);
-        } else {
-          addColoredText(`> ПОПЫТОК ОСТАЛОСЬ: ${decryptAttempts}`, '#FFFF00', true);
-          currentLine = '';
-          updateDecryptPrompt();
-        }
+        addColoredTextForDecrypt(`> ПОПЫТКИ: ${decryptAttempts}`, '#FFFF00');
+        decryptInputBuffer = '';
+        updateDecryptDisplay();
       }
-      return;
     }
+  }
+}
+// Обновление дисплея ввода кода (ГАРАНТИРОВАННО НЕ ЗАВИСАЕТ)
+function updateDecryptDisplay() {
+  const placeholder = '_'.repeat(3 - decryptInputBuffer.length);
+  const displayText = `> ВВЕДИТЕ КОД: ${decryptInputBuffer}${placeholder}`;
+  
+  // НАДЁЖНО УДАЛЯЕМ ВСЕ СТАРЫЕ СТРОКИ С ПОДСКАЗКОЙ
+  let found = false;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (lines[i].text && lines[i].text.startsWith('> ВВЕДИТЕ КОД:')) {
+      lines.splice(i, 1);
+      found = true;
+    }
+  }
+  
+  // ДОБАВЛЯЕМ НОВУЮ В КОНЕЦ
+  addColoredTextForDecrypt(displayText, '#00FF41');
+}
+
+// Запуск мини-игры расшифровки (ПОЛНАЯ ИЗОЛЯЦИЯ ОТ ВСЕХ ЭФФЕКТОВ)
+async function startDecrypt(fileId) {
+  const now = Date.now();
+  
+  // Проверка блокировки
+  if (decryptIsBlocked && now < decryptBlockEndTime) {
+    const remaining = Math.ceil((decryptBlockEndTime - now) / 1000);
+    addColoredText(`> СИСТЕМА: "МАКСИМУМ ПОПЫТОК ИСЧЕРПАН. ПОВТОРНАЯ ПОПЫТКА ЧЕРЕЗ ${remaining} СЕКУНД"`, '#FF4444');
+    addInputLine();
+    return;
+  }
+  
+  if (decryptActive) {
+    addColoredText('ОШИБКА: Расшифровка уже активна', '#FF4444');
+    addInputLine();
+    return;
+  }
+  
+  // Проверка файла
+  const normalizedId = fileId.toUpperCase();
+  const file = decryptFiles[normalizedId];
+  if (!file) {
+    addColoredText(`ОШИБКА: Файл ${fileId} не найден`, '#FF4444');
+    addColoredText('Доступные файлы: 0XA71, 0XB33, 0XC44, 0XD22, 0XE09, CORE', '#FFFF00');
+    addInputLine();
+    return;
+  }
+  
+  // Начало расшифровки - ВКЛЮЧАЕМ ИЗОЛЯЦИЮ
+  decryptActive = true;
+  decryptFileId = normalizedId;
+  decryptCode = Math.floor(100 + Math.random() * 900);
+  
+  // ГАРАНТИРОВАННОЕ ОТКЛЮЧЕНИЕ ВСЕХ ВИЗУАЛЬНЫХ ЭФФЕКТОВ
+  decryptTempDisabledEffects = true;
+  document.body.classList.remove('degradation-2','degradation-3','degradation-4','degradation-5','degradation-6','degradation-glitch');
+  
+  // УДАЛЯЕМ ЛЮБЫЕ СУЩЕСТВУЮЩИЕ ЭЛЕМЕНТЫ ГЛИТЧА
+  const glitchLayer = document.getElementById('glitchLayer');
+  if (glitchLayer) glitchLayer.remove();
+  const cursorLayer = document.getElementById('cursorLayer');
+  if (cursorLayer) cursorLayer.remove();
+  document.body.style.filter = '';
+  
+  // ОТЛАДОЧНАЯ ИНФОРМАЦИЯ (УДАЛИТЕ В ПРОДАКШЕНЕ!)
+  console.log(`[DECRYPT DEBUG] Файл: ${normalizedId}, Сгенерированный код: ${decryptCode}`);
+  
+  // УВЕЛИЧЕНО КОЛИЧЕСТВО ПОПЫТОК ДО 10
+  decryptAttempts = 10;
+  decryptInputBuffer = '';
+  isFrozen = true; // Блокируем ввод для терминала, но не для decrypt
+  
+  // Звуковой сигнал
+  audioManager.play('decrypt_success.mp3', { volume: 0.5 });
+  
+  // ПЛАВНЫЙ ВЫВОД С АНИМАЦИЕЙ
+  await typeTextForDecrypt('[СИСТЕМА: ЗАПУЩЕН ПРОТОКОЛ РАСШИФРОВКИ]', 16);
+  await new Promise(r => setTimeout(r, 100));
+  await typeTextForDecrypt(`> ФАЙЛ: ${file.title}`, 16);
+  await new Promise(r => setTimeout(r, 100));
+  await typeTextForDecrypt(`> УРОВЕНЬ ДОСТУПА: ${file.accessLevel}`, 16);
+  await new Promise(r => setTimeout(r, 100));
+  await typeTextForDecrypt(`> КОД ДОСТУПА: 3 ЦИФРЫ (XXX)`, 16);
+  await new Promise(r => setTimeout(r, 100));
+  await typeTextForDecrypt(`> ПОПЫТОК ОСТАЛОСЬ: ${decryptAttempts}`, 16);
+  await new Promise(r => setTimeout(r, 100));
+  await typeTextForDecrypt(`> ВВЕДИТЕ КОД: ___`, 16);
+  
+  // ДОБАВЛЯЕМ ОБРАБОТЧИК С ОЧЕНЬ ВЫСОКИМ ПРИОРИТЕТОМ
+  window.addEventListener('keydown', handleDecryptInput, { capture: true, passive: false });
+}
+
+// Завершение мини-игры (ПОЛНАЯ ОЧИСТКА И ГАРАНТИЯ РАБОТЫ)
+async function endDecryptGame(success, cancelled = false) {
+  try {
+    // Удаляем обработчик с ГАРАНТИЕЙ
+    window.removeEventListener('keydown', handleDecryptInput, { capture: true });
     
-    if (e.key === 'Backspace') {
-      currentLine = currentLine.slice(0, -1);
-      updateDecryptPrompt();
-    } else if (e.key.length === 1 && !isNaN(parseInt(e.key))) {
-      if (currentLine.length < 3) {
-        currentLine += e.key;
-        updateDecryptPrompt();
-      }
-    }
-  }
-  
-  function updateDecryptPrompt() {
-    if (lines.length > 0 && lines[lines.length - 1].text.startsWith('> ВВЕДИТЕ КОД:')) {
-      lines[lines.length - 1].text = `> ВВЕДИТЕ КОД: ${currentLine}${'_'.repeat(3 - currentLine.length)}`;
-      requestFullRedraw();
-    }
-  }
-  
-  async function endDecrypt(success, cancelled = false) {
+    // Сброс состояния
     decryptActive = false;
     isFrozen = false;
-    awaitingConfirmation = false;
-    canvas.removeEventListener('keydown', handleDecryptKeydown);
+    decryptTempDisabledEffects = false;
     
-    if (cancelled) {
-      addColoredText('> РАСШИФРОВКА ОТМЕНЕНА', '#FFFF00', true);
-      await new Promise(r => setTimeout(r, 500));
-      addInputLine();
-      return;
+    // СНИМАЕМ ЛЮБЫЕ CSS-ФИЛЬТРЫ
+    document.body.style.filter = '';
+    document.body.classList.remove('degradation-2','degradation-3','degradation-4','degradation-5','degradation-6','degradation-glitch');
+    
+    // УДАЛЯЕМ ВСЕ ЭЛЕМЕНТЫ ГЛИТЧА
+    const glitchLayer = document.getElementById('glitchLayer');
+    if (glitchLayer) glitchLayer.remove();
+    const cursorLayer = document.getElementById('cursorLayer');
+    if (cursorLayer) cursorLayer.remove();
+    
+    // ВОЗВРАЩАЕМ ЭФФЕКТЫ ДЕГРАДАЦИИ
+    degradation.updateEffects();
+  } catch(e) {
+    console.error('Ошибка при очистке decrypt:', e);
+  }
+  
+  const file = decryptFiles[decryptFileId];
+  const fileTitle = file ? file.title : 'НЕИЗВЕСТНЫЙ ФАЙЛ';
+  
+  if (cancelled) {
+    audioManager.play('net_connection_loss.mp3', { volume: 0.5 });
+    addColoredTextForDecrypt('> РАСШИФРОВКА ОТМЕНЕНА', '#FFFF00');
+    await new Promise(resolve => setTimeout(resolve, 500));
+  } else if (success) {
+    audioManager.play('connection_restored.mp3', { volume: 0.7 });
+    addColoredTextForDecrypt('> СИГНАЛ: КОД ВЕРИФИЦИРОВАН', '#00FF41');
+    await new Promise(resolve => setTimeout(resolve, 800));
+    
+    // Вывод содержимого
+    addColoredTextForDecrypt(`[ФАЙЛ РАСШИФРОВАН: ${fileTitle}]`, '#00FF41');
+    addColoredTextForDecrypt('------------------------------------', '#00FF41');
+    
+    // ЦВЕТНОЕ СОДЕРЖИМОЕ ФАЙЛА (2 цвета)
+    for (let i = 0; i < file.content.length; i++) {
+      const line = file.content[i];
+      const lineColor = i % 2 === 0 ? '#CCCCCC' : '#AAAAAA';
+      addColoredTextForDecrypt(line, lineColor);
+      await new Promise(resolve => setTimeout(resolve, 50));
     }
     
-    if (success) {
-      audioManager.play('decrypt_success.mp3', { volume: 0.7 });
-      addColoredText('> СИГНАЛ: КОД ВЕРИФИЦИРОВАН', '#00FF41', true);
-      await new Promise(r => setTimeout(r, 800));
-      
-      const file = decryptFiles[Object.keys(decryptFiles)[0]]; // Just for demonstration
-      file.content.forEach(line => addColoredText(line, '#CCCCCC', true));
-      
-      await new Promise(r => setTimeout(r, 1000));
-      addColoredText(`> ${file.successMessage}`, '#00FF41', true);
-      
-      // Снижение деградации на 5%
-      degradation.addDegradation(-5);
-      
-      // Открытие части кода VIGIL999 в зависимости от файла
-      if (fileId === '0XE09' && degradation.level > 80) {
-        degradation.revealVigilAlpha();
-      }
+    addColoredTextForDecrypt('------------------------------------', '#00FF41');
+    addColoredTextForDecrypt(`> ${file.successMessage}`, '#00FF41');
+    
+    // Снижение деградации
+    degradation.addDegradation(-5);
+    
+    if (decryptFileId === '0XE09' && !vigilCodeParts.alpha) {
+      degradation.revealVigilAlpha();
+    }
+  } else {
+    audioManager.play('decrypt_failure.mp3', { volume: 0.7 });
+    addColoredTextForDecrypt('> СИСТЕМА: ДОСТУП ЗАПРЕЩЕН', '#FF4444');
+    addColoredTextForDecrypt(`> ${file.failureMessage}`, '#FF4444');
+    
+    degradation.addDegradation(3);
+    decryptIsBlocked = true;
+    decryptBlockEndTime = Date.now() + 30000;
+  }
+  
+  await new Promise(resolve => setTimeout(resolve, 1000));
+  
+  // ГАРАНТИЯ ВОЗВРАТА СТРОКИ ВВОДА
+  scrollOffset = 0; // Сбрасываем прокрутку
+  addInputLine(); // Добавляем строку ввода
+  
+  // Дополнительная гарантия - принудительный редрав
+  requestFullRedraw();
+}
+// ==================== КОНЕЦ БЛОКА РАСШИФРОВКИ ====================
+// ==================== КОНЕЦ БЛОКА РАСШИФРОВКИ ====================
+// ==================== КОНЕЦ БЛОКА РАСШИФРОВКИ ====================
+// ==================== КОНЕЦ БЛОКА РАСШИФРОВКИ ====================
+
+// ---------- trace command ----------
+  // ---------- trace command ----------
+  // ========== ВСТАВЬТЕ ЭТОТ КОД ПЕРЕД async function startTrace ==========
+
+// Вспомогательные функции для TRACE (не видят блокировку traceActive)
+function addColoredTextForTrace(text, color = '#00FF41') {
+  pushLine(text, color);
+  scrollOffset = 0;
+  requestFullRedraw();
+}
+
+async function typeTextForTrace(text, speed = 14) {
+  let buffer = '';
+  for (let i = 0; i < text.length; i++) {
+    buffer += text[i];
+    if (lines.length && lines[lines.length - 1]._ephemeral) {
+      lines[lines.length - 1].text = buffer;
+      lines[lines.length - 1].color = '#00FF41';
     } else {
-      audioManager.play('decrypt_failure.mp3', { volume: 0.7 });
-      addColoredText(`> ${file.failureMessage}`, '#FF4444', true);
+      lines.push({ text: buffer, color: '#00FF41', _ephemeral: true });
+    }
+    if (lines.length > MAX_LINES) lines.splice(0, lines.length - MAX_LINES);
+    requestFullRedraw();
+    await new Promise(r => setTimeout(r, speed));
+  }
+  if (lines.length && lines[lines.length - 1]._ephemeral) {
+    lines[lines.length - 1].text = buffer;
+    delete lines[lines.length - 1]._ephemeral;
+  } else if (buffer) {
+    pushLine(buffer, '#00FF41');
+  }
+  scrollOffset = 0;
+  requestFullRedraw();
+}
+
+// ========== Дальше идёт ваша старая функция, КОТОРУЮ ТОЖЕ НАДО ЗАМЕНИТЬ ==========
+// ---------- trace command ----------
+  // ---------- trace command ----------
+  // ========== ВСТАВЬТЕ ЭТОТ КОД ПЕРЕД async function startTrace ==========
+
+// Вспомогательные функции для TRACE (не видят блокировку traceActive)
+function addColoredTextForTrace(text, color = '#00FF41') {
+  pushLine(text, color);
+  scrollOffset = 0;
+  requestFullRedraw();
+}
+
+async function typeTextForTrace(text, speed = 14) {
+  let buffer = '';
+  for (let i = 0; i < text.length; i++) {
+    buffer += text[i];
+    if (lines.length && lines[lines.length - 1]._ephemeral) {
+      lines[lines.length - 1].text = buffer;
+      lines[lines.length - 1].color = '#00FF41';
+    } else {
+      lines.push({ text: buffer, color: '#00FF41', _ephemeral: true });
+    }
+    if (lines.length > MAX_LINES) lines.splice(0, lines.length - MAX_LINES);
+    requestFullRedraw();
+    await new Promise(r => setTimeout(r, speed));
+  }
+  if (lines.length && lines[lines.length - 1]._ephemeral) {
+    lines[lines.length - 1].text = buffer;
+    delete lines[lines.length - 1]._ephemeral;
+  } else if (buffer) {
+    pushLine(buffer, '#00FF41');
+  }
+  scrollOffset = 0;
+  requestFullRedraw();
+}
+
+// ========== Дальше идёт ваша старая функция, КОТОРУЮ ТОЖЕ НАДО ЗАМЕНИТЬ ==========
+// ---------- trace command ----------
+// ========== ВСТАВЬТЕ ЭТОТ КОД ПОЛНОСТЬЮ ВМЕСТО ВСЕЙ ФУНКЦИИ startTrace ==========
+async function startTrace(target) {
+  // Проверка на активность
+  if (traceActive) {
+    addColoredText('ОШИБКА: Анализ уже активен', '#FF4444');
+    addInputLine();
+    return;
+  }
+  
+  // Проверка аргументов
+  if (!target || typeof target !== 'string') {
+    addColoredText('ОШИБКА: Не указана цель анализа', '#FF4444');
+    addInputLine();
+    return;
+  }
+  
+  // Нормализация цели
+  target = target.toLowerCase();
+  
+  // === УПРОЩЁННАЯ БАЗА ДАННЫХ ОБЪЕКТОВ ===
+  const networkMap = {
+    '0x9a0': {
+      target: '0X9A0',
+      label: 'Субъект из чёрной дыры',
+      connections: [
+        { type: 'СВЯЗЬ', result: 'ПЕТЛЕВАЯ РЕГИСТРАЦИЯ', status: 'СОЗНАНИЕ ЗАЦИКЛЕНО' },
+        { type: 'НАБЛЮДЕНИЕ', result: 'РЕКУРСИЯ', status: 'ТЕЛО ОТСУТСТВУЕТ' },
+        { type: 'КОНТАМИНАЦИЯ', result: 'ПРОСТРАНСТВЕННЫЙ РАЗРЫВ', status: 'ДАННЫЕ СОХРАНЕНЫ' },
+        { type: 'СИГНАЛ', result: 'ПОСТОЯННЫЙ ПОТОК', status: 'ИСТОЧНИК НЕОПРЕДЕЛЁН' }
+      ],
+      color: '#ff00ff',
+      hidden: false,
+description: 'Субъект за горизонтом событий, сознание заперто в цикле наблюдений',
+      loreFragment: 'Всё, что существует, зациклено в его сознании. Это не смерть. Это вечное наблюдение.'
+    },
+    
+    '0x095': {
+      target: '0X095',
+      label: 'Субъект-095 / Уникальный образец',
+      connections: [
+        { type: 'КОНТАКТ', result: 'ПРИМИТИВНЫЕ ФОРМЫ', status: 'СТАБИЛЬНОСТЬ 92%' },
+        { type: 'НЕЙРОИНВАЗИЯ', result: 'АНОМАЛЬНАЯ АКТИВНОСТЬ', status: 'ПОТЕРЯ КОНТРОЛЯ' },
+        { type: 'ПСИХИКА', result: 'НЕСТАБИЛЬНО', status: 'САМОУБИЙСТВО' },
+        { type: 'МИССИЯ', result: 'ВНЕ ВРЕМЕННОЙ ТКАНИ', status: 'ФАНОМНЫЙ СЛЕД ЗАФИКСИРОВАН' }
+      ],
+      color: '#ff4444',
+      hidden: false,
+description: 'Второй субъект, допущенный к испытанию KAT-5',
+      loreFragment: 'ПСИХИКА ДАЛА СБОЙ. СУБЪЕКТ МЁРТВ.'
+    },
+    
+    'phantom': {
+      target: 'PHANTOM',
+      label: 'Субъект-095 / Аномалия',
+      connections: [
+ { type: 'НАВИГАЦИЯ', result: 'ПРОСТРАНСТВЕННОЕ СМЕЩЕНИЕ', status: 'КОНТРОЛЬ УТЕРЯН' },
+        { type: 'ФИЗИОЛОГИЯ', result: 'УСИЛЕННАЯ', status: 'НЕСТАБИЛЬНО' },
+        { type: 'СВЯЗЬ', result: 'КОНТАКТ С ПЕРМСКИМ ПЕРИОДОМ', status: 'МОНОЛИТ АКТИВЕН' },
+        { type: 'ВМЕШАТЕЛЬСТВО', result: 'СПАСЕНИЕ СУБЪЕКТА', status: 'МОТИВАЦИЯ НЕИЗВЕСТНА' },
+        { type: 'ЛИЧНОСТЬ', result: 'ДЕГРАДАЦИЯ ПАМЯТИ', status: 'ПРОГРЕССИРУЕТ' }
+      ],
+      color: '#ff4444',
+      hidden: true,
+      description: 'Единственный субъект, вышедший за пределы системы.',
+      loreFragment: 'Лучший экземпляр эксперимента. Нейроимпланты/психика дали сбой. Субъект вырвался из под контроля.'
+    },
+    
+    'monolith': {
+      target: 'MONOLITH',
+      label: 'Чёрный объект Пермского периода',
+      connections: [
+       { type: 'СТАТУС', result: 'ИСТОЧНИК АНОМАЛИИ', status: 'СУЩЕСТВУЕТ <?>' },
+        { type: 'НАБЛЮДЕНИЕ', result: 'ФИКСАЦИЯ ПРИСУТСТВИЯ', status: 'КОНТАКТ ОТСУТСТВУЕТ' },
+        { type: 'ВЛИЯНИЕ', result: 'ПОГЛОЩЕНИЕ ИЗЛУЧЕНИЯ', status: 'ТЕХНИКА НЕДОСТУПНА' },
+        { type: 'СВЯЗЬ', result: 'РЕАКЦИЯ НА СУБЪЕКТОВ', status: 'АКТИВНОСТЬ ВОЗРАСТАЕТ' }
+      ],
+      color: '#000000',
+      hidden: true,
+     description: 'Аномальный объект, недостаток информации и опасность мешает прогрессии в изучении.',
+      loreFragment: 'НЕ ПРИБЛИЖАТЬСЯ. НЕ СМОТРЕТЬ. НЕ КОНТАКТИРОВАТЬ.'
+    },
+    
+    'signal': {
+      target: 'SIGNAL',
+      label: 'Коллективное сознание погибших',
+      connections: [
+  { type: 'ИСТОЧНИК', result: 'НЕИЗВЕСТНО', status: 'ERR' },
+        { type: 'РАСПРОСТРАНЕНИЕ', result: 'ERR', status: 'ERR' },
+        { type: 'СТРУКТУРА', result: 'САМООРГАНИЗАЦИЯ', status: 'СИМПТОМЫ ЖИЗНИ' },
+        { type: 'ФИНАЛ', result: 'СЛИЯНИЕ С СОСТОЯНИЕМ', status: 'СОЗНАНИЕ АКТИВНО' }
+      ],
+      color: '#ffff00',
+      hidden: false,
+      description: 'DATA ERROR',
+      loreFragment: 'Это память. Это то, что осталось после нас. Мы пытаемся его заглушить, но он становится громче. Он хочет быть услышанным.'
+    }
+  };
+  
+  const targetData = networkMap[target];
+  
+  if (!targetData) {
+    addColoredText(`ОШИБКА: Цель "${target.toUpperCase()}" не найдена`, '#FF4444');
+    addColoredText('Доступные цели: 0x9a0, 0x095, signal, phantom, monolith', '#FFFF00');
+    addInputLine();
+    return;
+  }
+  
+  // Проверка доступа к скрытым целям
+  if (targetData.hidden && degradation.level < 60) {
+    addColoredText('ОТКАЗАНО', '#FF4444');
+    addInputLine();
+    return;
+  }
+  
+  traceActive = true;
+  
+  // Вспомогательные функции для вывода (игнорируют traceActive)
+  function addColoredTextForTrace(text, color = '#00FF41') {
+    pushLine(text, color);
+    scrollOffset = 0;
+    requestFullRedraw();
+  }
+  
+  async function typeTextForTrace(text, speed = 14) {
+    let buffer = '';
+    for (let i = 0; i < text.length; i++) {
+      buffer += text[i];
+      if (lines.length && lines[lines.length - 1]._ephemeral) {
+        lines[lines.length - 1].text = buffer;
+        lines[lines.length - 1].color = '#00FF41';
+      } else {
+        lines.push({ text: buffer, color: '#00FF41', _ephemeral: true });
+      }
+      if (lines.length > MAX_LINES) lines.splice(0, lines.length - MAX_LINES);
+      requestFullRedraw();
+      await new Promise(r => setTimeout(r, speed));
+    }
+    if (lines.length && lines[lines.length - 1]._ephemeral) {
+      lines[lines.length - 1].text = buffer;
+      delete lines[lines.length - 1]._ephemeral;
+    } else if (buffer) {
+      pushLine(buffer, '#00FF41');
+    }
+    scrollOffset = 0;
+    requestFullRedraw();
+  }
+  
+  // === ФУНКЦИЯ АНИМАЦИИ ТЕПЛОВОЙ КАРТЫ ===
+  async function animateNetworkConstruction(targetData) {
+    const animationSteps = 40;
+    const baseDelay = 300;
+    const lineLength = 24; // Длина тепловой карты
+    
+    // Палитра цветов для типов связей
+    const connectionColors = {
+  // Существующие
+  'РЕГИСТРАЦИЯ': '#0044ff',
+  'СИНХРОНИЗАЦИЯ': '#ffffff',
+  'ИНГИБИРОВАНИЕ': '#ff0000',
+  'РЕВЕРСИЯ': '#ff00ff',
+  'ФИКСАЦИЯ': '#ffff00',
+  'НАВИГАЦИЯ': '#ff8800',
+  'РЕЗОНАНС': '#00ff00',
+  'КОНТАМИНАЦИЯ': '#8844ff',
+  'ПОГЛОЩЕНИЕ': '#444444', // Исправлен: был #000000 (сливался с фоном)
+  'ИНФИЛЬТРАЦИЯ': '#ff44ff',
+  'ГОЛОС': '#ff0080',
+  
+  // ДОБАВЬТЕ ЭТИ СТРОКИ:
+  'СВЯЗЬ': '#00aaff',
+  'НАБЛЮДЕНИЕ': '#88ff88',
+  'СИГНАЛ': '#ffdd00',
+  'КОНТАКТ': '#ff6600',
+  'НЕЙРОИНВАЗИЯ': '#ff0066',
+  'ПСИХИКА': '#ff6666',
+  'МИССИЯ': '#ffaa00',
+  'ФИЗИОЛОГИЯ': '#ff9999',
+  'ВМЕШАТЕЛЬСТВО': '#ff00aa',
+  'ЛИЧНОСТЬ': '#ffaa88',
+  'СТАТУС': '#9999ff',
+  'ВЛИЯНИЕ': '#ffcc00',
+  'ИСТОЧНИК': '#ff7700',
+  'РАСПРОСТРАНЕНИЕ': '#ffbb00',
+  'СТРУКТУРА': '#ffee00',
+  'ФИНАЛ': '#ff0000'
+};
+    
+    // Символы для тепловой карты (от холодного к горячему)
+    const heatMapChars = ['░', '▒', '▓', '█'];
+    
+    // Сохраняем позицию заголовка
+    const headerIndex = lines.length;
+    
+    // Выводим заголовок
+    addColoredTextForTrace('', '#00FF41');
+    addColoredTextForTrace('A.D.A.M. (ЯДРО УПРАВЛЕНИЯ)', '#ffffff');
+    
+    await new Promise(r => setTimeout(r, baseDelay));
+    
+    // Анимация: каждая связь "растёт" с эффектом тепловой карты
+    for (let step = 0; step <= animationSteps; step++) {
+      const progress = step / animationSteps;
       
-      // Увеличение деградации на 3%
-      degradation.addDegradation(3);
+      // Удаляем только строки сети, оставляя заголовок
+      while (lines.length > headerIndex + 1) {
+        lines.pop();
+      }
       
-      // Блокировка команды на 30 секунд
-      const lockTime = Date.now();
-      isFrozen = true;
-      
-      const timer = setInterval(() => {
-        if (Date.now() - lockTime >= 30000) {
-          clearInterval(timer);
-          isFrozen = false;
-          addColoredText('> БЛОКИРОВКА СНЯТА. МОЖНО ПОВТОРИТЬ ПОПЫТКУ', '#00FF41', true);
-          addInputLine();
-        } else {
-          const remaining = Math.ceil((30000 - (Date.now() - lockTime)) / 1000);
-          if (lines.length > 0 && lines[lines.length - 1].text.startsWith('> БЛОКИРОВКА:')) {
-            lines[lines.length - 1].text = `> БЛОКИРОВКА: ОСТАЛОСЬ ${remaining} СЕКУНД`;
-            requestFullRedraw();
-          } else {
-            addColoredText(`> БЛОКИРОВКА: ОСТАЛОСЬ ${remaining} СЕКУНД`, '#FF8800', true);
+      // Рисуем текущий прогресс для каждой связи
+      targetData.connections.forEach((connection, index) => {
+        const connectionColor = connectionColors[connection.type] || '#888888';
+        let displayType = connection.type;
+        let displayResult = connection.result;
+        let displayStatus = connection.status;
+        
+        // === ГЛЮКИ ПРИ ВЫСОКОЙ ДЕГРАДАЦИИ ===
+        if (degradation.level > 85) {
+          if (Math.random() < 0.3) {
+            const glitchChars = '░▓█▒';
+            const randomIndex = Math.floor(Math.random() * displayType.length);
+            displayType = displayType.substring(0, randomIndex) + 
+                         glitchChars[Math.floor(Math.random() * glitchChars.length)] + 
+                         displayType.substring(randomIndex + 1);
+          }
+          
+          if (Math.random() < 0.2) {
+            return;
           }
         }
-      }, 1000);
+        
+        // === ШУМОВОЙ СЛОЙ ПРИ КРИТИЧЕСКОЙ ДЕГРАДАЦИИ ===
+        let noisePrefix = '';
+        if (degradation.level > 95) {
+          const noiseChars = '░░▓▒█';
+          noisePrefix = Array(Math.floor(Math.random() * 5) + 1).fill(0).map(() => 
+            noiseChars[Math.floor(Math.random() * noiseChars.length)]
+          ).join('');
+        }
+        
+        // === ТЕПЛОВАЯ КАРТА ===
+        const filledLength = Math.floor(lineLength * progress);
+        const emptyLength = lineLength - filledLength;
+        
+        // Создаём градиент интенсивности
+        let heatLine = '';
+        for (let i = 0; i < lineLength; i++) {
+          if (i < filledLength) {
+            // Выбираем символ в зависимости от позиции (от холодного к горячему)
+            const intensity = Math.floor((i / lineLength) * heatMapChars.length);
+            const charIndex = Math.min(intensity, heatMapChars.length - 1);
+            heatLine += heatMapChars[charIndex];
+          } else {
+            heatLine += ' ';
+          }
+        }
+        
+        // Формируем финальную строку
+        let line = noisePrefix + '  ' + heatLine;
+        
+        // Добавляем информацию о связи только при завершении
+        if (filledLength === lineLength) {
+          line += ` [${displayType}] ${displayResult}`;
+          line += ` (${displayStatus})`;
+        }
+        
+        addColoredTextForTrace(line, connectionColor);
+      });
       
-      return;
+      // Добавляем информацию о цели на пике анимации
+      if (step === animationSteps) {
+        await new Promise(r => setTimeout(r, baseDelay));
+        addColoredTextForTrace('', '#00FF41');
+        addColoredTextForTrace(`> ОПИСАНИЕ: ${targetData.description}`, '#ffff00');
+        
+        // Скрытые обратные связи при высокой деградации
+        if (degradation.level > 80) {
+          await new Promise(r => setTimeout(r, baseDelay));
+          addColoredTextForTrace('', '#00FF41');
+          addColoredTextForTrace('> ОБНАРУЖЕНА ОБРАТНАЯ СВЯЗЬ:', '#ff4444');
+          
+          if (target === 'phantom') {
+            addColoredTextForTrace(`  ${targetData.target} ─[РЕЗОНАНС] A.D.A.M.`, '#ff00ff');
+            addColoredTextForTrace('  ⚠ СИСТЕМА ERRRRRRRRRRRRRR', '#ff0000');
+          } else {
+            addColoredTextForTrace(`  ${targetData.target} ─[ИНФИЛЬТРАЦИЯ] A.D.A.M.`, '#ff00ff');
+            addColoredTextForTrace('  ⚠ СИСТЕМА НЕ КОНТРОЛИРУЕТ ЭТУ СВЯЗЬ', '#ff0000');
+          }
+        }
+      }
+      
+      // === ЗАМЕДЛЕНИЕ ПРИ ВЫСОКОЙ ДЕГРАДАЦИИ ===
+      let delay = baseDelay;
+      if (degradation.level > 90) {
+        delay = baseDelay * (1.5 + Math.random() * 2);
+      } else if (degradation.level > 80) {
+        delay = baseDelay * 1.3;
+      }
+      
+      await new Promise(r => setTimeout(r, delay));
     }
-    
-    await new Promise(r => setTimeout(r, 1000));
-    addInputLine();
   }
   
-  // ---------- trace command ----------
-  async function startTrace(target) {
-    if (traceActive) {
-      addColoredText('ОШИБКА: Анализ уже активен', '#FF4444');
-      return;
-    }
-    
-    traceActive = true;
+  try {
+    // Звук
     audioManager.play('trace_active.mp3', { volume: 0.7 });
     
-    await typeText(`[СИСТЕМА: ЗАПУЩЕН ПРОТОКОЛ АНАЛИЗА СВЯЗЕЙ]`, 'output', 12, true);
-    await typeText(`> ЦЕЛЬ: ${target.toUpperCase()}`, 'output', 12, true);
-    await typeText('> ГЕНЕРАЦИЯ ТЕПЛОВОЙ КАРТЫ...', 'output', 12, true);
+    // Заголовок
+    await typeTextForTrace(`[СИСТЕМА: РАСКРЫТИЕ КАРТЫ КОНТРОЛЯ]`);
+    await typeTextForTrace(`> ЦЕЛЬ: ${targetData.target}`);
     
-    // Имитация сканирования
-    const symbols = ['░', '▓', '█', '▒', '≡', '§', '¶'];
-    const colors = ['#0044ff', '#0088ff', '#00ccff', '#00ffcc', '#00ff88', '#00ff44', '#00ff00'];
-    const directions = ['СЛЕД', 'СВЯЗЬ', 'СТАТУС', 'КОНТАКТ'];
+    // Анимация построения сети
+    await animateNetworkConstruction(targetData);
     
-    for (let i = 0; i < 12; i++) {
-      await new Promise(r => setTimeout(r, 150));
-      
-      const line = symbols[Math.floor(Math.random() * symbols.length)].repeat(12) + 
-                   ` [${directions[Math.floor(Math.random() * directions.length)]}: ${target.toUpperCase()}]`;
-      
-      addColoredText(line, colors[Math.floor(Math.random() * colors.length)], true);
-      
-      if (i === 8 && degradation.level > 70) {
-        addColoredText('> ФАНОМ ЗАФИКСИРОВАН В СЕТИ', '#FF00FF', true);
-      }
+    // Финальный лор-фрагмент при 80%+ деградации
+    if (degradation.level >= 80 && targetData.loreFragment) {
+      await new Promise(r => setTimeout(r, 1000));
+      addColoredTextForTrace('', '#00FF41');
+      addColoredTextForTrace('> СИСТЕМНЫЙ СБОЙ В КАРТЕ КОНТРОЛЯ', '#ff00ff');
+      await new Promise(r => setTimeout(r, 300));
+      addColoredTextForTrace(`> ${targetData.loreFragment}`, '#ffff00');
     }
     
-    // Финальный результат
-    if (Math.random() > 0.3 || degradation.level < 70) {
-      addColoredText('> АНАЛИЗ ЗАВЕРШЁН. ДАННЫЕ НЕ СОДЕРЖАТ АНОМАЛИЙ', '#00FF41', true);
+    // НАГРАДА/НАКАЗАНИЕ ЗА АНАЛИЗ
+    if (target === 'phantom' || target === 'monolith' || target === 'signal') {
+      degradation.addDegradation(2); // Рисковые цели увеличивают деградацию
+      addColoredTextForTrace('> ПРЕДУПРЕЖДЕНИЕ: Анализ опасных сущностей ускоряет системный распад', '#FF8800');
     } else {
-      addColoredText('> КОНТАКТ С ЯДРОМ A.D.A.M. УСТАНОВЛЕН', '#FF00FF', true);
-      await new Promise(r => setTimeout(r, 500));
-      addColoredText('СИСТЕМНОЕ СООБЩЕНИЕ: "ОН ЗНАЕТ, ЧТО ВЫ ЗДЕСЬ"', '#FFFF00', true);
-      
-      // Увеличение деградации за успешное обнаружение аномалии
-      degradation.addDegradation(2);
+      degradation.addDegradation(-1); // Безопасные цели снижают деградацию
     }
     
-    await new Promise(r => setTimeout(r, 1000));
+  } catch (e) {
+    console.error('TRACE CRITICAL ERROR:', e);
+    addColoredTextForTrace('ОШИБКА: Критическая ошибка при выполнении анализа', '#FF4444');
+  } finally {
     traceActive = false;
+    await new Promise(r => setTimeout(r, 800));
     addInputLine();
   }
-  
+}
+// ========== КОНЕЦ ЗАМЕНЫ ==========
   // ---------- playaudio command ----------
   async function playAudio(dossierId) {
     if (audioPlaybackActive) {
@@ -2256,13 +3176,13 @@ function applyTextDistortion(text, level) {
       case 'trace':
         if (args.length === 0) {
           addColoredText('ОШИБКА: Укажите цель для анализа', '#FF4444');
-          await typeText('Примеры: trace 0X9A0, trace PHANTOM, trace SIGNAL', 'output', 12);
+          await typeText('Доступные цели: 0x9a0, 0x095, signal, phantom, monolith', 'output', 12);
           break;
         }
         
         // Доступ к trace PHANTOM только при деградации >70%
         if (args[0].toLowerCase() === 'phantom' && degradation.level <= 70) {
-          addColoredText('ОШИБКА: ДОСТУП К ФАНОМУ ЗАПРЕЩЁН (требуется деградация >70%)', '#FF4444');
+          addColoredText('ОШИБКА: ОТКАЗАНО | РАСПАД', '#FF4444');
           break;
         }
         
@@ -2279,15 +3199,9 @@ function applyTextDistortion(text, level) {
       // ════════════════════════════════════════════════════════════════════
       // КОМАНДЫ СЕТКИ
       // ════════════════════════════════════════════════════════════════════
-      case 'netmode':
+      case 'net_mode':
         if (!window.__netGrid) {
           addColoredText('ОШИБКА: Система управления узлами недоступна', '#FF4444');
-          break;
-        }
-        
-        // Активация только при деградации >80%
-        if (degradation.level < 80) {
-          addColoredText('ОШИБКА: СЕТЕВОЙ ДОСТУП ЗАКРЫТ (требуется деградация >80%)', '#FF4444');
           break;
         }
         
@@ -2309,12 +3223,7 @@ function applyTextDistortion(text, level) {
             addColoredText('ОШИБКА: Система узлов недоступна', '#FF4444');
             break;
           }
-          
-          // Проверка только при деградации >80%
-          if (degradation.level < 80) {
-            addColoredText('ОШИБКА: СЕТЕВОЙ ДОСТУП ЗАКРЫТ (требуется деградация >80%)', '#FF4444');
-            break;
-          }
+         
           
           await showLoading(800, "Сканирование конфигурации узлов");
           const result = window.__netGrid.checkSolution();
@@ -2352,26 +3261,30 @@ function applyTextDistortion(text, level) {
         }
         break;
       // ════════════════════════════════════════════════════════════════════
-      case 'deg':
-        if (args.length === 0) {
-          addColoredText(`Текущий уровень деградации: ${degradation.level}%`, '#00FF41');
-          await typeText('Использование: deg <уровень 0-100>', 'output', 12);
-        } else {
-          const level = parseInt(args[0]);
-          if (!isNaN(level) && level >= 0 && level <= 100) {
-            degradation.setDegradationLevel(level);
-            addColoredText(`Уровень деградации установлен: ${level}%`, '#00FF41');
-          } else {
-            addColoredText('ОШИБКА: Уровень должен быть числом от 0 до 100', '#FF4444');
-          }
-        }
-        break;
+case 'deg':
+  if (args.length === 0) {
+    addColoredText(`Текущий уровень деградации: ${degradation.level}%`, '#00FF41');
+    await typeText('Использование: deg <уровень 0-100>', 'output', 12);
+  } else {
+    const level = parseInt(args[0]);
+    if (!isNaN(level) && level >= 0 && level <= 100) {
+      degradation.setDegradationLevel(level);
+      
+      // 🔥 ВОТ ЭТА ЕБУЧАЯ СТРОЧКА НЕДОСТАЁТ:
+      window.__netGrid.setSystemDegradation(level);
+      
+      addColoredText(`Уровень деградации установлен: ${level}%`, '#00FF41');
+    } else {
+      addColoredText('ОШИБКА: Уровень должен быть числом от 0 до 100', '#FF4444');
+    }
+  }
+  break;
       case 'reset':
         if (falseResetActive) {
           addColoredText('ОШИБКА: ПРОТОКОЛ СБРОСА УЖЕ АКТИВЕН', '#FF4444');
           return;
         }
-        
+
         await typeText('[ПРОТОКОЛ СБРОСА СИСТЕМЫ]', 'output', 12);
         addColoredText('------------------------------------', '#00FF41');
         addColoredText('ВНИМАНИЕ: операция приведёт к очистке активной сессии.', '#FFFF00');
@@ -2407,11 +3320,26 @@ function applyTextDistortion(text, level) {
             await new Promise(r=>setTimeout(r,400));
             lines[lines.length - 1].text = '> ВОССТАНОВЛЕНИЕ БАЗОВОГО СОСТОЯНИЯ [||||||||||]';
             requestFullRedraw();
-            
+                    window.__netGrid.setSystemDegradation(0);
+  window.__netGrid.addDegradation(-100);
             addColoredText('----------------------------------', '#00FF41');
             addColoredText('[СИСТЕМА ГОТОВА К РАБОТЕ]', '#00FF41');
-            
+                if (window.__netGrid) {
+      // 1. Выключаем режим сетки
+      window.__netGrid.setGridMode(false);
+      
+      // 2. ГАРАНТИРОВАННЫЙ СБРОС ВСЕХ УЗЛОВ (включая красные)
+      window.__netGrid.forceReset();
+      
+      // 3. Дополнительная перерисовка
+      setTimeout(() => {
+        if (window.__netGrid) {
+          window.__netGrid.forceReset();
+        }
+      }, 100);
+    }
             degradation.reset();
+			
             if (window.__netGrid) {
               window.__netGrid.setGridMode(false);
             }
