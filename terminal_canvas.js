@@ -28,7 +28,391 @@
   const ANOMALOUS_INSERTS_END_LEVEL = 80;
   const INVERSION_START_LEVEL = 95;
   const AUTO_RESET_LEVEL = 98;
+  // ========== НОВАЯ СИСТЕМА ГЛИТЧА (ЭТАП 1) ==========
+// Метаданные для глитченного текста
+// Каждая строка может иметь информацию о глитч-фрагментах
+const GLITCH_CONFIG = {
+  BLOCKS: ['█', '▓', '▒', '░'],
+  GLYPHS: ['≣', '≡', '§', 'Σ', 'Ϟ', '¶', '×', 'Ø', '◊', '∑', 'Ω', '·'],
+  CUTS: ['│', '╫', '┼', '▌', '▐'],
+  ALL: null // будет сгенерировано далее
+};
+
+GLITCH_CONFIG.ALL = [...GLITCH_CONFIG.BLOCKS, ...GLITCH_CONFIG.GLYPHS, ...GLITCH_CONFIG.CUTS];
+
+// Класс для управления глитч-фрагментами
+class GlitchFragment {
+  constructor(startPos, length, isCorrosion = false) {
+    this.start = startPos;
+    this.length = length;
+    this.originalChars = [];
+    this.glitchedChars = [];
+    this.lastSpasmTime = 0;
+    this.isCorrosion = isCorrosion; // Добавлено: тип коррозии
+  }
   
+  // Статическое применение глитча (первичное искажение)
+  applyStaticGlitch() {
+    const availableChars = [...GLITCH_CONFIG.ALL];
+    const heavyBlocks = ['█', '▓'];
+    
+    // ТОЧЕЧНАЯ КОРРОЗИЯ (ТЗ 2.3)
+    if (this.isCorrosion) {
+      const glitchChar = availableChars[Math.floor(Math.random() * availableChars.length)];
+      this.glitchedChars = [glitchChar];
+      return;
+    }
+    
+    // Обычный фрагмент с проверкой тяжелых блоков (ТЗ 2.4)
+    this.glitchedChars = this.originalChars.map((_, idx) => {
+      let char;
+      let attempts = 0;
+      
+      do {
+        char = availableChars[Math.floor(Math.random() * availableChars.length)];
+        attempts++;
+        
+        // Проверка на 2 тяжелых блока подряд
+        if (heavyBlocks.includes(char) && attempts < 10) {
+          const testChars = [...this.glitchedChars];
+          testChars.push(char);
+          if (hasTooManyHeavyBlocks(testChars)) {
+            char = null;
+          }
+        }
+      } while (!char && attempts < 20);
+      
+      return char || availableChars[Math.floor(Math.random() * availableChars.length)];
+    });
+  }
+  
+  // Живой спазм внутри фрагмента
+  applySpasm(degradationLevel) {
+    const now = Date.now();
+    const frequency = getSpasmFrequency(degradationLevel);
+    
+    // Проверяем, пора ли делать спазм
+    if (now - this.lastSpasmTime < frequency) return;
+    
+    this.lastSpasmTime = now;
+    
+    // Выбираем 1-2 символа в фрагменте
+    const spasmCount = Math.random() < 0.7 ? 1 : 2;
+    const indices = [];
+    
+    while (indices.length < spasmCount && indices.length < this.length) {
+      const idx = Math.floor(Math.random() * this.length);
+      if (!indices.includes(idx)) indices.push(idx);
+    }
+    
+    // Применяем спазмы к выбранным символам
+    indices.forEach(idx => {
+      const type = Math.random();
+      
+      // Тип 1: Глитч-мутация (60%)
+      if (type < 0.6) {
+        const availableChars = [...GLITCH_CONFIG.ALL];
+        this.glitchedChars[idx] = availableChars[Math.floor(Math.random() * availableChars.length)];
+      }
+      // Тип 2: Колебание (мигание) (35%)
+      else if (type < 0.95) {
+        const original = this.originalChars[idx];
+        this.glitchedChars[idx] = original; // временно нормальный
+        setTimeout(() => {
+          const availableChars = [...GLITCH_CONFIG.ALL];
+          this.glitchedChars[idx] = availableChars[Math.floor(Math.random() * availableChars.length)];
+        }, 50 + Math.random() * 100);
+      }
+      // Тип 3: Изменение разреза (5%)
+      else {
+        const cutChars = [...GLITCH_CONFIG.CUTS];
+        this.glitchedChars[idx] = cutChars[Math.floor(Math.random() * cutChars.length)];
+      }
+    });
+    
+    // Попытка заражения (расширения фрагмента)
+    if (Math.random() < 0.02) { // 2% шанс
+      this.tryExpandFragment();
+    }
+  }
+  
+  // Попытка расширения фрагмента (заражение)
+  tryExpandFragment() {
+    // Максимальное расширение +3 от исходного размера
+    if (this.length >= this.originalChars.length + 3) return;
+    
+    // Расширяем на 1 символ
+    this.length++;
+    const availableChars = [...GLITCH_CONFIG.ALL];
+    this.glitchedChars.push(availableChars[Math.floor(Math.random() * availableChars.length)]);
+  }
+}
+
+// Главный движок глитча
+class GlitchTextEngine {
+  constructor() {
+    this.fragments = new Map(); // Map<lineId, fragment[]>
+    this.nextLineId = 0;
+  }
+  
+// ========== ФИНАЛЬНАЯ ВЕРСИЯ processStatic (ЭТАП 4) ==========
+  processStatic(text, degradationLevel) {
+    if (text.startsWith('adam@secure:~$') || text.startsWith('>') || text.startsWith('[')) {
+      return { text, lineId: null, fragments: [] };
+    }
+    
+    // Вероятность применения глитча
+    let glitchChance = 0;
+    if (degradationLevel > 30) {
+      glitchChance = Math.min(0.9, (degradationLevel - 30) / 65 * 0.9);
+    }
+    
+    if (Math.random() > glitchChance) {
+      return { text, lineId: null, fragments: [] };
+    }
+    
+    // === ГЛАВНОЕ ИЗМЕНЕНИЕ: фрагменты зависят ТОЛЬКО от длины слова (ТЗ 2.1) ===
+    const words = text.split(' ');
+    const processedWords = [];
+    const fragments = [];
+    let charOffset = 0;
+    
+    words.forEach((word, wordIndex) => {
+      // ОПРЕДЕЛЕНИЕ КОЛИЧЕСТВА ФРАГМЕНТОВ ПО ДЛИНЕ СЛОВА
+      let fragmentCount = 0;
+      
+      if (word.length <= 3) {
+        fragmentCount = Math.random() < 0.5 ? 1 : 0; // 0-1 фрагмент
+      } else if (word.length <= 7) {
+        fragmentCount = Math.floor(Math.random() * 2) + 1; // 1-2 фрагмента
+      } else {
+        fragmentCount = Math.floor(Math.random() * 2) + 2; // 2-3 фрагмента
+      }
+      
+      if (fragmentCount === 0 || word.length < 1) {
+        processedWords.push(word);
+        charOffset += word.length + 1;
+        return;
+      }
+      
+      const originalWord = word;
+      let glitchedWord = originalWord.split('');
+      const tempFragments = [];
+      
+      // Выбираем тип глитча для всего слова (70% обычный, 30% коррозия)
+      const isCorrosionWord = Math.random() < 0.3;
+      
+      for (let i = 0; i < fragmentCount; i++) {
+        const maxLength = isCorrosionWord ? 1 : Math.min(3, Math.floor(originalWord.length * 0.5));
+        if (maxLength <= 0) break;
+        
+        const fragmentLength = Math.floor(Math.random() * maxLength) + 1;
+        const startPos = Math.floor(Math.random() * (originalWord.length - fragmentLength + 1));
+        
+        // Проверка перекрытия
+        let overlap = false;
+        for (let j = 0; j < fragmentLength; j++) {
+          if (glitchedWord[startPos + j] !== originalWord[startPos + j]) {
+            overlap = true;
+            break;
+          }
+        }
+        
+        if (overlap) continue;
+        
+        const fragment = new GlitchFragment(charOffset + startPos, fragmentLength, isCorrosionWord);
+        fragment.originalChars = originalWord.substr(startPos, fragmentLength).split('');
+        fragment.applyStaticGlitch();
+        
+        for (let j = 0; j < fragmentLength; j++) {
+          glitchedWord[startPos + j] = fragment.glitchedChars[j];
+        }
+        
+        tempFragments.push(fragment);
+      }
+      
+      processedWords.push(glitchedWord.join(''));
+      fragments.push(...tempFragments);
+      charOffset += originalWord.length + 1;
+    });
+    
+    let lineId = null;
+    if (fragments.length > 0) {
+      lineId = this.nextLineId++;
+      this.fragments.set(lineId, fragments);
+    }
+    
+    return {
+      text: processedWords.join(' '),
+      lineId,
+      fragments
+    };
+  }
+// ========== КОНЕЦ ЭТАПА 4.1 ==========
+// ========== ИЗМЕНЕННАЯ applyDynamicSpasms (ЭТАП 4.2) ==========
+applyDynamicSpasms(degradationLevel) {
+  const now = Date.now();
+  const frequency = getSpasmFrequency(degradationLevel);
+  
+  // Шанс заражения (расширения фрагмента) растёт с деградацией
+  const infectionChance = Math.min(0.05, (degradationLevel - 50) / 1000); // 0-5%
+  
+  this.fragments.forEach((fragments, lineId) => {
+    fragments.forEach(fragment => {
+      if (now - fragment.lastSpasmTime < frequency) return;
+      
+      fragment.lastSpasmTime = now;
+      
+      const spasmCount = Math.random() < 0.7 ? 1 : 2;
+      const indices = [];
+      
+      while (indices.length < spasmCount && indices.length < fragment.length) {
+        const idx = Math.floor(Math.random() * fragment.length);
+        if (!indices.includes(idx)) indices.push(idx);
+      }
+      
+      indices.forEach(idx => {
+        const type = Math.random();
+        
+        // Тип 1: Глитч-мутация (60%)
+        if (type < 0.6) {
+          const availableChars = [...GLITCH_CONFIG.ALL];
+          fragment.glitchedChars[idx] = availableChars[Math.floor(Math.random() * availableChars.length)];
+        }
+        // Тип 2: Колебание (мигание) (35%)
+        else if (type < 0.95) {
+          const original = fragment.originalChars[idx];
+          fragment.glitchedChars[idx] = original;
+          
+          setTimeout(() => {
+            // Проверяем, что фрагмент всё ещё существует
+            if (fragment.glitchedChars[idx] === original) {
+              const availableChars = [...GLITCH_CONFIG.ALL];
+              fragment.glitchedChars[idx] = availableChars[Math.floor(Math.random() * availableChars.length)];
+            }
+          }, 50 + Math.random() * 100);
+        }
+        // Тип 3: Изменение разреза (5%)
+        else {
+          const cutChars = [...GLITCH_CONFIG.CUTS];
+          fragment.glitchedChars[idx] = cutChars[Math.floor(Math.random() * cutChars.length)];
+        }
+      });
+      
+      // Заражение (расширение)
+      if (Math.random() < 0.02 && fragment.length < fragment.originalChars.length + 3) {
+        fragment.length++;
+        const availableChars = [...GLITCH_CONFIG.ALL];
+        fragment.glitchedChars.push(availableChars[Math.floor(Math.random() * availableChars.length)]);
+      }
+    });
+  });
+}
+// ========== КОНЕЦ ЭТАПА 4.2 ==========
+ 
+  
+  // Удалить фрагменты для строки (при очистке экрана)
+  clearFragments(lineId) {
+    this.fragments.delete(lineId);
+  }
+}
+// ========== ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ (ЭТАП 2) ==========
+function renderGlitchText(lineObj, x, y, ctx) {
+  const text = lineObj.text;
+  const originalText = lineObj.originalText || text;
+  
+  // Если нет глитч-фрагментов - рисуем как есть
+  if (!lineObj.glitchLineId || !glitchEngine.fragments.has(lineObj.glitchLineId)) {
+    ctx.fillText(text, x, y);
+    return;
+  }
+  
+  const fragments = glitchEngine.fragments.get(lineObj.glitchLineId);
+  
+  // Рисуем текст посимвольно, заменяя фрагменты
+  let currentX = x;
+  let charIndex = 0;
+  
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    
+    // Проверяем, находится ли символ в глитч-фрагменте
+    const fragment = fragments.find(f => 
+      charIndex >= f.start && 
+      charIndex < f.start + f.length
+    );
+    
+    if (fragment) {
+      // Рисуем глитч-символ
+      const posInFragment = charIndex - fragment.start;
+if (posInFragment < fragment.glitchedChars.length) {
+  const glitchChar = fragment.glitchedChars[posInFragment];
+  ctx.fillText(glitchChar || '▓', currentX, y); // Защита от undefined
+} else {
+  ctx.fillText(char || ' ', currentX, y);
+}
+    } else {
+      // Рисуем нормальный символ
+      ctx.fillText(char, currentX, y);
+    }
+    
+    // Обновляем позицию
+    currentX += ctx.measureText(char).width;
+    charIndex++;
+  }
+}
+// ========== КОНЕЦ renderGlitchText ==========
+// Вспомогательная функция для получения частоты спазмов
+// ========== ФИНАЛЬНАЯ getSpasmFrequency (ЭТАП 4.3) ==========
+function getSpasmFrequency(degradationLevel) {
+  // 0-40%: нет спазмов (возвращаем бесконечность)
+  if (degradationLevel < 40) return Infinity;
+  
+  // 40-60%: 1 спазм / 1.5-2 секунды
+  if (degradationLevel < 60) return 1500 + Math.random() * 500;
+  
+  // 60-80%: 1 спазм / 1-0.5 секунды
+  if (degradationLevel < 80) {
+    const t = (degradationLevel - 60) / 20; // 0-1
+    return 1000 - t * 500 + Math.random() * 200;
+  }
+  
+  // 80-90%: 1 спазм / 0.6-0.4 секунды
+  if (degradationLevel < 90) {
+    const t = (degradationLevel - 80) / 10; // 0-1
+    return 600 - t * 200 + Math.random() * 100;
+  }
+  
+  // 90-95%: 1 спазм / 0.3-0.2 секунды
+  if (degradationLevel < 95) {
+    const t = (degradationLevel - 90) / 5; // 0-1
+    return 300 - t * 100 + Math.random() * 50;
+  }
+  
+  // 95-98%: предсмертное затухание - снова редкие спазмы
+  return 1500 + Math.random() * 500;
+}
+// ========== КОНЕЦ ЭТАПА 4.3 ==========
+
+// Создаем глобальный экземпляр движка
+const glitchEngine = new GlitchTextEngine();
+// ========== ФУНКЦИЯ ПРОВЕРКИ ТЯЖЕЛЫХ БЛОКОВ (ТЗ 2.4) ==========
+function hasTooManyHeavyBlocks(chars) {
+  const heavyBlocks = ['█', '▓'];
+  let consecutiveCount = 0;
+  
+  for (let i = 0; i < chars.length; i++) {
+    if (heavyBlocks.includes(chars[i])) {
+      consecutiveCount++;
+      if (consecutiveCount >= 2) return true;
+    } else {
+      consecutiveCount = 0;
+    }
+  }
+  return false;
+}
+// ========== КОНЕЦ ПРОВЕРКИ ==========
+// ========== КОНЕЦ ЭТАПА 1 ==========
   // ---------- create main canvas ----------
   const canvas = document.createElement('canvas');
   canvas.id = 'terminalCanvas';
@@ -256,24 +640,6 @@
   let audioPlaybackFile = null;
   let decryptCloseAttempts = 0;
   
-  // ---------- text distortion patterns ----------
-  const GLITCH_CHARS = {
-    50: ['▓', '█', '▒'],
-    60: ['▓', '█', '▒', '░', '≡', '§'],
-    70: ['▓', '█', '▒', '░', '≡', '§', '¶', '×', 'Ø'],
-    80: ['▓', '█', '▒', '░', '≡', '§', '¶', '×', 'Ø', '◊', '∑', 'Ω'],
-    90: ['▓', '█', '▒', '░', '≡', '§', '¶', '×', 'Ø', '◊', '∑', 'Ω', '·'],
-    95: ['▓', '░', '█', '▒', '≡', '§', '¶', '×', 'Ø', '◊', '∑', 'Ω', '·', '#', '@', '$', '%', '^', '&', '*', '!', '?', '.']
-  };
-  
-const DISTORTION_PATTERNS = {
-  50: 0.025,  // 2.5% символов вместо 5%
-  60: 0.08,   // 8% вместо 15%
-  70: 0.15,   // 18% вместо 30%
-  80: 0.25,   // 35% вместо 50%
-  90: 0.40,   // 60% вместо 75%
-  95: 0.50    // 85% вместо 100%
-};
   
 // ---------- Degradation system ----------
 class DegradationSystem {
@@ -403,12 +769,6 @@ if (this.level >= AUTO_RESET_LEVEL && !isFrozen) {
       this.stopAnomalousInserts();
     }
     
-    // Уровень 5: Зеркальный вывод
-    if (this.level >= MIRROR_START_LEVEL && this.level < MIRROR_END_LEVEL) {
-      this.startMirrorText();
-    } else {
-      this.stopMirrorText();
-    }
     
     // Уровень 5: Рандомная блокировка команд
     if (this.level >= COMMAND_BLOCK_START_LEVEL && this.level < COMMAND_BLOCK_END_LEVEL) {
@@ -1048,14 +1408,6 @@ reset(){
     }
   }
   
-  startMirrorText() {
-    this.mirrorActive = true;
-  }
-  
-  stopMirrorText() {
-    this.mirrorActive = false;
-  }
-  
   startCommandBlocking() {
     this.commandBlockActive = true;
   }
@@ -1210,143 +1562,56 @@ setDegradationLevel(level){
     ctx.restore();
   }
   
-function applyTextDistortion(text, level) {
-	if (level >= 95) return text;
-  // Пропускаем искажение для служебных строк
-  if (text.startsWith('adam@secure:~$') || text.startsWith('>') || text.startsWith('[')) {
-    return text;
-  }
-  
-  // Проверка вероятности применения искажения
-  if (level < 50 || Math.random() > 0.3) return text;
-  
-  // Выбираем уровень искажения
-  let glitchLevel = 50;
-  if (level >= 95) glitchLevel = 95;
-  else if (level >= 90) glitchLevel = 90;
-  else if (level >= 80) glitchLevel = 80;
-  else if (level >= 70) glitchLevel = 70;
-  else if (level >= 60) glitchLevel = 60;
-  
-  const distortionRate = DISTORTION_PATTERNS[glitchLevel];
-  const glitchChars = GLITCH_CHARS[glitchLevel];
-  
-  // Разбиваем текст на слова для сохранения читаемости
-  const words = text.split(' ');
-  
-  return words.map(word => {
-    if (word.length <= 3) return word; // Короткие слова не искажаем
-    
-    return word.split('').map((char, index) => {
-      // Увеличиваем вероятность искажения для краев слов
-      const edgeFactor = (index === 0 || index === word.length - 1) ? 1.8 : 
-                         (index === 1 || index === word.length - 2) ? 1.3 : 1.0;
-      
-      // Дополнительный фактор для краев строки
-      const positionInLine = text.indexOf(word);
-      const lineEdgeFactor = (positionInLine === 0 || 
-                             positionInLine > text.length - word.length - 5) ? 1.5 : 1.0;
-      
-      // Общая вероятность искажения
-      const distortionChance = distortionRate * edgeFactor * lineEdgeFactor * level / 50;
-      
-      if (Math.random() < distortionChance) {
-        return glitchChars[Math.floor(Math.random() * glitchChars.length)];
-      }
-      return char;
-    }).join('');
-  }).join(' ');
-}
-  
   function mirrorText(text) {
     return text.split('').reverse().join('');
   }
   
-  function drawTextLines(){
-    ctx.save();
-    ctx.setTransform(1,0,0,1,0,0);
-    ctx.scale(DPR, DPR);
-	
-    ctx.font = `${FONT_SIZE_PX}px ${FONT_FAMILY}`;
-    ctx.textBaseline = 'top';
-    const contentH = vh - PADDING*2;
-    const visibleLines = Math.max(1, Math.floor(contentH / LINE_HEIGHT));
-    const maxScroll = Math.max(0, lines.length - visibleLines);
-    const start = Math.max(0, lines.length - visibleLines - scrollOffset);
-    const end = Math.min(lines.length, start + visibleLines);
-    let y = PADDING;
-    const maxW = vw - PADDING*2;
-    
-    // Эффект дрожания текста
-
-    
-    // Зеркальный вывод
-    const shouldMirror = degradation.level >= MIRROR_START_LEVEL && degradation.level < MIRROR_END_LEVEL && 
-                         Math.random() < 0.2 + (degradation.level - MIRROR_START_LEVEL) / (MIRROR_END_LEVEL - MIRROR_START_LEVEL) * 0.1;
-    
-    for (let i = start; i < end; i++){
-      const item = lines[i];
-      let color = item.color || '#00FF41';
-      
-      // Искажение цвета при высокой деградации
-if (degradation.level >= 60 && Math.random() < 0.02) { 
-        color = ['#FF4444', '#FF8800', '#FFFF00', '#4d00ff'][Math.floor(Math.random() * 4)];
-      }
-      
-      let text = String(item.text);
-      let shouldDistort = !item._ephemeral && !item.skipDistortion;
-      
-      // Применяем глитч-фильтр
-      if (shouldDistort && degradation.level >= 50 && degradation.level < GLITCH_MAX_LEVEL) {
-        text = applyTextDistortion(text, degradation.level);
-      }
-      
-      // Зеркальный вывод
-      if (shouldDistort && shouldMirror) {
-        text = mirrorText(text);
-      }
-      
-      // Искажение приглашения командной строки
-      if (degradation.level >= 50 && degradation.level < 70 && 
-          text.startsWith('adam@secure:~$') && Math.random() < 0.3) {
-        
-        const distortedPrompts = [
-          'ADAM@secure:~$',
-          'aD@m.secuRe:~$',
-          '@d@m.v1g1l:~$'
-        ];
-        
-        text = distortedPrompts[Math.floor(Math.random() * distortedPrompts.length)] + 
-               text.substring('adam@secure:~$'.length);
-      }
-      
-      ctx.fillStyle = color;
-      
-      if (ctx.measureText(text).width <= maxW) {
-        ctx.fillText(text, PADDING, y);
-        y += LINE_HEIGHT;
-        continue;
-      }
-      
-      const words = text.split(' ');
-      let line = '';
-      for (let w = 0; w < words.length; w++){
-        const test = line ? line + ' ' + words[w] : words[w];
-        if (ctx.measureText(test).width > maxW && line){
-          ctx.fillText(line, PADDING + shakeOffset, y);
-          y += LINE_HEIGHT;
-          line = words[w];
-        } else {
-          line = test;
-        }
-      }
-      if (line) { 
-        ctx.fillText(line, PADDING + shakeOffset, y); 
-        y += LINE_HEIGHT; 
-      }
-    }
-    ctx.restore();
+// ========== НОВАЯ ФУНКЦИЯ drawTextLines (ЭТАП 1) ==========
+// ========== ОБНОВЛЕННАЯ drawTextLines (ЭТАП 2) ==========
+function drawTextLines(){
+  ctx.save();
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.scale(DPR, DPR);
+  
+  ctx.font = `${FONT_SIZE_PX}px ${FONT_FAMILY}`;
+  ctx.textBaseline = 'top';
+  const contentH = vh - PADDING*2;
+  const visibleLines = Math.max(1, Math.floor(contentH / LINE_HEIGHT));
+  const maxScroll = Math.max(0, lines.length - visibleLines);
+  const start = Math.max(0, lines.length - visibleLines - scrollOffset);
+  const end = Math.min(lines.length, start + visibleLines);
+  let y = PADDING;
+  const maxW = vw - PADDING*2;
+  
+  // Дрожание текста при деградации >= 60%
+  let shakeX = 0, shakeY = 0;
+  if (degradation.level >= 60) {
+    const intensity = 0.1;
+    shakeX = (Math.random() - 0.5) * intensity;
+    shakeY = (Math.random() - 0.5) * intensity;
   }
+  ctx.translate(shakeX, shakeY);
+  
+  for (let i = start; i < end; i++){
+    const item = lines[i];
+    let color = item.color || '#00FF41';
+    
+    // Искажение цвета при высокой деградации
+    if (degradation.level >= 60 && Math.random() < 0.01) {
+      color = ['#FF4444', '#FF8800', '#FFFF00', '#4d00ff'][Math.floor(Math.random() * 4)];
+    }
+    
+    ctx.fillStyle = color;
+    
+    // Используем новый рендерер для глитченных строк
+    renderGlitchText(item, PADDING + shakeX, y, ctx);
+    
+    y += LINE_HEIGHT;
+  }
+  ctx.restore();
+}
+// ========== КОНЕЦ drawTextLines ==========
+// ========== КОНЕЦ НОВОЙ drawTextLines ==========
   
 function drawDegradationIndicator(){
   const wBox = Math.min(420, Math.floor(vw * 0.38));
@@ -1499,16 +1764,39 @@ function drawDegradationIndicator(){
   }
   
   // ---------- terminal API ----------
+// ========== НОВАЯ ФУНКЦИЯ pushLine (ЭТАП 2) ==========
 function pushLine(text, color, skipDistortion = false, _ephemeral = false, _isInputLine = false){
+  let processedText = text;
+  let lineId = null;
+  
+  // Обрабатываем глитч только для нормальных строк (не служебных)
+  if (!skipDistortion && !text.startsWith('adam@secure:~$') && !text.startsWith('>') && !text.startsWith('[')) {
+    const glitchData = glitchEngine.processStatic(text, degradation.level);
+    processedText = glitchData.text;
+    lineId = glitchData.lineId;
+  }
+  
   lines.push({ 
-    text: String(text), 
+    text: String(processedText), 
+    originalText: text, // сохраняем оригинал для спазмов
     color: color || '#00FF41', 
     skipDistortion, 
     _ephemeral, 
-    _isInputLine 
+    _isInputLine,
+    glitchLineId: lineId // ID для отслеживания фрагментов
   });
-  if (lines.length > MAX_LINES) lines.splice(0, lines.length - MAX_LINES);
+  
+  if (lines.length > MAX_LINES) {
+    // Очищаем старые фрагменты при удалении строк
+    const removed = lines.splice(0, lines.length - MAX_LINES);
+    removed.forEach(line => {
+      if (line.glitchLineId) {
+        glitchEngine.clearFragments(line.glitchLineId);
+      }
+    });
+  }
 }
+// ========== КОНЕЦ pushLine ==========
   
   function addOutput(text, className = 'output') {
     if (isFrozen || decryptActive || traceActive || audioPlaybackActive) return;
@@ -1518,47 +1806,76 @@ function pushLine(text, color, skipDistortion = false, _ephemeral = false, _isIn
     requestFullRedraw();
   }
   
-  function addColoredText(text, color = '#00FF41', skipDistortion = false) {
-    if (isFrozen || decryptActive || traceActive || audioPlaybackActive) return;
-    pushLine(text, color);
-    if (skipDistortion) {
-      lines[lines.length - 1].skipDistortion = true;
+// ========== ОБНОВЛЕННАЯ addColoredText (ЭТАП 2) ==========
+function addColoredText(text, color = '#00FF41', skipDistortion = false) {
+  if (isFrozen || decryptActive || traceActive || audioPlaybackActive) return;
+  pushLine(text, color, skipDistortion);
+  scrollOffset = 0;
+  requestFullRedraw();
+}
+// ========== КОНЕЦ addColoredText ==========
+  
+// ========== ОБНОВЛЕННАЯ ФУНКЦИЯ typeText (ЭТАП 2) ==========
+async function typeText(text, className = 'output', speed = TYPING_SPEED_DEFAULT, skipDistortion = false) {
+  if (isFrozen || decryptActive || traceActive || audioPlaybackActive) return;
+  isTyping = true;
+  let buffer = '';
+  const color = className === 'command' ? '#FFFFFF' : '#00FF41';
+  
+  for (let i = 0; i < text.length; i++) {
+    buffer += text[i];
+    
+    // Обработка глитча для промежуточного состояния
+    let displayBuffer = buffer;
+    let lineId = null;
+    
+    if (!skipDistortion) {
+      const glitchData = glitchEngine.processStatic(buffer, degradation.level);
+      displayBuffer = glitchData.text;
+      lineId = glitchData.lineId;
     }
-    scrollOffset = 0;
+    
+    if (lines.length && lines[lines.length - 1]._ephemeral) {
+      lines[lines.length - 1].text = displayBuffer;
+      lines[lines.length - 1].color = color;
+      lines[lines.length - 1].glitchLineId = lineId;
+    } else {
+      lines.push({ 
+        text: displayBuffer, 
+        originalText: buffer,
+        color, 
+        _ephemeral: true,
+        glitchLineId: lineId
+      });
+    }
+    
+    if (lines.length > MAX_LINES) {
+      const removed = lines.splice(0, lines.length - MAX_LINES);
+      removed.forEach(line => {
+        if (line.glitchLineId) {
+          glitchEngine.clearFragments(line.glitchLineId);
+        }
+      });
+    }
+    
     requestFullRedraw();
+    await new Promise(r => setTimeout(r, speed));
+    if (isFrozen || decryptActive || traceActive || audioPlaybackActive) break;
   }
   
-  async function typeText(text, className = 'output', speed = TYPING_SPEED_DEFAULT, skipDistortion = false) {
-    if (isFrozen || decryptActive || traceActive || audioPlaybackActive) return;
-    isTyping = true;
-    let buffer = '';
-    const color = className === 'command' ? '#FFFFFF' : '#00FF41';
-    for (let i = 0; i < text.length; i++) {
-      buffer += text[i];
-      if (lines.length && lines[lines.length - 1]._ephemeral) {
-        lines[lines.length - 1].text = buffer;
-        lines[lines.length - 1].color = color;
-      } else {
-        lines.push({ text: buffer, color, _ephemeral: true });
-      }
-      if (lines.length > MAX_LINES) lines.splice(0, lines.length - MAX_LINES);
-      requestFullRedraw();
-      await new Promise(r => setTimeout(r, speed));
-      if (isFrozen || decryptActive || traceActive || audioPlaybackActive) break;
-    }
-    if (lines.length && lines[lines.length - 1]._ephemeral) {
-      lines[lines.length - 1].text = buffer;
-      delete lines[lines.length - 1]._ephemeral;
-    } else if (buffer) {
-      pushLine(buffer, color);
-      if (skipDistortion) {
-        lines[lines.length - 1].skipDistortion = true;
-      }
-    }
-    isTyping = false;
-    scrollOffset = 0;
-    requestFullRedraw();
+  if (lines.length && lines[lines.length - 1]._ephemeral) {
+    lines[lines.length - 1].text = buffer;
+    lines[lines.length - 1].originalText = buffer;
+    delete lines[lines.length - 1]._ephemeral;
+  } else if (buffer) {
+    pushLine(buffer, color, skipDistortion);
   }
+  
+  isTyping = false;
+  scrollOffset = 0;
+  requestFullRedraw();
+}
+// ========== КОНЕЦ typeText ==========
   
 function addInputLine(){
   if (isFrozen || decryptActive || traceActive || audioPlaybackActive) return;
@@ -3497,7 +3814,18 @@ default:
 
 // Восстановление состояний после обработки команды (уже вне switch)
 intentionPredicted = false;
-addInputLine();
+    // Отзеркаливание вывода команды при деградации > 60% (15% шанс)
+    if (degradation.level > 60 && Math.random() < 0.15 && !decryptActive && !traceActive && !audioPlaybackActive) {
+      for (let i = lines.length - 1; i >= 0; i--) {
+        const line = lines[i];
+        if (line._isInputLine || line.text.startsWith('adam@secure:~$')) break;
+        line.text = mirrorText(line.text);
+      }
+      requestFullRedraw();
+    }
+    
+    addInputLine();
+  
 }
 
 // ---------- confirmation helper ----------
@@ -3709,6 +4037,8 @@ function getSyslogLevel() {
 })();
 
 // ---------- background animation tick ----------
+// ========== ОБНОВЛЕННЫЙ backgroundTick (ЭТАП 2) ==========
+// ========== ИЗМЕНЕННАЯ backgroundTick (ЭТАП 3) ==========
 let lastTick = performance.now();
 function backgroundTick(ts) {
   const dt = ts - lastTick;
@@ -3717,10 +4047,18 @@ function backgroundTick(ts) {
   backgroundTick._acc += dt;
   if (backgroundTick._acc >= (1000 / 30)) {
     backgroundTick._acc = 0;
+    
+    // Применяем живые спазмы при деградации >= 50%
+    if (degradation.level >= 50 && !decryptActive && !traceActive && !audioPlaybackActive) {
+      glitchEngine.applyDynamicSpasms(degradation.level);
+    }
+    
     requestFullRedraw();
   }
   requestAnimationFrame(backgroundTick);
 }
+// ========== КОНЕЦ ИЗМЕНЕНИЯ ==========
+// ========== КОНЕЦ backgroundTick ==========
 requestAnimationFrame(backgroundTick);
 
 // expose debug API
