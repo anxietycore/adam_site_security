@@ -50,91 +50,168 @@ class GlitchFragment {
     this.lastSpasmTime = 0;
     this.isCorrosion = isCorrosion; // Добавлено: тип коррозии
   }
+  // ========== ДОБАВЬТЕ ЭТИ МЕТОДЫ В КЛАСС GlitchFragment ==========
+
+// Проверка, можно ли поставить символ в позицию (без 2 тяжелых подряд)
+isValidCharForPosition(char, position) {
+  const heavyBlocks = ['█', '▓'];
   
-  // Статическое применение глитча (первичное искажение)
-  applyStaticGlitch() {
-    const availableChars = [...GLITCH_CONFIG.ALL];
-    const heavyBlocks = ['█', '▓'];
-    
-    // ТОЧЕЧНАЯ КОРРОЗИЯ (ТЗ 2.3)
-    if (this.isCorrosion) {
-      const glitchChar = availableChars[Math.floor(Math.random() * availableChars.length)];
-      this.glitchedChars = [glitchChar];
-      return;
+  if (!heavyBlocks.includes(char)) return true;
+  
+  const left = this.glitchedChars[position - 1];
+  const right = this.glitchedChars[position + 1];
+  
+  return !heavyBlocks.includes(left) && !heavyBlocks.includes(right);
+}
+
+// Получение безопасных кандидатов для мутации (с учётом соседей)
+getSafeMutationCandidates(position) {
+  const heavyBlocks = ['█', '▓'];
+  const left = this.glitchedChars[position - 1];
+  const right = this.glitchedChars[position + 1];
+  
+  // Если соседи - тяжелые блоки, исключаем их из кандидатов
+  if (heavyBlocks.includes(left) || heavyBlocks.includes(right)) {
+    return GLITCH_CONFIG.ALL.filter(c => !heavyBlocks.includes(c));
+  }
+  
+  return [...GLITCH_CONFIG.ALL];
+}
+
+// Проверка, можно ли расширить фрагмент (не более +3 и не больше оригинала)
+canExpand() {
+  return this.length < this.originalChars.length + 3;
+}
+
+// Улучшенное расширение с проверкой тяжелых блоков
+tryExpandFragment() {
+  if (!this.canExpand()) return;
+  
+  const lastChar = this.glitchedChars[this.glitchedChars.length - 1];
+  const candidates = this.getSafeExpansionCandidates(lastChar);
+  
+  if (candidates.length > 0) {
+    this.length++;
+    this.glitchedChars.push(candidates[Math.floor(Math.random() * candidates.length)]);
+  }
+}
+
+getSafeExpansionCandidates(lastChar) {
+  const heavyBlocks = ['█', '▓'];
+  
+  // Если последний символ тяжелый - не добавляем тяжелые
+  if (heavyBlocks.includes(lastChar)) {
+    return GLITCH_CONFIG.ALL.filter(c => !heavyBlocks.includes(c));
+  }
+  
+  return [...GLITCH_CONFIG.ALL];
+}
+
+// ПРОВЕРКА: есть ли уже 2 тяжелых блока подряд в фрагменте
+hasTooManyHeavyBlocks(chars = this.glitchedChars) {
+  const heavyBlocks = ['█', '▓'];
+  let consecutiveCount = 0;
+  
+  for (let i = 0; i < chars.length; i++) {
+    if (heavyBlocks.includes(chars[i])) {
+      consecutiveCount++;
+      if (consecutiveCount >= 2) return true;
+    } else {
+      consecutiveCount = 0;
     }
+  }
+  return false;
+}
+// ========== КОНЕЦ ДОБАВЛЕНИЯ ==========
+// ========== ЗАМЕНИТЕ ВЕСЬ МЕТОД applyStaticGlitch ==========
+applyStaticGlitch() {
+  const availableChars = [...GLITCH_CONFIG.ALL];
+  const heavyBlocks = ['█', '▓'];
+  
+  // ТОЧЕЧНАЯ КОРРОЗИЯ
+  if (this.isCorrosion) {
+    const glitchChar = availableChars[Math.floor(Math.random() * availableChars.length)];
+    this.glitchedChars = [glitchChar || '▓'];
+    return;
+  }
+  
+  // Обычный фрагмент с проверкой тяжелых блоков
+  this.glitchedChars = this.originalChars.map((_, idx) => {
+    let char;
+    let attempts = 0;
     
-    // Обычный фрагмент с проверкой тяжелых блоков (ТЗ 2.4)
-    this.glitchedChars = this.originalChars.map((_, idx) => {
-      let char;
-      let attempts = 0;
+    do {
+      char = availableChars[Math.floor(Math.random() * availableChars.length)];
+      attempts++;
       
-      do {
-        char = availableChars[Math.floor(Math.random() * availableChars.length)];
-        attempts++;
-        
-        // Проверка на 2 тяжелых блока подряд
-        if (heavyBlocks.includes(char) && attempts < 10) {
-          const testChars = [...this.glitchedChars];
-          testChars.push(char);
-          if (hasTooManyHeavyBlocks(testChars)) {
-            char = null;
-          }
+      // Проверка на 2 тяжелых блока подряд (ВЫЗОВ МЕТОДА КЛАССА, не глобальной функции)
+      if (heavyBlocks.includes(char) && attempts < 10) {
+        const testChars = [...this.glitchedChars];
+        testChars.push(char);
+        // ВОТ ЭТОТ ВЫЗОВ БЫЛ СЛОМАН - ТЕПЕРЬ ПРАВИЛЬНЫЙ
+        if (this.hasTooManyHeavyBlocks(testChars)) {
+          char = null;
         }
-      } while (!char && attempts < 20);
-      
-      return char || availableChars[Math.floor(Math.random() * availableChars.length)];
-    });
+      }
+    } while (!char && attempts < 20);
+    
+    return char || availableChars[Math.floor(Math.random() * availableChars.length)] || '▓';
+  });
+}
+// ========== КОНЕЦ ЗАМЕНЫ ==========
+// ========== ЗАМЕНИТЕ МЕТОД applySpasm ==========
+applySpasm(degradationLevel) {
+  const now = Date.now();
+  const frequency = getSpasmFrequency(degradationLevel);
+  
+  if (now - this.lastSpasmTime < frequency) return;
+  this.lastSpasmTime = now;
+  
+  const spasmCount = Math.random() < 0.7 ? 1 : 2;
+  const indices = [];
+  
+  while (indices.length < spasmCount && indices.length < this.length) {
+    const idx = Math.floor(Math.random() * this.length);
+    if (!indices.includes(idx)) indices.push(idx);
   }
   
-  // Живой спазм внутри фрагмента
-  applySpasm(degradationLevel) {
-    const now = Date.now();
-    const frequency = getSpasmFrequency(degradationLevel);
+  indices.forEach(idx => {
+    const type = Math.random();
+    let newChar;
     
-    // Проверяем, пора ли делать спазм
-    if (now - this.lastSpasmTime < frequency) return;
-    
-    this.lastSpasmTime = now;
-    
-    // Выбираем 1-2 символа в фрагменте
-    const spasmCount = Math.random() < 0.7 ? 1 : 2;
-    const indices = [];
-    
-    while (indices.length < spasmCount && indices.length < this.length) {
-      const idx = Math.floor(Math.random() * this.length);
-      if (!indices.includes(idx)) indices.push(idx);
+    // Тип 1: Глитч-мутация (60%)
+    if (type < 0.6) {
+      const candidates = this.getSafeMutationCandidates(idx);
+      newChar = candidates[Math.floor(Math.random() * candidates.length)];
+    }
+    // Тип 2: Колебание (35%)
+    else if (type < 0.95) {
+      newChar = this.originalChars[idx];
+      setTimeout(() => {
+        if (this.glitchedChars[idx] === newChar) {
+          const candidates = this.getSafeMutationCandidates(idx);
+          this.glitchedChars[idx] = candidates[Math.floor(Math.random() * candidates.length)];
+        }
+      }, 50 + Math.random() * 100);
+    }
+    // Тип 3: Изменение разреза (5%)
+    else {
+      const cutChars = [...GLITCH_CONFIG.CUTS];
+      newChar = cutChars[Math.floor(Math.random() * cutChars.length)];
     }
     
-    // Применяем спазмы к выбранным символам
-    indices.forEach(idx => {
-      const type = Math.random();
-      
-      // Тип 1: Глитч-мутация (60%)
-      if (type < 0.6) {
-        const availableChars = [...GLITCH_CONFIG.ALL];
-        this.glitchedChars[idx] = availableChars[Math.floor(Math.random() * availableChars.length)];
-      }
-      // Тип 2: Колебание (мигание) (35%)
-      else if (type < 0.95) {
-        const original = this.originalChars[idx];
-        this.glitchedChars[idx] = original; // временно нормальный
-        setTimeout(() => {
-          const availableChars = [...GLITCH_CONFIG.ALL];
-          this.glitchedChars[idx] = availableChars[Math.floor(Math.random() * availableChars.length)];
-        }, 50 + Math.random() * 100);
-      }
-      // Тип 3: Изменение разреза (5%)
-      else {
-        const cutChars = [...GLITCH_CONFIG.CUTS];
-        this.glitchedChars[idx] = cutChars[Math.floor(Math.random() * cutChars.length)];
-      }
-    });
-    
-    // Попытка заражения (расширения фрагмента)
-    if (Math.random() < 0.02) { // 2% шанс
-      this.tryExpandFragment();
+    // ПРОВЕРКА ТЯЖЕЛЫХ БЛОКОВ ПРИ СПАЗМАХ
+    if (this.isValidCharForPosition(newChar, idx)) {
+      this.glitchedChars[idx] = newChar;
     }
+  });
+  
+  // Заражение (расширение) с проверкой
+  if (Math.random() < 0.02 && this.canExpand()) {
+    this.tryExpandFragment();
   }
+}
+// ========== КОНЕЦ ЗАМЕНЫ ==========
   
   // Попытка расширения фрагмента (заражение)
   tryExpandFragment() {
@@ -154,108 +231,119 @@ class GlitchTextEngine {
     this.fragments = new Map(); // Map<lineId, fragment[]>
     this.nextLineId = 0;
   }
+  // ========== ДОБАВЬТЕ ЭТИ МЕТОДЫ В КЛАСС GlitchTextEngine ==========
+
+// Расчёт оптимального количества фрагментов
+calculateOptimalFragmentCount(length, degradationLevel, isServiceLine) {
+  if (degradationLevel < 30) return 0;
   
-// ========== ФИНАЛЬНАЯ ВЕРСИЯ processStatic (ЭТАП 4) ==========
-  processStatic(text, degradationLevel) {
-    if (text.startsWith('adam@secure:~$') || text.startsWith('>') || text.startsWith('[')) {
-      return { text, lineId: null, fragments: [] };
-    }
-    
-    // Вероятность применения глитча
-    let glitchChance = 0;
-    if (degradationLevel > 30) {
-      glitchChance = Math.min(0.9, (degradationLevel - 30) / 65 * 0.9);
-    }
-    
-    if (Math.random() > glitchChance) {
-      return { text, lineId: null, fragments: [] };
-    }
-    
-    // === ГЛАВНОЕ ИЗМЕНЕНИЕ: фрагменты зависят ТОЛЬКО от длины слова (ТЗ 2.1) ===
-    const words = text.split(' ');
-    const processedWords = [];
-    const fragments = [];
-    let charOffset = 0;
-    
-    words.forEach((word, wordIndex) => {
-      // ОПРЕДЕЛЕНИЕ КОЛИЧЕСТВА ФРАГМЕНТОВ ПО ДЛИНЕ СЛОВА
-      let fragmentCount = 0;
-      
-      if (word.length <= 3) {
-        fragmentCount = Math.random() < 0.5 ? 1 : 0; // 0-1 фрагмент
-      } else if (word.length <= 7) {
-        fragmentCount = Math.floor(Math.random() * 2) + 1; // 1-2 фрагмента
-      } else {
-        fragmentCount = Math.floor(Math.random() * 2) + 2; // 2-3 фрагмента
-      }
-      
-      if (fragmentCount === 0 || word.length < 1) {
-        processedWords.push(word);
-        charOffset += word.length + 1;
-        return;
-      }
-      
-      const originalWord = word;
-      let glitchedWord = originalWord.split('');
-      const tempFragments = [];
-      
-      // Выбираем тип глитча для всего слова (70% обычный, 30% коррозия)
-      const isCorrosionWord = Math.random() < 0.3;
-      
-      for (let i = 0; i < fragmentCount; i++) {
-        const maxLength = isCorrosionWord ? 1 : Math.min(3, Math.floor(originalWord.length * 0.5));
-        if (maxLength <= 0) break;
-        
-        const fragmentLength = Math.floor(Math.random() * maxLength) + 1;
-        const startPos = Math.floor(Math.random() * (originalWord.length - fragmentLength + 1));
-        
-        // Проверка перекрытия
-        let overlap = false;
-        for (let j = 0; j < fragmentLength; j++) {
-          if (glitchedWord[startPos + j] !== originalWord[startPos + j]) {
-            overlap = true;
-            break;
-          }
-        }
-        
-        if (overlap) continue;
-        
-        const fragment = new GlitchFragment(charOffset + startPos, fragmentLength, isCorrosionWord);
-        fragment.originalChars = originalWord.substr(startPos, fragmentLength).split('');
-        fragment.applyStaticGlitch();
-        
-        for (let j = 0; j < fragmentLength; j++) {
-          glitchedWord[startPos + j] = fragment.glitchedChars[j];
-        }
-        
-        tempFragments.push(fragment);
-      }
-      
-      processedWords.push(glitchedWord.join(''));
-      fragments.push(...tempFragments);
-      charOffset += originalWord.length + 1;
-    });
-    
-    let lineId = null;
-    if (fragments.length > 0) {
-      lineId = this.nextLineId++;
-      this.fragments.set(lineId, fragments);
-    }
-    
-    return {
-      text: processedWords.join(' '),
-      lineId,
-      fragments
-    };
+  // Для служебных строк - ограниченная интенсивность
+  const serviceMultiplier = isServiceLine ? 0.3 : 1.0;
+  
+  let maxFragments;
+  if (length <= 20) {
+    // Короткие строки: макс 1-2 фрагмента
+    maxFragments = degradationLevel > 80 ? 2 : 1;
+  } else if (length <= 50) {
+    // Средние строки: пропорционально деградации
+    maxFragments = Math.floor((degradationLevel - 30) / 70 * Math.min(5, length / 10));
+  } else {
+    // Длинные строки: плавное заполнение
+    maxFragments = Math.floor((degradationLevel - 30) / 70 * Math.min(10, length / 5));
   }
-// ========== КОНЕЦ ЭТАПА 4.1 ==========
-// ========== ИЗМЕНЕННАЯ applyDynamicSpasms (ЭТАП 4.2) ==========
+  
+  return Math.max(0, maxFragments * serviceMultiplier);
+}
+
+// Создание фрагмента для строки (перестал быть привязан к словам)
+createFragmentForLine(text, degradationLevel, isServiceLine, usedPositions) {
+  const maxAttempts = 30;
+  const maxLength = isServiceLine ? 2 : (degradationLevel > 80 ? 4 : 3);
+  
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const length = Math.floor(Math.random() * maxLength) + 1;
+    const startPos = Math.floor(Math.random() * (text.length - length + 1));
+    
+    // Проверяем, не перекрывается ли с существующими фрагментами
+    let overlap = false;
+    for (let i = startPos; i < startPos + length; i++) {
+      if (usedPositions.has(i)) {
+        overlap = true;
+        break;
+      }
+    }
+    
+    if (!overlap) {
+      const fragment = new GlitchFragment(startPos, length, false);
+      fragment.originalChars = text.substr(startPos, length).split('');
+      fragment.applyStaticGlitch();
+      return fragment;
+    }
+  }
+  
+  return null;
+}
+// ========== КОНЕЦ ДОБАВЛЕНИЯ ==========
+// ========== ЗАМЕНИТЕ ВЕСЬ МЕТОД processStatic ==========
+processStatic(text, degradationLevel) {
+  const isServiceLine = text.startsWith('adam@secure:~$') || text.startsWith('>') || text.startsWith('[');
+  
+  // Для служебных строк при деградации < 50% - минимальные глитчи
+  if (isServiceLine && degradationLevel < 50) {
+    return { text, lineId: null, fragments: [] };
+  }
+  
+  // РАСЧЁТ КОЛИЧЕСТВА ФРАГМЕНТОВ (зависит от длины строки и деградации)
+  const fragmentCount = this.calculateOptimalFragmentCount(text.length, degradationLevel, isServiceLine);
+  
+  if (fragmentCount === 0) {
+    return { text, lineId: null, fragments: [] };
+  }
+  
+  // СОЗДАНИЕ ФРАГМЕНТОВ ПО ВСЕЙ СТРОКЕ (не по словам!)
+  const fragments = [];
+  const usedPositions = new Set();
+  const chars = text.split('');
+  
+  for (let i = 0; i < fragmentCount; i++) {
+    const fragment = this.createFragmentForLine(text, degradationLevel, isServiceLine, usedPositions);
+    if (fragment) {
+      fragments.push(fragment);
+      // Отмечаем позиции как занятые
+      for (let j = fragment.start; j < fragment.start + fragment.length; j++) {
+        usedPositions.add(j);
+      }
+    }
+  }
+  
+  // ПРИМЕНЕНИЕ ГЛИТЧА К СТРОКЕ
+  fragments.forEach(fragment => {
+    for (let i = 0; i < fragment.length; i++) {
+      const pos = fragment.start + i;
+      if (pos < chars.length) {
+        chars[pos] = fragment.glitchedChars[i];
+      }
+    }
+  });
+  
+  // СОХРАНЕНИЕ ФРАГМЕНТОВ
+  const lineId = fragments.length > 0 ? this.nextLineId++ : null;
+  if (lineId) {
+    this.fragments.set(lineId, fragments);
+  }
+  
+  return {
+    text: chars.join(''),
+    lineId,
+    fragments
+  };
+}
+// ========== КОНЕЦ ЗАМЕНЫ ==========
+// ========== ЗАМЕНИТЕ НА ЭТО ==========
 applyDynamicSpasms(degradationLevel) {
   const now = Date.now();
   const frequency = getSpasmFrequency(degradationLevel);
-  
-  // Шанс заражения (расширения фрагмента) растёт с деградацией
-  const infectionChance = Math.min(0.05, (degradationLevel - 50) / 1000); // 0-5%
+  const infectionChance = Math.min(0.05, (degradationLevel - 50) / 1000);
   
   this.fragments.forEach((fragments, lineId) => {
     fragments.forEach(fragment => {
@@ -263,6 +351,7 @@ applyDynamicSpasms(degradationLevel) {
       
       fragment.lastSpasmTime = now;
       
+      // Обычные спазмы (с проверкой тяжелых блоков)
       const spasmCount = Math.random() < 0.7 ? 1 : 2;
       const indices = [];
       
@@ -273,42 +362,91 @@ applyDynamicSpasms(degradationLevel) {
       
       indices.forEach(idx => {
         const type = Math.random();
+        let newChar;
         
         // Тип 1: Глитч-мутация (60%)
         if (type < 0.6) {
-          const availableChars = [...GLITCH_CONFIG.ALL];
-          fragment.glitchedChars[idx] = availableChars[Math.floor(Math.random() * availableChars.length)];
+          const candidates = fragment.getSafeMutationCandidates(idx);
+          newChar = candidates[Math.floor(Math.random() * candidates.length)];
         }
         // Тип 2: Колебание (мигание) (35%)
         else if (type < 0.95) {
           const original = fragment.originalChars[idx];
-          fragment.glitchedChars[idx] = original;
+          newChar = original;
           
           setTimeout(() => {
-            // Проверяем, что фрагмент всё ещё существует
             if (fragment.glitchedChars[idx] === original) {
-              const availableChars = [...GLITCH_CONFIG.ALL];
-              fragment.glitchedChars[idx] = availableChars[Math.floor(Math.random() * availableChars.length)];
+              const candidates = fragment.getSafeMutationCandidates(idx);
+              fragment.glitchedChars[idx] = candidates[Math.floor(Math.random() * candidates.length)];
             }
           }, 50 + Math.random() * 100);
         }
         // Тип 3: Изменение разреза (5%)
         else {
           const cutChars = [...GLITCH_CONFIG.CUTS];
-          fragment.glitchedChars[idx] = cutChars[Math.floor(Math.random() * cutChars.length)];
+          newChar = cutChars[Math.floor(Math.random() * cutChars.length)];
+        }
+        
+        // ПРОВЕРКА ТЯЖЕЛЫХ БЛОКОВ ПРИ СПАЗМАХ
+        if (fragment.isValidCharForPosition(newChar, idx)) {
+          fragment.glitchedChars[idx] = newChar;
         }
       });
       
-      // Заражение (расширение)
-      if (Math.random() < 0.02 && fragment.length < fragment.originalChars.length + 3) {
-        fragment.length++;
-        const availableChars = [...GLITCH_CONFIG.ALL];
-        fragment.glitchedChars.push(availableChars[Math.floor(Math.random() * availableChars.length)]);
+      // Расширение фрагмента с проверкой
+      if (Math.random() < infectionChance && fragment.canExpand()) {
+        fragment.tryExpandFragment();
+      }
+      
+      // ДИНАМИЧЕСКОЕ ЗАРАЖЕНИЕ СОСЕДНИХ СИМВОЛОВ (при деградации > 70%)
+      if (degradationLevel > 70 && Math.random() < 0.01) {
+        this.infectNeighbouringCharacters(lineId, fragment);
       }
     });
   });
 }
-// ========== КОНЕЦ ЭТАПА 4.2 ==========
+
+// Заражение символов вокруг фрагмента
+infectNeighbouringCharacters(lineId, fragment) {
+  const line = lines.find(l => l.glitchLineId === lineId);
+  if (!line || !line.originalText) return;
+  
+  const originalText = line.originalText;
+  const allFragments = this.fragments.get(lineId) || [];
+  
+  // Проверяем слева
+  if (fragment.start > 0) {
+    const leftPos = fragment.start - 1;
+    const isOccupied = allFragments.some(f => 
+      leftPos >= f.start && leftPos < f.start + f.length
+    );
+    
+    if (!isOccupied && Math.random() < 0.3) {
+      const newFragment = new GlitchFragment(leftPos, 1, Math.random() < 0.2);
+      newFragment.originalChars = [originalText[leftPos]];
+      newFragment.applyStaticGlitch();
+      newFragment.lastSpasmTime = Date.now();
+      allFragments.push(newFragment);
+    }
+  }
+  
+  // Проверяем справа
+  const rightPos = fragment.start + fragment.length;
+  if (rightPos < originalText.length) {
+    const isOccupied = allFragments.some(f => 
+      rightPos >= f.start && rightPos < f.start + f.length
+    );
+    
+    if (!isOccupied && Math.random() < 0.3) {
+      const newFragment = new GlitchFragment(rightPos, 1, Math.random() < 0.2);
+      newFragment.originalChars = [originalText[rightPos]];
+      newFragment.applyStaticGlitch();
+      newFragment.lastSpasmTime = Date.now();
+      allFragments.push(newFragment);
+    }
+  }
+}
+// ========== КОНЕЦ ЗАМЕНЫ ==========
  
   
   // Удалить фрагменты для строки (при очистке экрана)
@@ -317,50 +455,38 @@ applyDynamicSpasms(degradationLevel) {
   }
 }
 // ========== ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ (ЭТАП 2) ==========
+// ЗАМЕНИТЕ ВЕСЬ renderGlitchText НА ЭТОТ:
+
+// ========== ОПТИМИЗИРОВАННЫЙ renderGlitchText ==========
 function renderGlitchText(lineObj, x, y, ctx) {
   const text = lineObj.text;
-  const originalText = lineObj.originalText || text;
+  const originalText = lineObj.originalText;
   
-  // Если нет глитч-фрагментов - рисуем как есть
+  // Если нет глитчей — рисуем одной командой
   if (!lineObj.glitchLineId || !glitchEngine.fragments.has(lineObj.glitchLineId)) {
     ctx.fillText(text, x, y);
     return;
   }
   
   const fragments = glitchEngine.fragments.get(lineObj.glitchLineId);
-  
-  // Рисуем текст посимвольно, заменяя фрагменты
   let currentX = x;
-  let charIndex = 0;
   
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i];
+  // Рисуем посимвольно, но ширину берем от оригинала
+  for (let i = 0; i < originalText.length; i++) {
+    const originalChar = originalText[i];
+    const displayChar = text[i];
     
-    // Проверяем, находится ли символ в глитч-фрагменте
-    const fragment = fragments.find(f => 
-      charIndex >= f.start && 
-      charIndex < f.start + f.length
-    );
+    // Оптимизация: измеряем ширину один раз за символ
+    const charWidth = ctx.measureText(originalChar).width;
     
-    if (fragment) {
-      // Рисуем глитч-символ
-      const posInFragment = charIndex - fragment.start;
-if (posInFragment < fragment.glitchedChars.length) {
-  const glitchChar = fragment.glitchedChars[posInFragment];
-  ctx.fillText(glitchChar || '▓', currentX, y); // Защита от undefined
-} else {
-  ctx.fillText(char || ' ', currentX, y);
-}
-    } else {
-      // Рисуем нормальный символ
-      ctx.fillText(char, currentX, y);
-    }
+    // Проверяем, в глитче ли символ
+    const fragment = fragments.find(f => i >= f.start && i < f.start + f.length);
     
-    // Обновляем позицию
-    currentX += ctx.measureText(char).width;
-    charIndex++;
+    ctx.fillText(fragment ? (fragment.glitchedChars[i - fragment.start] || '▓') : displayChar, currentX, y);
+    currentX += charWidth;
   }
 }
+// ========== КОНЕЦ ОПТИМИЗАЦИИ ==========
 // ========== КОНЕЦ renderGlitchText ==========
 // Вспомогательная функция для получения частоты спазмов
 // ========== ФИНАЛЬНАЯ getSpasmFrequency (ЭТАП 4.3) ==========
@@ -396,23 +522,7 @@ function getSpasmFrequency(degradationLevel) {
 
 // Создаем глобальный экземпляр движка
 const glitchEngine = new GlitchTextEngine();
-// ========== ФУНКЦИЯ ПРОВЕРКИ ТЯЖЕЛЫХ БЛОКОВ (ТЗ 2.4) ==========
-function hasTooManyHeavyBlocks(chars) {
-  const heavyBlocks = ['█', '▓'];
-  let consecutiveCount = 0;
-  
-  for (let i = 0; i < chars.length; i++) {
-    if (heavyBlocks.includes(chars[i])) {
-      consecutiveCount++;
-      if (consecutiveCount >= 2) return true;
-    } else {
-      consecutiveCount = 0;
-    }
-  }
-  return false;
-}
-// ========== КОНЕЦ ПРОВЕРКИ ==========
-// ========== КОНЕЦ ЭТАПА 1 ==========
+
   // ---------- create main canvas ----------
   const canvas = document.createElement('canvas');
   canvas.id = 'terminalCanvas';
@@ -764,7 +874,6 @@ if (this.level >= AUTO_RESET_LEVEL && !isFrozen) {
     
     // Уровень 4: Аномальные вставки
     if (this.level >= ANOMALOUS_INSERTS_START_LEVEL && this.level < ANOMALOUS_INSERTS_END_LEVEL) {
-      this.startAnomalousInserts();
     } else {
       this.stopAnomalousInserts();
     }
@@ -1388,19 +1497,6 @@ reset(){
     }
   }
   
-  startAnomalousInserts() {
-    this._anomalousTimer = setInterval(() => {
-      if (Math.random() < 0.2 && lines.length > 0) {
-        const inserts = [
-          '10101010100010101', '0xERROR_22', '#FF00FF#', '|||',
-          '01189998819991197253', 'SYSTEM OVERRIDE', '7A1-9B3-F00'
-        ];
-        const insert = inserts[Math.floor(Math.random() * inserts.length)];
-        addColoredText(insert, '#8844FF');
-      }
-    }, 10000);
-  }
-  
   stopAnomalousInserts() {
     if (this._anomalousTimer) {
       clearInterval(this._anomalousTimer);
@@ -1816,57 +1912,53 @@ function addColoredText(text, color = '#00FF41', skipDistortion = false) {
 // ========== КОНЕЦ addColoredText ==========
   
 // ========== ОБНОВЛЕННАЯ ФУНКЦИЯ typeText (ЭТАП 2) ==========
+// ========== ИСПРАВЛЕННАЯ typeText (ПОЛНАЯ ПЛАВНОСТЬ) ==========
 async function typeText(text, className = 'output', speed = TYPING_SPEED_DEFAULT, skipDistortion = false) {
   if (isFrozen || decryptActive || traceActive || audioPlaybackActive) return;
   isTyping = true;
   let buffer = '';
   const color = className === 'command' ? '#FFFFFF' : '#00FF41';
   
+  // 🔥 ШАГ 1: Печатаем ЧИСТЫЙ текст посимвольно (без глитчей)
   for (let i = 0; i < text.length; i++) {
     buffer += text[i];
     
-    // Обработка глитча для промежуточного состояния
-    let displayBuffer = buffer;
-    let lineId = null;
-    
-    if (!skipDistortion) {
-      const glitchData = glitchEngine.processStatic(buffer, degradation.level);
-      displayBuffer = glitchData.text;
-      lineId = glitchData.lineId;
-    }
-    
+    // Создаем временную строку без обработки
     if (lines.length && lines[lines.length - 1]._ephemeral) {
-      lines[lines.length - 1].text = displayBuffer;
+      lines[lines.length - 1].text = buffer;
       lines[lines.length - 1].color = color;
-      lines[lines.length - 1].glitchLineId = lineId;
+      lines[lines.length - 1].originalText = buffer; // Сохраняем оригинал
     } else {
       lines.push({ 
-        text: displayBuffer, 
+        text: buffer, 
         originalText: buffer,
         color, 
         _ephemeral: true,
-        glitchLineId: lineId
+        skipDistortion: true // 🔥 Запрещаем глитчи во время печати
       });
     }
     
-    if (lines.length > MAX_LINES) {
-      const removed = lines.splice(0, lines.length - MAX_LINES);
-      removed.forEach(line => {
-        if (line.glitchLineId) {
-          glitchEngine.clearFragments(line.glitchLineId);
-        }
-      });
-    }
+    if (lines.length > MAX_LINES) lines.splice(0, lines.length - MAX_LINES);
     
     requestFullRedraw();
     await new Promise(r => setTimeout(r, speed));
     if (isFrozen || decryptActive || traceActive || audioPlaybackActive) break;
   }
   
+  // 🔥 ШАГ 2: После печати применяем глитчи ОДИН РАЗ
   if (lines.length && lines[lines.length - 1]._ephemeral) {
-    lines[lines.length - 1].text = buffer;
-    lines[lines.length - 1].originalText = buffer;
-    delete lines[lines.length - 1]._ephemeral;
+    const finalLine = lines[lines.length - 1];
+    finalLine.text = buffer;
+    finalLine.originalText = buffer;
+    delete finalLine._ephemeral;
+    delete finalLine.skipDistortion; // Разрешаем глитчи
+    
+    // Применяем глитч только к финальной строке
+    if (!skipDistortion && degradation.level >= 30) {
+      const glitchData = glitchEngine.processStatic(buffer, degradation.level);
+      finalLine.text = glitchData.text;
+      finalLine.glitchLineId = glitchData.lineId;
+    }
   } else if (buffer) {
     pushLine(buffer, color, skipDistortion);
   }
@@ -1875,6 +1967,7 @@ async function typeText(text, className = 'output', speed = TYPING_SPEED_DEFAULT
   scrollOffset = 0;
   requestFullRedraw();
 }
+// ========== КОНЕЦ ИСПРАВЛЕНИЯ ==========
 // ========== КОНЕЦ typeText ==========
   
 function addInputLine(){
@@ -1924,7 +2017,7 @@ function updatePromptLine(){
     '0X5E4': { name: 'SUBJECT-5E4', role: 'Исследователь временных срезов (PERMIAN)', status: 'МЁРТВ', outcome: ['После активации катализатора атмосфера воспламенилась метаном.', 'Атмосферный цикл обнулён. Субъект не идентифицирован.'], report: ['Эксперимент признан неконтролируемым.', 'Временной слой PERMIAN изъят из программы наблюдения.'], missions: 'PERMIAN, CARBON' },
     '0X413': { name: 'SUBJECT-413', role: 'Исследователь внеземной экосистемы (EX-413)', status: 'МЁРТВ', outcome: ['Поверхность планеты представляла собой живой организм.', 'Экипаж поглощён. Зафиксирована передача сигналов через изменённый геном субъекта.'], report: ['Сектор EX-413 закрыт. Код ДНК использован в эксперименте HELIX.'], missions: 'EX-413', audio: 'sounds/dscr3.mp3', audioDescription: 'Запись контакта с внеземной биосферой' },
     '0XC19': { name: 'SUBJECT-C19', role: 'Переносчик образца / Контакт с биоформой', status: 'МЁРТВ', outcome: ['Организм использован как контейнер для спорообразной массы неизвестного происхождения.', 'После возвращения субъекта в лабораторию зафиксировано перекрёстное заражение трёх исследовательских блоков.'], report: ['Классификация угрозы: BIO-CLASS Θ.', 'Все данные проекта CARBON изолированы и зашифрованы.'], missions: 'CARBON' },
-    '0X9A0': { name: 'SUBJECT-9A0', role: 'Тест наблюдения за горизонтом событий', status: 'МЁРТВ / СОЗНАНИЕ АКТИВНО', outcome: ['Зафиксирован визуальный контакт субъекта с собственным образом до точки обрыва сигнала.', 'Предположительно сознание зациклено в петле наблюдения.'], report: ['Поток данных из сектора BLACKHOLE продолжается без источника.', 'Обнаружены фрагменты самореференциальных структур.'], missions: 'BLACKHOLE', audio: 'sounds/dscr6.mp3', audioDescription: 'Петля сознания субъекта 9A0' },
+    '0X9A0': { name: 'SUBJECT-9A0', role: 'Тест наблюдения за горизонтом событий', status: 'МЁРТВ', outcome: ['Зафиксирован визуальный контакт субъекта с собственным образом до точки обрыва сигнала.', 'Предположительно сознание зациклено в петле наблюдения.'], report: ['Поток данных из сектора BLACKHOLE продолжается без источника.', 'Обнаружены фрагменты самореференциальных структур.'], missions: 'BLACKHOLE', audio: 'sounds/dscr6.mp3', audioDescription: 'Петля сознания субъекта 9A0' },
     '0XB3F': { name: 'SUBJECT-B3F', role: 'Участник теста "Titanic Reclamation"', status: 'МЁРТВ', outcome: ['Субъект демонстрировал полное отсутствие эмоциональных реакций.', 'Миссия завершена неудачно, симуляция признана нефункциональной.'], report: ['Модуль TITANIC выведен из эксплуатации.', 'Рекомендовано пересмотреть параметры когнитивной эмпатии.'], missions: 'TITANIC' },
     '0XD11': { name: 'SUBJECT-D11', role: 'Поведенческий наблюдатель / тестовая миссия PLEISTOCENE', status: 'МЁРТВ', outcome: ['Субъект внедрён в сообщество ранних гоминид.', 'Контакт с источником тепла вызвал мгновенное разрушение капсулы.', 'Зафиксировано кратковременное пробуждение зеркальных нейронов у местных особей.'], report: ['Миссия признана успешной по уровню поведенческого заражения.'], missions: 'PLEISTOCENE' },
     '0XDB2': { name: 'SUBJECT-DB2', role: 'Исторический наблюдатель / симуляция POMPEII', status: 'МЁРТВ', outcome: ['При фиксации извержения Везувия выявлено несовпадение временных меток.', 'Система зафиксала событие до его фактического наступления.', 'Субъект уничтожен при кросс-временном сдвиге.'], report: ['Аномалия зарегистрирована как «TEMPORAL FEEDBACK».', 'Доступ к историческим тестам ограничен.'], missions: 'POMPEII, HISTORICAL TESTS' },
@@ -3668,6 +3761,7 @@ case 'deg':
             addColoredText('------------------------------------', '#00FF41');
             await typeText('[ОПЕРАЦИЯ ОТМЕНЕНА]', 'output', 12);
           }
+		  
         }
         break;
       case 'exit':
