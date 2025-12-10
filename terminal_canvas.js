@@ -35,7 +35,7 @@ const GLITCH_CONFIG = {
   BLOCKS: ['█', '▓', '▒', '░'],
   GLYPHS: ['≣', '≡', '§', 'Σ', 'Ϟ', '¶', '×', 'Ø', '◊', '∑', 'Ω', '·'],
   CUTS: ['│', '╫', '┼', '▌', '▐'],
-  ALL: null // будет сгенерировано далее
+  ALL: null
 };
 
 GLITCH_CONFIG.ALL = [...GLITCH_CONFIG.BLOCKS, ...GLITCH_CONFIG.GLYPHS, ...GLITCH_CONFIG.CUTS];
@@ -750,6 +750,80 @@ const glitchEngine = new GlitchTextEngine();
   let audioPlaybackFile = null;
   let decryptCloseAttempts = 0;
   
+  // ДОБАВИТЬ после vigilCodeParts (примерно строка 328)
+class OperationManager {
+  constructor() {
+    this.activeOperation = null;
+    this.queue = [];
+  }
+  
+  start(operationType, callback) {
+    if (this.activeOperation) {
+      console.warn(`Операция ${operationType} отложена, активна ${this.activeOperation}`);
+      this.queue.push({ type: operationType, callback });
+      return false;
+    }
+    
+    this.activeOperation = operationType;
+    
+    // Устанавливаем ВСЕ нужные флаги атомарно
+    switch(operationType) {
+      case 'reset':
+      case 'auto-reset':
+        window.isFrozen = true;
+        break;
+      case 'decrypt':
+        window.isFrozen = true;
+        window.decryptActive = true;
+        break;
+      case 'trace':
+        window.isFrozen = true;
+        window.traceActive = true;
+        break;
+      case 'audio':
+        window.isFrozen = true;
+        window.audioPlaybackActive = true;
+        break;
+    }
+    
+    if (callback) callback();
+    return true;
+  }
+  
+end(operationType, callback) {
+  if (this.activeOperation !== operationType) {
+    console.warn(`Попытка завершить не ту операцию: ${operationType}, активна: ${this.activeOperation}`);
+    return;
+  }
+  
+  // АТОМАРНЫЙ сброс ВСЕХ флагов - ГАРАНТИРОВАННО
+  window.isFrozen = false;
+  window.decryptActive = false;
+  window.traceActive = false;
+  window.audioPlaybackActive = false;
+  window.awaitingConfirmation = false;
+  window.isTyping = false;
+  
+  this.activeOperation = null;
+  
+  // Гарантированно добавляем строку ввода СРАЗУ
+  addInputLine(true); // УБРАТЬ setTimeout - ДОБАВЛЯЕМ СРАЗУ
+  
+  if (callback) callback();
+  
+  // Запускаем следующую операцию из очереди
+  if (this.queue.length > 0) {
+    const next = this.queue.shift();
+    setTimeout(() => this.start(next.type, next.callback), 200);
+  }
+}
+  
+  isBlocked() {
+    return !!this.activeOperation;
+  }
+}
+
+const operationManager = new OperationManager();
   
 // ---------- Degradation system ----------
 class DegradationSystem {
@@ -2820,6 +2894,11 @@ async function typeTextForTrace(text, speed = 14) {
 // ---------- trace command ----------
 // ========== ВСТАВЬТЕ ЭТОТ КОД ПОЛНОСТЬЮ ВМЕСТО ВСЕЙ ФУНКЦИИ startTrace ==========
 async function startTrace(target) {
+	  if (operationManager.isBlocked()) {
+    addColoredText('ОШИБКА: Другая операция уже выполняется', '#FF4444');
+    addInputLine();
+    return;
+  }
   // Проверка на активность
   if (traceActive) {
     addColoredText('ОШИБКА: Анализ уже активен', '#FF4444');
@@ -2833,7 +2912,7 @@ async function startTrace(target) {
     addInputLine();
     return;
   }
-  
+    if (!operationManager.start('trace')) return;
   // Нормализация цели
   target = target.toLowerCase();
   
@@ -3148,14 +3227,13 @@ description: 'Второй субъект, допущенный к испыта�
       degradation.addDegradation(-1); // Безопасные цели снижают деградацию
     }
     
-  } catch (e) {
-    console.error('TRACE CRITICAL ERROR:', e);
-    addColoredTextForTrace('ОШИБКА: Критическая ошибка при выполнении анализа', '#FF4444');
-  } finally {
-    traceActive = false;
-    await new Promise(r => setTimeout(r, 800));
-    addInputLine();
-  }
+} catch (e) {
+  console.error('TRACE CRITICAL ERROR:', e);
+  addColoredTextForTrace('ОШИБКА: Критическая ошибка при выполнении анализа', '#FF4444');
+} finally {
+  traceActive = false;
+  operationManager.end('trace');
+}
 }
 // ========== КОНЕЦ ЗАМЕНЫ ==========
   // ---------- playaudio command ----------
@@ -3268,7 +3346,7 @@ description: 'Второй субъект, допущенный к испыта�
   
   // ---------- processCommand ----------
   async function processCommand(rawCmd){
-    if (isTyping || isFrozen || decryptActive || traceActive || audioPlaybackActive) return;
+  if (isTyping || operationManager.isBlocked()) return;
     
     // Инверсия управления при высокой деградации
     if (degradation.level >= INVERSION_START_LEVEL && !intentionalPredictionActive) {
@@ -3703,6 +3781,7 @@ case 'deg':
         {
           const resetConfirmed = await waitForConfirmation();
           if (resetConfirmed) {
+			    operationManager.start('reset');
             addColoredText('> Y', '#00FF41');
             
             // Плавная анимация сброса
@@ -3734,6 +3813,8 @@ case 'deg':
   window.__netGrid.addDegradation(-100);
             addColoredText('----------------------------------', '#00FF41');
             addColoredText('[СИСТЕМА ГОТОВА К РАБОТЕ]', '#00FF41');
+			        operationManager.end('reset');
+
                 if (window.__netGrid) {
       // 1. Выключаем режим сетки
       window.__netGrid.setGridMode(false);
@@ -3966,7 +4047,7 @@ function waitForUserResponse(timeout = 30000) {
 
 // ---------- key handling ----------
 document.addEventListener('keydown', function(e){
-  if (isFrozen || decryptActive || traceActive || audioPlaybackActive) return;
+  if (operationManager && operationManager.isBlocked()) return;
   
   // Обработка инверсии управления (уровень 6)
   if (degradation.level >= INVERSION_START_LEVEL && degradation.inputInversionActive) {
