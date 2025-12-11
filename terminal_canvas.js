@@ -1024,10 +1024,11 @@ if (this.level >= AUTO_RESET_LEVEL && !isFrozen) {
   }
   
   // ========== ГЛАВНЫЙ МЕТОД: ЗАПУСК ГЛИТЧА-ПРОЦЕССА ==========
-  triggerGlitchApocalypse(){
-    if (decryptActive || traceActive || audioPlaybackActive) return;
-    
-    isFrozen = true; // Замораживаем ввод
+triggerGlitchApocalypse(){
+  if (decryptActive || traceActive || audioPlaybackActive) return;
+  
+  // Используем OperationManager для блокировки
+  operationManager.start('auto-reset', () => {
     audioManager.play('glitch_e.mp3', { volume: 0.9, distort: true });
     
     // Запускаем визуальные эффекты
@@ -1037,143 +1038,119 @@ if (this.level >= AUTO_RESET_LEVEL && !isFrozen) {
     setTimeout(() => {
       this.showResetProgress();
     }, 4000);
-  }
+  });
+}
   
   // ========== МЕТОД: ПОКАЗ ПРОГРЕССА СБРОСА (АНИМАЦИЯ) ==========
-  showResetProgress() {
-    // Очищаем терминал
-    lines.length = 0;
+showResetProgress() {
+  // Очищаем терминал
+  lines.length = 0;
+  
+  // Добавляем заголовок
+  pushLine('', '#000000');
+  pushLine('>>> ПРИНУДИТЕЛЬНЫЙ СБРОС СИСТЕМЫ <<<', '#FF00FF');
+  pushLine('', '#000000');
+  
+  // Начальное состояние прогресс-бара
+  pushLine('> ЗАВЕРШЕНИЕ АКТИВНЫХ МОДУЛЕЙ [          ]', '#FFFF00');
+  
+  let progress = 0;
+  const progressInterval = setInterval(() => {
+    progress += 10;
     
-    // Добавляем заголовок
-    pushLine('', '#000000'); // отступ
-    pushLine('>>> ПРИНУДИТЕЛЬНЫЙ СБРОС СИСТЕМЫ <<<', '#FF00FF');
-    pushLine('', '#000000'); // отступ
-    
-    // Начальное состояние прогресс-бара
-    pushLine('> ЗАВЕРШЕНИЕ АКТИВНЫХ МОДУЛЕЙ [          ]', '#FFFF00');
-    
-    let progress = 0;
-    const progressInterval = setInterval(() => {
-      progress += 10;
+    if (progress >= 100) {
+      clearInterval(progressInterval);
       
-      if (progress >= 100) {
-        clearInterval(progressInterval);
-        
-        // Финальное состояние прогресс-бара
-        if (lines.length > 0) {
-          lines[lines.length - 1].text = '> ЗАВЕРШЕНИЕ АКТИВНЫХ МОДУЛЕЙ [||||||||||] 100%';
-          requestFullRedraw();
-		                      window.__netGrid.setSystemDegradation(0);
-  window.__netGrid.addDegradation(-100);
-        }
-        
-        // Запускаем фактический сброс через 1 секунду
-        setTimeout(() => this.performAutoReset(), 1000);
-        return;
-      }
-      
-      // Обновляем прогресс-бар
+      // Финальное состояние прогресс-бара
       if (lines.length > 0) {
-        const filled = Math.floor(progress / 10);
-        const empty = 10 - filled;
-        lines[lines.length - 1].text = `> ЗАВЕРШЕНИЕ АКТИВНЫХ МОДУЛЕЙ [${'|'.repeat(filled)}${' '.repeat(empty)}] ${progress}%`;
+        lines[lines.length - 1].text = '> ЗАВЕРШЕНИЕ АКТИВНЫХ МОДУЛЕЙ [||||||||||] 100%';
         requestFullRedraw();
+        window.__netGrid.setSystemDegradation(0);
+        window.__netGrid.addDegradation(-100);
       }
-    }, 200);
-  }
+      
+      // Запускаем фактический сброс через 1 секунду
+      setTimeout(() => this.performAutoReset(), 1000);
+      return;
+    }
+    
+    // Обновляем прогресс-бар
+    if (lines.length > 0) {
+      const filled = Math.floor(progress / 10);
+      const empty = 10 - filled;
+      lines[lines.length - 1].text = `> ЗАВЕРШЕНИЕ АКТИВНЫХ МОДУЛЕЙ [${'|'.repeat(filled)}${' '.repeat(empty)}] ${progress}%`;
+      requestFullRedraw();
+    }
+  }, 200);
+}
   
 // ========== МЕТОД: ВЫПОЛНЕНИЕ АВТОМАТИЧЕСКОГО СБРОСА ==========
 // ========== МЕТОД: ВЫПОЛНЕНИЕ АВТОМАТИЧЕСКОГО СБРОСА ==========
 performAutoReset() {
   console.log('[AUTO RESET] Starting...');
   
-  // Гарантированная очистка ВСЕХ эффектов
-  this.clearGlitchEffects();
-  this.clearAllVisualEffects();
+  // Очищаем экран
+  lines.length = 0;
   
-  // Блокируем ввод на время сброса
-  isFrozen = true;
-  
-  // Добавляем видимую команду reset
-  pushLine('adam@secure:~$ reset [АВТОМАТИЧЕСКОЕ ИСПОЛНЕНИЕ]', '#FF4444');
+  // Выводим сообщение о сбросе
+  pushLine('>>> АВТОМАТИЧЕСКИЙ СБРОС СИСТЕМЫ <<<', '#00FF41');
+  pushLine('> Стабилизация ядра A.D.A.M.', '#FFFF00');
   requestFullRedraw();
   
-  // Даем время увидеть команду
   setTimeout(() => {
-    console.log('[AUTO RESET] Executing system reset...');
+    // Сбрасываем деградацию
+    degradation.level = 0;
+    localStorage.setItem('adam_degradation', '0');
+    degradation.updateIndicator();
+    degradation.updateEffects();
     
-    // ===== ПОЛНАЯ ОЧИСТКА ВСЕХ СОСТОЯНИЙ =====
-    lines.length = 0;
-    commandHistory = [];
-    historyIndex = -1;
-    currentLine = '';
-    commandCount = 0;
-    sessionStartTime = Date.now();
-    falseResetActive = false;
-    intentionalPredictionActive = false;
-    intentionPredicted = false;
-    decryptCloseAttempts = 0;
-    
-    // Сброс состояний
-    isFrozen = false; // РАЗМОРАЖИВАЕМ
-    
-    // Сброс системы деградации
-    this.reset();
-    
-    // ════════════════════════════════════════════════════════════════════
-    // ГЛАВНОЕ: ВЫЗЫВАЕМ forceReset() ДЛЯ СЕТКИ
-    // ════════════════════════════════════════════════════════════════════
-// === ГАРАНТИРОВАННЫЙ СБРОС СЕТКИ ===
-if (window.__netGrid) {
-  // 1. Выключаем режим сетки
-  if (typeof window.__netGrid.setGridMode === 'function') {
-    window.__netGrid.setGridMode(false);
-  }
-  
-  // 2. Сбрасываем деградацию
-  window.__netGrid.setSystemDegradation(0);
-  
-  // 3. Форсированный сброс эффектов
-  if (typeof window.__netGrid.forceReset === 'function') {
-    window.__netGrid.forceReset();
-  }
-  
-  // 4. ДВОЙНАЯ ПЕРЕРИСОВКА ЧЕРЕЗ 100мс (гарантия)
-  setTimeout(() => {
+    // Сбрасываем сетку
     if (window.__netGrid) {
+      window.__netGrid.setSystemDegradation(0);
       window.__netGrid.forceReset();
+      window.__netGrid.setGridMode(false);
     }
-  }, 100);
-}
-    // ════════════════════════════════════════════════════════════════════
     
-    // ПОЛНЫЙ СБРОЗ CSS-СОСТОЯНИЯ
+    // Очищаем все эффекты
     document.body.classList.remove('degradation-2','degradation-3','degradation-4','degradation-5','degradation-6','degradation-glitch');
     document.body.style.filter = '';
     document.body.style.backdropFilter = '';
-    document.body.style.mixBlendMode = '';
-    document.body.style.transition = '';
     
-    // ===== ВОЗВРАТ В ИСХОДНОЕ СОСТОЯНИЕ =====
-    // Используем pushLine напрямую, а не typeText, чтобы гарантировать отображение
+    // Выводим финальное сообщение
+    pushLine('>>> СИСТЕМА ВОССТАНОВЛЕНА <<<', '#00FF41');
+    pushLine('> Стабильность: 100%', '#00FF41');
     pushLine('> ТЕРМИНАЛ A.D.A.M. // VIGIL-9 АКТИВЕН', '#00FF41');
-    pushLine('> ДОБРО ПОЖАЛОВАТЬ, ОПЕРАТОР', '#00FF41');
     pushLine('> ВВЕДИТЕ "help" ДЛЯ СПИСКА КОМАНД', '#00FF41');
     
-    // Гарантированная перерисовка
+    // ✅ Добавляем строку ввода
+    currentLine = '';
+    const newLine = { 
+      text: 'adam@secure:~$ ', 
+      color: '#00FF41', 
+      _isInputLine: true 
+    };
+    lines.push(newLine);
+    
+    scrollOffset = 0;
     requestFullRedraw();
     
-    // Даем время отрисоваться
-    setTimeout(() => {
-      // ТОЛЬКО ПОСЛЕ отрисовки приветствия добавляем строку ввода
-      addInputLine();
-      
-      // Финальная перерисовка
-      requestFullRedraw();
-      
-      console.log('[AUTO RESET] Complete. Terminal ready.');
-    }, 300);
-  }, 1500);
+    // ✅ ПОЛНЫЙ СБРОС ВСЕХ ФЛАГОВ БЛОКИРОВКИ
+    isFrozen = false;
+    isTyping = false;
+    awaitingConfirmation = false;
+    decryptActive = false;
+    traceActive = false;
+    audioPlaybackActive = false;
+    intentionalPredictionActive = false;
+    intentionPredicted = false;
+    
+    // ✅ Если используем OperationManager - сбросим его тоже
+    if (operationManager && operationManager.activeOperation === 'auto-reset') {
+      operationManager.activeOperation = null;
+    }
+    
+    console.log('[AUTO RESET] Complete. Terminal ready. isFrozen:', isFrozen);
+  }, 1000);
 }
   // ========== МЕТОД: ОЧИСТКА ЭФФЕКТОВ ГЛИТЧА ==========
   clearGlitchEffects() {
@@ -2543,10 +2520,12 @@ function handleDecryptInput(e) {
   e.stopPropagation();
   e.stopImmediatePropagation();
   
-  if (e.key === 'Escape') {
-    endDecryptGame(false, true);
-    return;
-  }
+if (e.key === 'Escape') {
+  // НЕМЕДЛЕННО блокируем ввод и прерываем игру
+  isFrozen = true; // ← ДОБАВИТЬ ЭТО
+  endDecryptGame(false, true);
+  return;
+}
   
   if (e.key === 'Backspace') {
     decryptInputBuffer = decryptInputBuffer.slice(0, -1);
@@ -2769,10 +2748,12 @@ async function endDecryptGame(success, cancelled = false) {
     audioManager.play('net_connection_loss.mp3', { volume: 0.5 });
     addColoredTextForDecrypt('> РАСШИФРОВКА ОТМЕНЕНА', '#FFFF00');
     await new Promise(resolve => setTimeout(resolve, 500));
-  } else if (success) {
-    audioManager.play('connection_restored.mp3', { volume: 0.7 });
-    addColoredTextForDecrypt('> СИГНАЛ: КОД ВЕРИФИЦИРОВАН', '#00FF41');
-    await new Promise(resolve => setTimeout(resolve, 800));
+} else if (success) {
+  // БЛОКИРУЕМ ввод ПОЛНОСТЬЮ до конца
+  isFrozen = true; // ← ДОБАВИТЬ ЭТО
+  audioManager.play('connection_restored.mp3', { volume: 0.7 });
+  addColoredTextForDecrypt('> СИГНАЛ: КОД ВЕРИФИЦИРОВАН', '#00FF41');
+  await new Promise(resolve => setTimeout(resolve, 800));
     
     // Вывод содержимого
     addColoredTextForDecrypt(`[ФАЙЛ РАСШИФРОВАН: ${fileTitle}]`, '#00FF41');
@@ -2807,12 +2788,17 @@ async function endDecryptGame(success, cancelled = false) {
   
   await new Promise(resolve => setTimeout(resolve, 1000));
   
-  // ГАРАНТИЯ ВОЗВРАТА СТРОКИ ВВОДА
-  scrollOffset = 0; // Сбрасываем прокрутку
-  addInputLine(); // Добавляем строку ввода
+  // ТОЛЬКО ПОСЛЕ ВСЕГО ВЫВОДА разблокируем
+  decryptActive = false;
+  isFrozen = false;
   
-  // Дополнительная гарантия - принудительный редрав
-  requestFullRedraw();
+  // СРАЗУ добавляем строку ввода без задержек
+  setTimeout(() => {
+    currentLine = '';
+    scrollOffset = 0;
+    addInputLine();
+    requestFullRedraw();
+  }, 50); // ← МИНИМАЛЬНАЯ задержка для гарантии отрисовки
 }
 // ==================== КОНЕЦ БЛОКА РАСШИФРОВКИ ====================
 // ==================== КОНЕЦ БЛОКА РАСШИФРОВКИ ====================
@@ -2997,13 +2983,19 @@ description: 'Второй субъект, допущенный к испыта�
   
   const targetData = networkMap[target];
   
-  if (!targetData) {
-    addColoredText(`ОШИБКА: Цель "${target.toUpperCase()}" не найдена`, '#FF4444');
-    addColoredText('Доступные цели: 0x9a0, 0x095, signal, phantom, monolith', '#FFFF00');
+ if (!targetData) {
+  addColoredText(`ОШИБКА: Цель "${target.toUpperCase()}" не найдена`, '#FF4444');
+  addColoredText('Доступные цели: 0x9a0, 0x095, signal, phantom, monolith', '#FFFF00');
+  
+  // Если операция была начата, завершаем её
+  if (operationManager.activeOperation === 'trace') {
+    operationManager.end('trace');
+  } else {
     addInputLine();
-    return;
   }
   
+  return;
+}
   // Проверка доступа к скрытым целям
   if (targetData.hidden && degradation.level < 60) {
     addColoredText('ОТКАЗАНО', '#FF4444');
@@ -3346,6 +3338,10 @@ description: 'Второй субъект, допущенный к испыта�
   
   // ---------- processCommand ----------
   async function processCommand(rawCmd){
+	    if (decryptActive) {
+    // Игнорируем любые команды во время расшифровки
+    return;
+  }
   if (isTyping || operationManager.isBlocked()) return;
     
     // Инверсия управления при высокой деградации
@@ -4047,7 +4043,11 @@ function waitForUserResponse(timeout = 30000) {
 
 // ---------- key handling ----------
 document.addEventListener('keydown', function(e){
-  if (operationManager && operationManager.isBlocked()) return;
+  // Проверяем, заблокирована ли система OperationManager
+  if (operationManager && operationManager.isBlocked()) {
+    e.preventDefault();
+    return;
+  }
   
   // Обработка инверсии управления (уровень 6)
   if (degradation.level >= INVERSION_START_LEVEL && degradation.inputInversionActive) {
