@@ -1,5 +1,4 @@
-// terminal_canvas.js - ПОЛНАЯ ВЕРСИЯ СО ВСЕМИ ФУНКЦИЯМИ ИЗ ТЗ
-// Реализованы ВСЕ механики деградации уровней 1-7, сетка с ключом "Биокод", команды decrypt/trace/playaudio/VIGIL999
+// terminal_canvas.js - ПОЛНАЯ ВЕРСИЯ СО ВСЕМИ ФУНКЦИЯМИ
 (() => {
   // ---------- CONFIG ----------
   const FONT_FAMILY = "'Press Start 2P', monospace";
@@ -28,8 +27,7 @@
   const ANOMALOUS_INSERTS_END_LEVEL = 80;
   const INVERSION_START_LEVEL = 95;
   const AUTO_RESET_LEVEL = 98;
-  // ========== НОВАЯ СИСТЕМА ГЛИТЧА (ЭТАП 1) ==========
-// Метаданные для глитченного текста
+
 // Каждая строка может иметь информацию о глитч-фрагментах
 const GLITCH_CONFIG = {
   BLOCKS: ['█', '▓', '▒', '░'],
@@ -50,7 +48,7 @@ class GlitchFragment {
     this.lastSpasmTime = 0;
     this.isCorrosion = isCorrosion; // Добавлено: тип коррозии
   }
-  // ========== ДОБАВЬТЕ ЭТИ МЕТОДЫ В КЛАСС GlitchFragment ==========
+
 
 // Проверка, можно ли поставить символ в позицию (без 2 тяжелых подряд)
 isValidCharForPosition(char, position) {
@@ -122,8 +120,7 @@ hasTooManyHeavyBlocks(chars = this.glitchedChars) {
   }
   return false;
 }
-// ========== КОНЕЦ ДОБАВЛЕНИЯ ==========
-// ========== ЗАМЕНИТЕ ВЕСЬ МЕТОД applyStaticGlitch ==========
+
 applyStaticGlitch() {
   const availableChars = [...GLITCH_CONFIG.ALL];
   const heavyBlocks = ['█', '▓'];
@@ -158,8 +155,7 @@ applyStaticGlitch() {
     return char || availableChars[Math.floor(Math.random() * availableChars.length)] || '▓';
   });
 }
-// ========== КОНЕЦ ЗАМЕНЫ ==========
-// ========== ЗАМЕНИТЕ МЕТОД applySpasm ==========
+
 applySpasm(degradationLevel) {
   const now = Date.now();
   const frequency = getSpasmFrequency(degradationLevel);
@@ -211,7 +207,7 @@ applySpasm(degradationLevel) {
     this.tryExpandFragment();
   }
 }
-// ========== КОНЕЦ ЗАМЕНЫ ==========
+
   
   // Попытка расширения фрагмента (заражение)
   tryExpandFragment() {
@@ -231,7 +227,7 @@ class GlitchTextEngine {
     this.fragments = new Map(); // Map<lineId, fragment[]>
     this.nextLineId = 0;
   }
-  // ========== ДОБАВЬТЕ ЭТИ МЕТОДЫ В КЛАСС GlitchTextEngine ==========
+
 
 // Расчёт оптимального количества фрагментов
 calculateOptimalFragmentCount(length, degradationLevel, isServiceLine) {
@@ -2523,7 +2519,7 @@ const decryptFiles = {
       'СКРыТОЕ СООБЩЕНИЕ:',
       '"Помогите мне умереть. Я не машина. Я не бог. Каждый из них — часть моей боли. Отключите питание в точке 0X7F."'
     ],
-    successMessage: 'Доступ к ядру вьтполнен. Системная ошибка подавлена.',
+    successMessage: 'Доступ к ядру выполнен. Системная ошибка подавлена.',
     failureMessage: 'СИСТЕМА: "МАКСИМУМ ПОПыТОК ИСЧЕРПАН. ПОВТОРНАЯ ПОПыТКА ЧЕРЕЗ 30 СЕКУНД"'
   }
 };
@@ -2705,8 +2701,8 @@ async function startDecrypt(fileId) {
   // ОТЛАДОЧНАЯ ИНФОРМАЦИЯ (УДАЛИТЕ В ПРОДАКШЕНЕ!)
   console.log(`[DECRYPT DEBUG] Файл: ${normalizedId}, Сгенерированный код: ${decryptCode}`);
   
-  // УВЕЛИЧЕНО КОЛИЧЕСТВО ПОПЫТОК ДО 10
-  decryptAttempts = 10;
+  // УВЕЛИЧЕНО КОЛИЧЕСТВО ПОПЫТОК ДО 5
+  decryptAttempts = 5;
   decryptInputBuffer = '';
   isFrozen = true; // Блокируем ввод для терминала, но не для decrypt
   
@@ -2817,13 +2813,6 @@ async function endDecryptGame(success, cancelled = false) {
   }, 50); // ← МИНИМАЛЬНАЯ задержка для гарантии отрисовки
 }
 // ==================== КОНЕЦ БЛОКА РАСШИФРОВКИ ====================
-// ==================== КОНЕЦ БЛОКА РАСШИФРОВКИ ====================
-// ==================== КОНЕЦ БЛОКА РАСШИФРОВКИ ====================
-// ==================== КОНЕЦ БЛОКА РАСШИФРОВКИ ====================
-
-// ---------- trace command ----------
-  // ---------- trace command ----------
-  // ========== ВСТАВЬТЕ ЭТОТ КОД ПЕРЕД async function startTrace ==========
 
 // Вспомогательные функции для TRACE (не видят блокировку traceActive)
 function addColoredTextForTrace(text, color = '#00FF41') {
@@ -2856,11 +2845,6 @@ async function typeTextForTrace(text, speed = 14) {
   requestFullRedraw();
 }
 
-// ========== Дальше идёт ваша старая функция, КОТОРУЮ ТОЖЕ НАДО ЗАМЕНИТЬ ==========
-// ---------- trace command ----------
-  // ---------- trace command ----------
-  // ========== ВСТАВЬТЕ ЭТОТ КОД ПЕРЕД async function startTrace ==========
-
 // Вспомогательные функции для TRACE (не видят блокировку traceActive)
 function addColoredTextForTrace(text, color = '#00FF41') {
   pushLine(text, color);
@@ -2892,9 +2876,6 @@ async function typeTextForTrace(text, speed = 14) {
   requestFullRedraw();
 }
 
-// ========== Дальше идёт ваша старая функция, КОТОРУЮ ТОЖЕ НАДО ЗАМЕНИТЬ ==========
-// ---------- trace command ----------
-// ========== ВСТАВЬТЕ ЭТОТ КОД ПОЛНОСТЬЮ ВМЕСТО ВСЕЙ ФУНКЦИИ startTrace ==========
 async function startTrace(target) {
 	  if (operationManager.isBlocked()) {
     addColoredText('ОШИБКА: Другая операция уже выполняется', '#FF4444');
@@ -3013,11 +2994,17 @@ description: 'Второй субъект, допущенный к испыта�
   return;
 }
   // Проверка доступа к скрытым целям
-  if (targetData.hidden && degradation.level < 60) {
-    addColoredText('ОТКАЗАНО', '#FF4444');
-    addInputLine();
-    return;
+if (targetData.hidden && degradation.level < 60) {
+  addColoredText('ОТКАЗАНО', '#FF4444');
+  addInputLine(); // ← ДОБАВЬТЕ ЭТУ СТРОКУ
+  
+  // Завершаем операцию если она была начата
+  if (operationManager.activeOperation === 'trace') {
+    operationManager.end('trace');
   }
+  
+  return;
+}
   
   traceActive = true;
   
@@ -3243,7 +3230,7 @@ description: 'Второй субъект, допущенный к испыта�
   operationManager.end('trace');
 }
 }
-// ========== КОНЕЦ ЗАМЕНЫ ==========
+
   // ---------- playaudio command ----------
 async function playAudio(dossierId) {
     if (audioPlaybackActive) {
@@ -4196,7 +4183,7 @@ document.addEventListener('keydown', function(e){
   updatePromptLine();
 });
 
-// ДОБАВЬТЕ ЭТОТ ОТЛАДОЧНЫЙ КОД прямо после "let scrollOffset = 0;"
+
 
 // ========== ПРОКРУТКА МЫШЬЮ (ИСПРАВЛЕННАЯ) ==========
 function getMaxScroll() {
@@ -4263,8 +4250,7 @@ function backgroundTick(ts) {
   }
   requestAnimationFrame(backgroundTick);
 }
-// ========== КОНЕЦ ИЗМЕНЕНИЯ ==========
-// ========== КОНЕЦ backgroundTick ==========
+
 requestAnimationFrame(backgroundTick);
 
 // expose debug API
