@@ -1756,6 +1756,22 @@ function drawTextLines(){
     y += LINE_HEIGHT;
   }
   ctx.restore();
+   if (!(window.__netGrid && window.__netGrid.isGridMode()) && 
+      lines.length > 0 && 
+      !lines[lines.length - 1]._isInputLine &&
+      !isTyping && 
+      !isFrozen && 
+      !decryptActive && 
+      !traceActive && 
+      !audioPlaybackActive) {
+    
+    // Проверяем, не ожидаем ли мы подтверждения
+    if (!awaitingConfirmation) {
+      setTimeout(() => {
+        addInputLine();
+      }, 100);
+    }
+	  }
 }
 // ========== КОНЕЦ drawTextLines ==========
 // ========== КОНЕЦ НОВОЙ drawTextLines ==========
@@ -3229,18 +3245,21 @@ description: 'Второй субъект, допущенный к испыта�
 }
 // ========== КОНЕЦ ЗАМЕНЫ ==========
   // ---------- playaudio command ----------
-  async function playAudio(dossierId) {
+async function playAudio(dossierId) {
     if (audioPlaybackActive) {
-      addColoredText('ОШИБКА: Аудиовоспроизведение уже активно', '#FF4444');
-      return;
+        addColoredText('ОШИБКА: Аудиовоспроизведение уже активно', '#FF4444');
+        return;
     }
     
     const id = String(dossierId || '').toUpperCase();
     const dossier = dossiers[id];
     if (!dossier || !dossier.audio) {
-      addColoredText(`ОШИБКА: Аудиофайл для ${dossierId} недоступен`, '#FF4444');
-      return;
+        addColoredText(`ОШИБКА: Аудиофайл для ${dossierId} недоступен`, '#FF4444');
+        return;
     }
+    
+    // ДОБАВИТЬ ЭТУ СТРОКУ - инструкция для пользователя
+    addColoredText('[ИНСТРУКЦИЯ: Для остановки нажмите ESC]', '#FFFF00', true);
     
     audioPlaybackActive = true;
     audioPlaybackFile = dossier.audio;
@@ -3251,12 +3270,14 @@ description: 'Второй субъект, допущенный к испыта�
       const audio = new Audio(dossier.audio);
       audio.volume = 0.7;
       
-      audio.addEventListener('ended', () => {
+    audio.addEventListener('ended', () => {
         audioPlaybackActive = false;
         audioPlaybackFile = null;
+        isFrozen = false; // ВОТ ЭТА СТРОКА ОЧЕНЬ ВАЖНА
+        document.removeEventListener('keydown', handleEsc); // Удаляем обработчик
         addColoredText('[АУДИО: ЗАПИСЬ ЗАВЕРШЕНА]', '#FFFF00', true);
         addInputLine();
-      });
+    });
       
       audio.play().catch(e => {
         console.error('Audio playback failed:', e);
@@ -3279,6 +3300,7 @@ description: 'Второй субъект, допущенный к испыта�
           audioPlaybackFile = null;
           addColoredText('[АУДИО: ВОСПРОИЗВЕДЕНИЕ ПРЕРВАНО]', '#FFFF00', true);
           addInputLine();
+          return; // Важно предотвратить дальнейшую обработку
         }
       };
       
@@ -3451,11 +3473,11 @@ description: 'Второй субъект, допущенный к испыта�
     }
     
     // Веса команд для увеличения деградации
-    const commandWeights = { 
-      'syst':1, 'syslog':1, 'net':1, 'dscr':2, 'subj':2, 'notes':1.5, 
-      'deg':0, 'netmode':0.5, 'help':0, 'clear':0, 'exit':0, 'reset':0, 'open':0,
-      'decrypt':3, 'trace':2, 'playaudio':1
-    };
+const commandWeights = { 
+  'syst':1, 'syslog':1, 'net':1, 'dscr':2, 'subj':2, 'notes':1, 
+  'deg':0, 'netmode':1, 'help':0, 'clear':0, 'exit':0, 'reset':0, 'open':0,
+  'decrypt':3, 'trace':2, 'playaudio':1
+};
     
     if (commandWeights[command]) degradation.addDegradation(commandWeights[command]);
     
@@ -3683,16 +3705,25 @@ description: 'Второй субъект, допущенный к испыта�
       // ════════════════════════════════════════════════════════════════════
       // КОМАНДЫ СЕТКИ
       // ════════════════════════════════════════════════════════════════════
-      case 'net_mode':
-        if (!window.__netGrid) {
-          addColoredText('ОШИБКА: Система управления узлами недоступна', '#FF4444');
-          break;
-        }
-        
-        window.__netGrid.setGridMode(true);
-        await typeText('> Переход в режим управления сеткой...', 'output', 12);
-        await typeText('> Управление: [WASD/↑↓←→] Перемещение | [Tab] Выбор узла | [Space] Закрепить/Открепить | [ESC] Выход', 'output', 12);
-        break;
+case 'net_mode':
+  if (!window.__netGrid) {
+    addColoredText('ОШИБКА: Система управления узлами недоступна', '#FF4444');
+    break;
+  }
+
+  window.__netGrid.setGridMode(true);
+  
+  // Мгновенный вывод текста (без анимации typeText)
+  addColoredText('> Переход в режим управления сеткой...', '#00FF41');
+  addColoredText('> Управление: [WASD/↑↓←→] Перемещение | [Tab] Выбор узла | [Space] Закрепить/Открепить | [ESC] Выход', '#00FF41');
+  
+  // Удаляем строку ввода
+  if (lines.length > 0 && lines[lines.length - 1]._isInputLine) {
+    lines.pop();
+  }
+  
+  requestFullRedraw();
+  return; // Не добавляем новую строку ввода
       case 'net':
         if (args.length === 0) {
           addColoredText('[СЕТЕВОЙ СТАТУС: АКТИВЕН]', '#00FF41');
