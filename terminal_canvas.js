@@ -4601,9 +4601,9 @@ requestFullRedraw();
 async function startHellTransition() {
     return new Promise((resolve) => {
         const startTime = Date.now();
-        const duration = 8000; // 8 секунд ада
+        const duration = 7000; // 7 секунд
         
-        // Создаем слой для анимации
+        // Создаем основной слой
         const hellLayer = document.createElement('div');
         hellLayer.id = 'hellLayer';
         hellLayer.style.cssText = `
@@ -4614,10 +4614,46 @@ async function startHellTransition() {
             height: 100%;
             z-index: 99999;
             pointer-events: none;
+            overflow: hidden;
         `;
+        
+        // Canvas для эффектов
+        const effectCanvas = document.createElement('canvas');
+        const ctx = effectCanvas.getContext('2d');
+        effectCanvas.width = window.innerWidth;
+        effectCanvas.height = window.innerHeight;
+        effectCanvas.style.cssText = `
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            transition: opacity 0.3s;
+        `;
+        hellLayer.appendChild(effectCanvas);
+        
+        // Слой для финальной вспышки (изначально скрыт)
+        const flashLayer = document.createElement('div');
+        flashLayer.style.cssText = `
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            z-index: 100000;
+            opacity: 0;
+            pointer-events: none;
+        `;
+        hellLayer.appendChild(flashLayer);
+        
         document.body.appendChild(hellLayer);
         
-        // Звуки ада
+        // Скрываем основной терминал сразу
+        canvas.style.opacity = '0';
+        
+        // Звуки
         audioManager.play('glitch_e.mp3', { volume: 1.0, loop: true });
         setTimeout(() => {
             audioManager.play('net_connection_loss.mp3', { volume: 0.7 });
@@ -4626,120 +4662,310 @@ async function startHellTransition() {
             audioManager.play('net_fragmentation.mp3', { volume: 0.8 });
         }, 4000);
         
+        // 1. ЭФФЕКТ ПРОВАЛИВАНИЯ СТРОК
+        let lineOffsets = [];
+        function initLineOffsets() {
+            const contentH = window.innerHeight - PADDING * 2;
+            const visibleLines = Math.max(1, Math.floor(contentH / LINE_HEIGHT));
+            const maxScroll = Math.max(0, lines.length - visibleLines);
+            const start = Math.max(0, lines.length - visibleLines - scrollOffset);
+            const end = Math.min(lines.length, start + visibleLines);
+            
+            lineOffsets = [];
+            for (let i = start; i < end; i++) {
+                lineOffsets.push({
+                    y: PADDING + (i - start) * LINE_HEIGHT,
+                    speed: 0.5 + Math.random() * 2,
+                    delay: Math.random() * 0.3,
+                    fallen: false
+                });
+            }
+        }
+        initLineOffsets();
+        
+        // 2. БИНАРНЫЙ ШУМ (символы 0 и 1)
+        let noiseParticles = [];
+        function generateNoise(count) {
+            for (let i = 0; i < count; i++) {
+                noiseParticles.push({
+                    x: Math.random() * effectCanvas.width,
+                    y: Math.random() * effectCanvas.height,
+                    char: Math.random() > 0.5 ? '0' : '1',
+                    speed: 0.1 + Math.random() * 0.5,
+                    size: 8 + Math.random() * 16,
+                    opacity: 0.1 + Math.random() * 0.3,
+                    createdAt: Date.now(),
+                    lifetime: 2000 + Math.random() * 3000
+                });
+            }
+        }
+        
+        // 3. УЛУЧШЕННЫЕ СИГНАЛЫ ОТКАЗА С ГЛИТЧАМИ
+        const errorMessages = [
+            'CRITICAL FAILURE',
+            'SYSTEM CORRUPTED',
+            'TERMINAL CRASH',
+            'MEMORY OVERFLOW',
+            'CORE DUMP INITIATED',
+            'NEURAL NET COLLAPSE',
+            'VIGIL-9 // ERROR',
+            'A.D.A.M. SYSTEM FAIL'
+        ];
+        
+        let errorSignals = [];
+        
+        function spawnErrorSignal(progress) {
+            if (Math.random() < 0.08 + progress * 0.15 && errorSignals.length < 4) {
+                const message = errorMessages[Math.floor(Math.random() * errorMessages.length)];
+                errorSignals.push({
+                    x: Math.random() * (effectCanvas.width - 300) + 150,
+                    y: Math.random() * (effectCanvas.height - 60) + 30,
+                    text: message,
+                    glitchText: message,
+                    opacity: 1.0,
+                    size: 16 + Math.random() * 8,
+                    duration: 1000 + Math.random() * 600,
+                    createdAt: Date.now(),
+                    color: Math.random() > 0.5 ? '#FF4444' : '#FFFF00',
+                    glitchPhase: 0,
+                    glitchSpeed: 0.05 + Math.random() * 0.1,
+                    shakeIntensity: 2 + Math.random() * 4
+                });
+            }
+        }
+        
+        function applyGlitchToError(errorSignal) {
+            const glitchChars = ['▓', '█', '░', '▒', '▄', '▀', '▌', '▐'];
+            let result = errorSignal.text.split('');
+            
+            const glitchCount = Math.floor(Math.random() * 3) + 1;
+            for (let i = 0; i < glitchCount; i++) {
+                const pos = Math.floor(Math.random() * result.length);
+                if (result[pos] !== ' ') {
+                    result[pos] = glitchChars[Math.floor(Math.random() * glitchChars.length)];
+                }
+            }
+            
+            if (Math.random() < 0.2) {
+                const start = Math.floor(Math.random() * result.length);
+                const length = Math.floor(Math.random() * 3) + 1;
+                for (let i = start; i < Math.min(start + length, result.length); i++) {
+                    result[i] = ' ';
+                }
+            }
+            
+            return result.join('');
+        }
+        
+        // 4. ПРОСТЫЕ ГОРИЗОНТАЛЬНЫЕ ПОЛОСЫ (редкие)
+        let lastStripeTime = 0;
+        
+        // Постепенно показываем canvas с эффектами
+        setTimeout(() => {
+            effectCanvas.style.opacity = '1';
+        }, 100);
+        
         // Анимационный цикл
         function animate() {
             const elapsed = Date.now() - startTime;
-            const progress = elapsed / duration;
+            const progress = Math.min(1, elapsed / duration);
             
             if (progress >= 1) {
-                // Завершение
-                hellLayer.remove();
-                resolve();
+                // Плавно затемняем всё перед вспышкой
+                flashLayer.style.transition = 'opacity 0.5s';
+                flashLayer.style.opacity = '1';
+                
+                setTimeout(() => {
+                    // Белая вспышка
+                    flashLayer.style.background = '#FFFFFF';
+                    flashLayer.style.transition = 'opacity 0.1s';
+                    flashLayer.style.opacity = '0.9';
+                    
+                    audioManager.play('glitch_error.mp3', { volume: 0.9 });
+                    
+                    setTimeout(() => {
+                        flashLayer.style.opacity = '0';
+                        setTimeout(() => {
+                            hellLayer.remove();
+                            canvas.style.opacity = '1'; // Восстанавливаем основной канвас
+                            resolve();
+                        }, 300);
+                    }, 100);
+                }, 500);
+                
                 return;
             }
             
-            // Очищаем слой
-            hellLayer.innerHTML = '';
+            // Очищаем canvas
+            ctx.clearRect(0, 0, effectCanvas.width, effectCanvas.height);
             
-            // Интенсивность растет со временем
-            const intensity = progress * 2;
+            // ========== ЭФФЕКТ 1: ПРОВАЛИВАНИЕ СТРОК ==========
+            const collapseIntensity = Math.min(1, progress * 3);
             
-            // 1. ДРОЖАНИЕ ЭКРАНА
-            const shakeX = (Math.random() - 0.5) * 40 * intensity;
-            const shakeY = (Math.random() - 0.5) * 40 * intensity;
-            hellLayer.style.transform = `translate(${shakeX}px, ${shakeY}px)`;
+            lineOffsets.forEach((line, index) => {
+                if (progress > line.delay) {
+                    const lineProgress = (progress - line.delay) / (1 - line.delay);
+                    const fallDistance = lineProgress * line.speed * 100;
+                    
+                    // Рисуем черный прямоугольник, который "съедает" строку
+                    ctx.fillStyle = '#000';
+                    const fillHeight = Math.min(fallDistance, LINE_HEIGHT);
+                    ctx.fillRect(0, line.y, effectCanvas.width, fillHeight);
+                    
+                    // Когда строка полностью упала
+                    if (fallDistance >= LINE_HEIGHT && !line.fallen) {
+                        line.fallen = true;
+                        generateNoise(8);
+                    }
+                }
+            });
             
-            // 2. ЦВЕТОВЫЕ ВСПЫШКИ
-            if (Math.random() < 0.3 * intensity) {
-                const flash = document.createElement('div');
-                flash.style.cssText = `
-                    position: absolute;
-                    top: 0;
-                    left: 0;
-                    width: 100%;
-                    height: 100%;
-                    background: ${Math.random() > 0.5 ? '#FF0000' : '#FF00FF'};
-                    opacity: ${0.1 + Math.random() * 0.3};
-                    mix-blend-mode: difference;
-                `;
-                hellLayer.appendChild(flash);
+            // Дополнительное заполнение черным снизу (последние 20%)
+            if (progress > 0.8) {
+                const bottomFillHeight = (progress - 0.8) / 0.2 * 100;
+                ctx.fillStyle = '#000';
+                ctx.fillRect(0, effectCanvas.height - bottomFillHeight, effectCanvas.width, bottomFillHeight);
             }
             
-            // 3. ГЛИТЧ-БЛОКИ
-            for (let i = 0; i < Math.floor(intensity * 50); i++) {
-                const block = document.createElement('div');
-                const size = 20 + Math.random() * 100;
-                block.style.cssText = `
-                    position: absolute;
-                    top: ${Math.random() * 100}%;
-                    left: ${Math.random() * 100}%;
-                    width: ${size}px;
-                    height: ${size}px;
-                    background: #000;
-                    opacity: ${0.5 + Math.random() * 0.5};
-                    transform: rotate(${Math.random() * 360}deg);
-                `;
-                hellLayer.appendChild(block);
+            // ========== ЭФФЕКТ 2: БИНАРНЫЙ ШУМ ==========
+            if (progress > 0.2) {
+                if (noiseParticles.length < 250 && Math.random() < 0.3) {
+                    generateNoise(10);
+                }
+                
+                noiseParticles = noiseParticles.filter(particle => {
+                    const age = Date.now() - particle.createdAt;
+                    if (age > particle.lifetime) return false;
+                    
+                    const ageProgress = age / particle.lifetime;
+                    const currentOpacity = particle.opacity * (1 - ageProgress);
+                    
+                    if (Math.random() < 0.02) {
+                        particle.char = particle.char === '0' ? '1' : '0';
+                    }
+                    
+                    ctx.fillStyle = `rgba(100, 100, 100, ${currentOpacity})`;
+                    ctx.font = `${particle.size}px ${FONT_FAMILY}`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(particle.char, particle.x, particle.y);
+                    
+                    particle.y += particle.speed;
+                    particle.x += (Math.random() - 0.5) * 0.5;
+                    
+                    return particle.y < effectCanvas.height + 50;
+                });
             }
             
-            // 4. ИСКАЖЕНИЕ ТЕКСТА
-            if (lines.length > 0) {
-                // Случайно искажаем некоторые строки
+            // ========== ЭФФЕКТ 3: УЛУЧШЕННЫЕ СИГНАЛЫ ОТКАЗА ==========
+            if (progress > 0.3) {
+                spawnErrorSignal(progress);
+                
+                errorSignals = errorSignals.filter(signal => {
+                    const age = Date.now() - signal.createdAt;
+                    if (age > signal.duration) return false;
+                    
+                    const ageProgress = age / signal.duration;
+                    const currentOpacity = signal.opacity * (1 - ageProgress * 0.7);
+                    
+                    signal.glitchPhase += signal.glitchSpeed;
+                    if (Math.sin(signal.glitchPhase) > 0.8) {
+                        signal.glitchText = applyGlitchToError(signal);
+                    }
+                    
+                    const pulse = Math.sin(age * 0.01) * 0.3 + 0.7;
+                    
+                    // Тень
+                    ctx.fillStyle = `rgba(0, 0, 0, ${currentOpacity * 0.5})`;
+                    ctx.font = `bold ${signal.size}px ${FONT_FAMILY}`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(
+                        signal.glitchText, 
+                        signal.x + signal.shakeIntensity, 
+                        signal.y + signal.shakeIntensity
+                    );
+                    
+                    // Основной текст
+                    ctx.fillStyle = signal.color.replace(')', `, ${currentOpacity * pulse})`).replace('rgb', 'rgba');
+                    ctx.font = `bold ${signal.size}px ${FONT_FAMILY}`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(signal.glitchText, signal.x, signal.y);
+                    
+                    signal.x += (Math.random() - 0.5) * signal.shakeIntensity;
+                    signal.y += (Math.random() - 0.5) * signal.shakeIntensity;
+                    
+                    return true;
+                });
+            }
+            
+            // ========== ЭФФЕКТ 4: РЕДКИЕ ГОРИЗОНТАЛЬНЫЕ ПОЛОСЫ ==========
+            if (progress > 0.7 && Date.now() - lastStripeTime > 500) {
+                if (Math.random() < 0.3) {
+                    const stripeY = Math.random() * effectCanvas.height;
+                    const stripeHeight = 1;
+                    const stripeColor = progress > 0.85 ? '#FF4444' : '#00FF41';
+                    
+                    ctx.fillStyle = stripeColor;
+                    ctx.fillRect(0, stripeY, effectCanvas.width, stripeHeight);
+                    
+                    lastStripeTime = Date.now();
+                }
+            }
+            
+            // ========== ИСКАЖЕНИЕ ТЕКСТА ТЕРМИНАЛА ==========
+            if (lines.length > 0 && progress > 0.2) {
                 lines.forEach((line, index) => {
-                    if (Math.random() < 0.1 * intensity) {
-                        const originalText = line.originalText || line.text;
-                        const chars = originalText.split('');
-                        // Перемешиваем символы
-                        for (let j = chars.length - 1; j > 0; j--) {
-                            const k = Math.floor(Math.random() * (j + 1));
-                            [chars[j], chars[k]] = [chars[k], chars[j]];
+                    if (Math.random() < 0.07 * progress) {
+                        if (!line.originalText) {
+                            line.originalText = line.text;
                         }
-                        line.text = chars.join('');
-                        line.color = '#FF0000';
+                        
+                        const glitchChars = ['▓', '█', '░', '▒', '▄', '▀'];
+                        const charArray = line.originalText.split('');
+                        
+                        const changes = Math.floor(Math.random() * 3) + 1;
+                        for (let i = 0; i < changes; i++) {
+                            const pos = Math.floor(Math.random() * charArray.length);
+                            if (charArray[pos] !== ' ') {
+                                charArray[pos] = glitchChars[Math.floor(Math.random() * glitchChars.length)];
+                            }
+                        }
+                        
+                        line.text = charArray.join('');
+                        
+                        // Плавный переход цвета от зеленого к красному
+                        const colorProgress = Math.min(1, progress * 1.2);
+                        const r = Math.floor(20 + colorProgress * 235);
+                        const g = Math.floor(255 - colorProgress * 235);
+                        const b = Math.floor(65 - colorProgress * 45);
+                        line.color = `rgb(${r}, ${g}, ${b})`;
                     }
                 });
                 requestFullRedraw();
             }
             
-            // 5. ГЕОМЕТРИЧЕСКИЕ АНОМАЛИИ (на canvas)
-            const canvas = document.getElementById('terminalCanvas');
-            if (canvas) {
-                const ctx = canvas.getContext('2d');
-                ctx.save();
-                
-                // Инвертируем цвета
-                if (Math.random() < 0.5) {
-                    ctx.filter = 'invert(1)';
-                }
-                
-                // Рисуем спирали
-                ctx.strokeStyle = `hsl(${Math.random() * 360}, 100%, 50%)`;
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                for (let i = 0; i < 100; i++) {
-                    const angle = 0.1 * i;
-                    const x = 200 * Math.cos(angle) + canvas.width / 2;
-                    const y = 200 * Math.sin(angle) + canvas.height / 2;
-                    if (i === 0) ctx.moveTo(x, y);
-                    else ctx.lineTo(x, y);
-                }
-                ctx.stroke();
-                
-                ctx.restore();
+            // ========== ДРОЖАНИЕ ЭКРАНА ==========
+            if (progress > 0.6) {
+                const shakeIntensity = 10 * (progress - 0.6) * 2;
+                const shakeX = (Math.random() - 0.5) * shakeIntensity;
+                const shakeY = (Math.random() - 0.5) * shakeIntensity;
+                hellLayer.style.transform = `translate(${shakeX}px, ${shakeY}px)`;
             }
             
-            // Продолжаем анимацию
             requestAnimationFrame(animate);
         }
         
         // Запускаем анимацию
         animate();
         
-        // Принудительное завершение через 10 секунд
+        // На всякий случай - таймаут
         setTimeout(() => {
             hellLayer.remove();
+            canvas.style.opacity = '1';
             resolve();
-        }, 10000);
+        }, 8000);
     });
 }
 })();
