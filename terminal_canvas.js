@@ -736,7 +736,7 @@ const glitchEngine = new GlitchTextEngine();
   let flashTextInterval = null;
   let lastProcessed = { text: null, ts: 0 };
   let resetAttempts = 0;
-  let falseResetActive = false;
+  let falseResetActive = false;	
   let intentionalPredictionActive = false;
   let intentionPredicted = false;
   let decryptActive = false;
@@ -812,6 +812,10 @@ class OperationManager {
         window.isFrozen = true;
         window.audioPlaybackActive = true;
         break;
+		case 'dossier':
+case 'note':
+  window.isFrozen = true; // Блокируем ввод
+  break;
     }
     
     if (callback) callback();
@@ -2266,6 +2270,7 @@ async function showSubjectDossier(subjectId) {
     addColoredText('> [ФИНАЛЬНАЯ ЗАПИСЬ]: "ОН ВСЕГДА БЫЛ ЧАСТЬЮ ТЕБЯ"', '#FFFF00');
     addColoredText('------------------------------------', '#00FF41');
     await typeText('[ДОСЬЕ ЗАКРЫТО]', 'output', 12);
+	
     return;
   }
   
@@ -3805,8 +3810,15 @@ await typeText('  VIGIL999      — активация протокола OBSERV
           await typeText('Пример: OPEN NOTE_001', 'output', 12);
           break;
         }
-        await openNote(args[0]);
-        break;
+ // ЗАПУСКАЕМ ЧЕРЕЗ OPERATION MANAGER
+  if (!operationManager.start('note')) return;
+  
+  try {
+    await openNote(args[0]);
+  } finally {
+    operationManager.end('note');
+  }
+  break;
       case 'subj':
         await typeText('[СПИСОК СУБЪЕКТОВ — ПРОЕКТ A.D.A.M. / ПРОТОКОЛ VIGIL-9]', 'output', 12);
         addColoredText('--------------------------------------------------------', '#00FF41');
@@ -3825,8 +3837,15 @@ await typeText('  VIGIL999      — активация протокола OBSERV
           await typeText('Пример: DSCR 0x001', 'output', 12);
           break;
         }
-        await showSubjectDossier(args[0]);
-        break;
+         // ЗАПУСКАЕМ ЧЕРЕЗ OPERATION MANAGER
+  if (!operationManager.start('dossier')) return;
+  
+  try {
+    await showSubjectDossier(args[0]);
+  } finally {
+    operationManager.end('dossier');
+  }
+  break;
       case 'decrypt':
         if (args.length === 0) {
           addColoredText('ОШИБКА: Укажите ID файла для расшифровки', '#FF4444');
