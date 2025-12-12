@@ -1391,7 +1391,7 @@ fullSystemReset(){
         glitchLayer.innerHTML = '';
         for (let i = 0; i < 50; i++) {
           const span = document.createElement('span');
-          span.textContent = GLITCH_CONFIG[95][Math.floor(Math.random() * GLITCH_CONFIG[95].length)];
+          //span.textContent = GLITCH_CONFIG[95][Math.floor(Math.random() * GLITCH_CONFIG[95].length)];
           span.style.cssText = `
             position:absolute;
             top:${Math.random() * 100}%;
