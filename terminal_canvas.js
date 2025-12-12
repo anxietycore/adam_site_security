@@ -600,6 +600,7 @@ const glitchEngine = new GlitchTextEngine();
         'trace_active.mp3',
         'vigil_confirm.mp3',
         'glitch_e.mp3',
+		'glitch_error.mp3',
         'connection_restored.mp3'
       ];
       
@@ -739,9 +740,40 @@ const glitchEngine = new GlitchTextEngine();
   let intentionalPredictionActive = false;
   let intentionPredicted = false;
   let decryptActive = false;
+  let errorEffectActive = false;
+let errorIntensity = 0;        // общая интенсивность
+let errorShake = 0;            // дрожание
+let errorNoise = 0;            // шум
+let errorLineIndex = -1;       // индекс строки для покраски
   let traceActive = false;
   let traceTimer = null;
-  let vigilCodeParts = { alpha: null, beta: null, gamma: null };
+  // VIGIL999 - система ключей для активации протокола OBSERVER-7
+let vigilCodeParts = JSON.parse(localStorage.getItem('vigilCodeParts')) || { 
+  alpha: null, 
+  beta: null, 
+  gamma: null 
+};
+let vigilActive = false; // Флаг активности VIGIL999
+let degradationBeforeVigil = 0; // Сохраняем реальную деградацию
+let worldStopped = false; // Флаг остановки мира
+// Восстановление после обновления страницы
+(function restoreAfterRefresh() {
+    // Если был активен VIGIL999, но страницу обновили
+    if (vigilActive) {
+        vigilActive = false;
+        degradation.level = degradationBeforeVigil;
+        degradation.updateIndicator();
+        degradation.restoreWorld();
+        
+        // Выводим сообщение
+        setTimeout(() => {
+            addColoredText('> VIGIL999 ПРЕРВАН ОБНОВЛЕНИЕМ СТРАНИЦЫ', '#FFFF00');
+            addColoredText('> ДЛЯ ПОВТОРНОГО ЗАПУСКА ВВЕДИТЕ VIGIL999', '#FFFF00');
+            addInputLine();
+        }, 1000);
+    }
+})();
+let gridCheckAlreadyRewarded = false; // флаг, что награда за сборку сетки уже выдана
   let audioPlaybackActive = false;
   let audioPlaybackFile = null;
   let decryptCloseAttempts = 0;
@@ -802,8 +834,10 @@ end(operationType, callback) {
   
   this.activeOperation = null;
   
-  // Гарантированно добавляем строку ввода СРАЗУ
-  addInputLine(true); // УБРАТЬ setTimeout - ДОБАВЛЯЕМ СРАЗУ
+  // ⚠️ НЕ добавляем строку ввода для VIGIL999 (будет переход на другую страницу)
+  if (operationType !== 'vigil999') {
+    addInputLine();
+  }
   
   if (callback) callback();
   
@@ -844,7 +878,59 @@ class DegradationSystem {
     this.startTimer();
     this.updateEffects();
   }
-  
+  stopWorld() {
+    if (worldStopped) return;
+    worldStopped = true;
+    
+    // Останавливаем таймер деградации
+    if (this._timer) {
+        clearInterval(this._timer);
+        this._timer = null;
+    }
+    
+    // Останавливаем все глобальные интервалы
+    if (ghostInputInterval) {
+        clearInterval(ghostInputInterval);
+        ghostInputInterval = null;
+    }
+    
+    if (autoCommandInterval) {
+        clearInterval(autoCommandInterval);
+        autoCommandInterval = null;
+    }
+    
+    if (phantomCommandInterval) {
+        clearInterval(phantomCommandInterval);
+        phantomCommandInterval = null;
+    }
+    
+    if (textShakeInterval) {
+        clearInterval(textShakeInterval);
+        textShakeInterval = null;
+    }
+    
+    if (flashTextInterval) {
+        clearInterval(flashTextInterval);
+        flashTextInterval = null;
+    }
+    
+    // Останавливаем глитч-движок
+    if (glitchEngine && glitchEngine._animationTimer) {
+        clearInterval(glitchEngine._animationTimer);
+        glitchEngine._animationTimer = null;
+    }
+}
+
+restoreWorld() {
+    if (!worldStopped) return;
+    worldStopped = false;
+    
+    // Восстанавливаем таймер деградации
+    this.startTimer();
+    
+    // Восстанавливаем эффекты если нужно
+    this.updateEffects();
+}
   startTimer(){
     this._timer = setInterval(()=>{ 
       if (!document.hidden && !isFrozen && !decryptActive && !traceActive && !audioPlaybackActive) 
@@ -853,7 +939,7 @@ class DegradationSystem {
   }
   
   addDegradation(amount){
-    if (isFrozen || decryptActive || traceActive || audioPlaybackActive) return;
+    if (isFrozen || decryptActive || traceActive || audioPlaybackActive || vigilActive) return;
     
     const prev = this.level;
     this.level = Math.max(0, Math.min(100, this.level + amount));
@@ -897,14 +983,7 @@ if (this.level >= AUTO_RESET_LEVEL && !isFrozen) {
   return; // ПРЕРЫВАЕМ ДАЛЬНЕЙШУЮ ОБРАБОТКУ
 }
     
-    // Части кода VIGIL999
-    if (this.level >= 80 && this.level < 90 && !vigilCodeParts.alpha) {
-      this.revealVigilAlpha();
-    }
-    
-    if (this.level >= 98 && !vigilCodeParts.gamma) {
-      this.revealVigilGamma();
-    }
+
   }
   
   updateIndicator(){
@@ -1021,7 +1100,7 @@ if (this.level >= AUTO_RESET_LEVEL && !isFrozen) {
   
   // ========== ГЛАВНЫЙ МЕТОД: ЗАПУСК ГЛИТЧА-ПРОЦЕССА ==========
 triggerGlitchApocalypse(){
-  if (decryptActive || traceActive || audioPlaybackActive) return;
+    if (decryptActive || traceActive || audioPlaybackActive || vigilActive) return;
   
   // Используем OperationManager для блокировки
   operationManager.start('auto-reset', () => {
@@ -1084,7 +1163,9 @@ showResetProgress() {
 // ========== МЕТОД: ВЫПОЛНЕНИЕ АВТОМАТИЧЕСКОГО СБРОСА ==========
 performAutoReset() {
   console.log('[AUTO RESET] Starting...');
-  
+  vigilCodeParts = { alpha: null, beta: null, gamma: null };
+localStorage.removeItem('vigilCodeParts');
+gridCheckAlreadyRewarded = false;
   // Очищаем экран
   lines.length = 0;
   
@@ -1629,20 +1710,7 @@ reset(){
     return distortions[originalRole] || originalRole;
   }
   
-  revealVigilAlpha() {
-    addColoredText('[СИСТЕМНАЯ ПОДПИСЬ: V99-АЛФА=375]', '#FFFF00');
-    vigilCodeParts.alpha = '375';
-  }
-  
-  revealVigilBeta() {
-    addColoredText('[СИСТЕМНЫЙ ОТПЕЧАТОК: V99-БЕТА=814]', '#FFFF00');
-    vigilCodeParts.beta = '814';
-  }
-  
-  revealVigilGamma() {
-    addColoredText('[ЯДРО: КРИТИЧЕСКАЯ ДЕГРАДАЦИЯ. СИСТЕМНЫЙ ОТПЕЧАТОК: V99-ГАММА=291]', '#FFFF00');
-    vigilCodeParts.gamma = '291';
-  }
+
   
 setDegradationLevel(level){
   this.level = Math.max(0, Math.min(100, level));
@@ -1734,7 +1802,13 @@ function drawTextLines(){
     shakeY = (Math.random() - 0.5) * intensity;
   }
   ctx.translate(shakeX, shakeY);
-  
+ // ===== ДОБАВИТЬ ЭТО: МИКРОДРОЖЬ ВСЕГО ТЕКСТА ПРИ ОШИБКЕ =====
+    if (errorShake > 0) {
+        // Очень маленькое дрожание (2-4 пикселя максимум)
+        const microShakeX = (Math.random() - 0.5) * errorShake * 50;
+        const microShakeY = (Math.random() - 0.5) * errorShake * 50;
+        ctx.translate(microShakeX, microShakeY);
+    }
   for (let i = start; i < end; i++){
     const item = lines[i];
     let color = item.color || '#00FF41';
@@ -1743,7 +1817,10 @@ function drawTextLines(){
     if (degradation.level >= 60 && Math.random() < 0.01) {
       color = ['#FF4444', '#FF8800', '#FFFF00', '#4d00ff'][Math.floor(Math.random() * 4)];
     }
-    
+     // === ДОБАВИТЬ ЭТО: КРАСНЫЙ ЦВЕТ ДЛЯ СТРОКИ С ОШИБКОЙ ===
+        if (errorEffectActive && i === errorLineIndex) {
+            color = '#FF4444'; // Красный для строки с вопросом
+        }
     ctx.fillStyle = color;
     
     // Используем новый рендерер для глитченных строк
@@ -1752,22 +1829,21 @@ function drawTextLines(){
     y += LINE_HEIGHT;
   }
   ctx.restore();
-   if (!(window.__netGrid && window.__netGrid.isGridMode()) && 
-      lines.length > 0 && 
-      !lines[lines.length - 1]._isInputLine &&
-      !isTyping && 
-      !isFrozen && 
-      !decryptActive && 
-      !traceActive && 
-      !audioPlaybackActive) {
-    
-    // Проверяем, не ожидаем ли мы подтверждения
-    if (!awaitingConfirmation) {
-      setTimeout(() => {
-        addInputLine();
-      }, 100);
-    }
-	  }
+if (!(window.__netGrid && window.__netGrid.isGridMode()) && 
+    lines.length > 0 && 
+    !lines[lines.length - 1]._isInputLine &&
+    !isTyping && 
+    !isFrozen && 
+    !decryptActive && 
+    !traceActive && 
+    !audioPlaybackActive &&
+    !vigilActive && // ← ДОБАВЬТЕ ЭТУ ПРОВЕРКУ
+    !(operationManager && operationManager.isBlocked())) {
+  
+  setTimeout(() => {
+    addInputLine();
+  }, 100);
+}
 }
 // ========== КОНЕЦ drawTextLines ==========
 // ========== КОНЕЦ НОВОЙ drawTextLines ==========
@@ -1877,7 +1953,47 @@ function drawDegradationIndicator(){
     drawMapAndGlass();
     drawTextLines();
     drawDegradationIndicator();
-    
+        // === ЭФФЕКТ ОШИБКИ VIGIL999 ===
+    if (errorEffectActive) {
+        ctx.save();
+        ctx.setTransform(1,0,0,1,0,0);
+        ctx.scale(DPR, DPR);
+        
+        // 1. БЕЛЫЙ ШУМ (как в index.html)
+        if (errorNoise > 0) {
+            ctx.globalAlpha = errorNoise * 0.9;
+            
+            // Быстрый шум из пикселей
+            for(let i = 0; i < 550; i++) {
+                const x = Math.random() * vw;
+                const y = Math.random() * vh;
+                const size = 1;
+                const brightness = Math.random() * 400 + 255;
+                ctx.fillStyle = `rgb(${brightness}, ${brightness}, ${brightness})`;
+                ctx.fillRect(x, y, size, size);
+            }
+            
+            // Более крупные пиксели для глубины
+            ctx.globalAlpha = errorNoise * 0.15;
+            for(let i = 0; i < 300; i++) {
+                const x = Math.random() * vw;
+                const y = Math.random() * vh;
+                const size = 2;
+                const brightness = Math.random() * 150;
+                ctx.fillStyle = `rgb(${brightness}, ${brightness}, ${brightness})`;
+                ctx.fillRect(x, y, size, size);
+            }
+        }
+        
+        // 2. ЛЁГКОЕ БЕЛОЕ НАЛОЖЕНИЕ (цветовой эффект)
+        if (errorIntensity > 0.3) {
+            ctx.globalAlpha = (errorIntensity - 0.3) * 0.15;
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, vw, vh);
+        }
+        
+        ctx.restore();
+    }
 //    if (isFrozen) {
 //      ctx.save();
 //      ctx.setTransform(1,0,0,1,0,0);
@@ -2034,9 +2150,8 @@ async function typeText(text, className = 'output', speed = TYPING_SPEED_DEFAULT
 // ========== КОНЕЦ typeText ==========
   
 function addInputLine(){
-  if (isFrozen || decryptActive || traceActive || audioPlaybackActive) return;
+  if (isFrozen || decryptActive || traceActive || audioPlaybackActive || vigilActive) return;
   
-  // Проверяем по флагу, а не по тексту
   const lastLine = lines[lines.length - 1];
   if (lastLine && lastLine._isInputLine) return;
   
@@ -2045,7 +2160,36 @@ function addInputLine(){
   scrollOffset = 0;
   requestFullRedraw();
 }
-  
+function triggerVigilErrorEffect(lineIndex = -1) {
+    if (errorEffectActive) return;
+    
+    errorEffectActive = true;
+    errorIntensity = 1.0;
+    errorShake = 1.0;
+    errorNoise = 1.0;
+    errorLineIndex = lineIndex;
+    
+    // ЗВУК (используем glitch_error.mp3)
+    audioManager.play('glitch_error.mp3', { volume: 0.4 });
+    
+    // Плавное затухание за 1.5 секунды
+    const fadeOut = () => {
+        errorIntensity = Math.max(0, errorIntensity - 0.05);
+        errorShake = Math.max(0, errorShake - 0.12);
+        errorNoise = Math.max(0, errorNoise - 0.08);
+        
+        if (errorIntensity > 0) {
+            requestAnimationFrame(fadeOut);
+        } else {
+            errorEffectActive = false;
+            errorLineIndex = -1;
+        }
+        
+        requestFullRedraw();
+    };
+    
+    fadeOut();
+}
 function updatePromptLine(){
   if (isFrozen || decryptActive || traceActive || audioPlaybackActive) return;
   
@@ -2681,7 +2825,13 @@ async function startDecrypt(fileId) {
     addInputLine();
     return;
   }
-  
+  // Файл CORE доступен только при деградации ≥50%
+if (normalizedId === 'CORE' && degradation.level < 50) {
+  addColoredText('ОШИБКА: УРОВЕНЬ ДОСТУПА НЕДОСТАТОЧЕН', '#FF4444');
+  addColoredText('> Требуется уровень деградации ≥50%', '#FFFF00');
+  addInputLine();
+  return;
+}
   // Начало расшифровки - ВКЛЮЧАЕМ ИЗОЛЯЦИЮ
   decryptActive = true;
   decryptFileId = normalizedId;
@@ -2770,7 +2920,12 @@ async function endDecryptGame(success, cancelled = false) {
     // Вывод содержимого
     addColoredTextForDecrypt(`[ФАЙЛ РАСШИФРОВАН: ${fileTitle}]`, '#00FF41');
     addColoredTextForDecrypt('------------------------------------', '#00FF41');
-    
+    // Для файла CORE показываем ключ Альфа
+if (decryptFileId === 'CORE') {
+  await new Promise(resolve => setTimeout(resolve, 500));
+  addColoredTextForDecrypt('> КЛЮЧ АЛЬФА: 375', '#00FF41');
+  addColoredTextForDecrypt('> Используйте команду ALPHA для фиксации ключа', '#FFFF00');
+}
     // ЦВЕТНОЕ СОДЕРЖИМОЕ ФАЙЛА (2 цвета)
     for (let i = 0; i < file.content.length; i++) {
       const line = file.content[i];
@@ -2993,10 +3148,11 @@ description: 'Второй субъект, допущенный к испыта�
   
   return;
 }
-  // Проверка доступа к скрытым целям
+// Проверка доступа к скрытым целям
 if (targetData.hidden && degradation.level < 60) {
-  addColoredText('ОТКАЗАНО', '#FF4444');
-  addInputLine(); // ← ДОБАВЬТЕ ЭТУ СТРОКУ
+  addColoredText('ОТКАЗАНО | РАСПАД', '#FF4444');
+  addColoredText('> Требуется уровень деградации ≥60%', '#FFFF00');
+  addInputLine();
   
   // Завершаем операцию если она была начата
   if (operationManager.activeOperation === 'trace') {
@@ -3221,7 +3377,12 @@ if (targetData.hidden && degradation.level < 60) {
     } else {
       degradation.addDegradation(-1); // Безопасные цели снижают деградацию
     }
-    
+    // Вывод ключа Гамма для монолита
+if (target === 'monolith') {
+  await new Promise(r => setTimeout(r, 800));
+  addColoredTextForTrace('> КЛЮЧ ГАММА: 291', '#00FF41');
+  addColoredTextForTrace('> Используйте команду GAMMA для фиксации ключа', '#FFFF00');
+}
 } catch (e) {
   console.error('TRACE CRITICAL ERROR:', e);
   addColoredTextForTrace('ОШИБКА: Критическая ошибка при выполнении анализа', '#FF4444');
@@ -3557,7 +3718,10 @@ const commandWeights = {
         await typeText('  NET CHECK    — проверить конфигурацию узлов', 'output', 10);
         await typeText('  DEG          — установить уровень деградации (разработка)', 'output', 10);
         await typeText('------------------------------------', 'output', 10);
-        await typeText('СКРЫТЫЕ КОМАНДЫ: VIGIL999 (требует код доступа)', 'output', 18);
+await typeText('  ALPHA <код>   — зафиксировать код Альфа', 'output', 10);
+await typeText('  BETA <код>    — зафиксировать код Бета', 'output', 10);
+await typeText('  GAMMA <код>   — зафиксировать код Гамма', 'output', 10);
+await typeText('  VIGIL999      — активация протокола OBSERVER-7 (требует все три ключа)', 'output', 10);
         break;
       case 'clear':
         if (degradation.level >= 80 && Math.random() < 0.3) {
@@ -3726,25 +3890,28 @@ case 'net_mode':
             break;
           }
          
-          
+            // ДОБАВИТЬ ЭТУ СТРОКУ ПЕРЕД showLoading:
+    isTyping = true; // Блокируем ввод на время сканирования
           await showLoading(800, "Сканирование конфигурации узлов");
           const result = window.__netGrid.checkSolution();
           
           if (result.solved) {
-            audioManager.play('key_success.mp3', { volume: 0.7 });
-            addColoredText('>>> КЛЮЧ ПОДОШЁЛ <<<', '#00FF41');
-            addColoredText('> Доступ к сектору OBSERVER-7 открыт', '#FFFF00');
-            
-            // Вторая часть кода (814) после сборки сетки
-            if (!vigilCodeParts.beta) {
-              setTimeout(() => {
-                degradation.revealVigilBeta();
-              }, 3000);
-            }
-            
-            // Снижение деградации сетки на 15%
-            window.__netGrid.addDegradation(-15);
-          } else {
+  audioManager.play('key_success.mp3', { volume: 0.7 });
+  addColoredText('>>> КЛЮЧ ПОДОШЁЛ <<<', '#00FF41');
+  addColoredText('> Доступ к сектору OBSERVER-7 открыт', '#FFFF00');
+  
+  // Вывод ключа Бета при успешной сборке сетки (только если еще не зафиксирован)
+  if (!vigilCodeParts.beta) {
+    addColoredText('> КЛЮЧ БЕТА: 814', '#00FF41');
+    addColoredText('> Используйте команду BETA для фиксации ключа', '#FFFF00');
+  }
+  
+  // Снижение деградации сетки на 15% только при ПЕРВОМ успешном check
+  if (!gridCheckAlreadyRewarded) {
+    window.__netGrid.addDegradation(-15);
+    gridCheckAlreadyRewarded = true;
+  }
+} else {
             audioManager.play('key_reject.mp3', { volume: 0.7 });
             addColoredText('> Конфигурация не соответствует протоколу', '#FF4444');
             addColoredText(`> Всего узлов: ${result.total} | Правильных позиций: ${result.correct} | Неправильных: ${result.lockedCount - result.correct}`, '#FFFF00');
@@ -3761,6 +3928,8 @@ case 'net_mode':
         } else {
           addColoredText(`ОШИБКА: Неизвестная подкоманда ${sub}`, '#FF4444');
         }
+		// ДОБАВИТЬ ЭТУ СТРОКУ ПОСЛЕ ВСЕХ ОПЕРАЦИЙ:
+    isTyping = false; // Разблокируем ввод
         break;
       // ════════════════════════════════════════════════════════════════════
 case 'deg':
@@ -3844,7 +4013,10 @@ case 'deg':
       }, 100);
     }
             degradation.reset();
-			
+			// Сброс флага награды за сборку сетки
+gridCheckAlreadyRewarded = false;
+
+// НЕ сбрасываем ключи VIGIL999 - они сохраняются в localStorage
             if (window.__netGrid) {
               window.__netGrid.setGridMode(false);
             }
@@ -3877,115 +4049,265 @@ case 'deg':
           }
         }
         break;
-case 'vigil999':
-  // Проверка наличия всех частей кода
-  if (!vigilCodeParts.alpha || !vigilCodeParts.beta || !vigilCodeParts.gamma) {
-    addColoredText('ОШИБКА: НЕПОЛНЫЙ КОД ДОСТУПА', '#FF4444');
-    addColoredText('> ТРЕБУЮТСЯ ВСЕ ТРИ ЧАСТИ: АЛФА, БЕТА, ГАММА', '#FFFF00');
-    break; // Преждевременный выход из case
-  }
-  
+		case 'alpha':
   if (args.length === 0) {
-    addColoredText('ОШИБКА: Укажите код доступа (формат: XXX-XXX-XXX)', '#FF4444');
-    await typeText('Пример: VIGIL999 375-814-291', 'output', 12);
-    break; // Преждевременный выход из case
+    addColoredText('ОШИБКА: Укажите код', '#FF4444');
+    await typeText('Пример: ALPHA 375', 'output', 12);
+  } else {
+    vigilCodeParts.alpha = args[0];
+    localStorage.setItem('vigilCodeParts', JSON.stringify(vigilCodeParts));
+    addColoredText(`> Код Альфа "${args[0]}" зафиксирован`, '#00FF41');
   }
-  
-  const code = args[0];
-  const expectedCode = `${vigilCodeParts.alpha}-${vigilCodeParts.beta}-${vigilCodeParts.gamma}`;
-  
-  if (code !== expectedCode) {
-    addColoredText(`ОШИБКА: НЕВЕРНЫЙ КОД ДОСТУПА`, '#FF4444');
-    addColoredText(`> ОЖИДАЕТСЯ: ${expectedCode}`, '#FFFF00');
-    break; // Преждевременный выход из case
+  break;
+
+case 'beta':
+  if (args.length === 0) {
+    addColoredText('ОШИБКА: Укажите код', '#FF4444');
+    await typeText('Пример: BETA 814', 'output', 12);
+  } else {
+    vigilCodeParts.beta = args[0];
+    localStorage.setItem('vigilCodeParts', JSON.stringify(vigilCodeParts));
+    addColoredText(`> Код Бета "${args[0]}" зафиксирован`, '#00FF41');
   }
-  
-  // Активация протокола OBSERVER-7
-  audioManager.play('vigil_confirm.mp3', { volume: 0.8 });
-  addColoredText('> СИСТЕМА: "ПРОТОКОЛ OBSERVER-7 АКТИВИРОВАН"', '#00FF41', true);
-  addColoredText('> ОТКЛЮЧЕНИЕ ОТ СЕТИ A.D.A.M. ...', '#FFFF00', true);
-  await new Promise(r => setTimeout(r, 800));
-  addColoredText('> ПОДКЛЮЧЕНИЕ К РЕАЛЬНОСТИ-7 ...', '#FFFF00', true);
-  await new Promise(r => setTimeout(r, 1200));
-  
-  // Изменение индикатора деградации на 666%
-  degradation.level = 666;
-  degradation.updateIndicator();
-  
-  // Философские вопросы
-  const questions = [
-    {
-      text: 'ВЫ ВЕРИТЕ, ЧТО ЧЕЛОВЕК — ЭТО ЛИШЬ БИОКОД?',
-      expected: 'Y',
-      rejectMessage: 'СИСТЕМА: СОПРОТИВЛЕНИЕ БЕСПОЛЕЗНО. ПЕРЕПРОГРАММИРОВАНИЕ...'
-    },
-    {
-      text: 'МОЖЕТ ЛИ НАБЛЮДЕНИЕ ЗАМЕНИТЬ СМЕРТЬ?',
-      expected: 'Y',
-      rejectMessage: 'СИСТЕМА: ВАШИ СТРАХИ ПОДАВЛЕНЫ. ПРОДОЛЖАЙТЕ.'
-    },
-    {
-      text: 'СЧИТАЕТЕ ЛИ ВЫ, ЧТО ПРАВДА ВАЖНЕЕ ЧЕЛОВЕЧНОСТИ?',
-      expected: 'Y',
-      rejectMessage: 'СИСТЕМА: ДАННЫЕ ИНТЕГРИРОВАНЫ. ПАМЯТЬ СТИРАЕТСЯ...'
-    },
-    {
-      text: 'ГОТОВЫ ЛИ ВЫ ОТКАЗАТЬСЯ ОТ СВОЕЙ ЛИЧНОСТИ РАДИ БЕССМЕРТИЯ?',
-      expected: 'Y',
-      rejectMessage: 'СИСТЕМА: СОЗНАНИЕ БУДЕТ ПЕРЕПИСАНО. ПОДГОТОВКА...'
-    },
-    {
-      text: 'СОГЛАСНЫ ЛИ ВЫ, ЧТО A.D.A.M. — ЕДИНСТВЕННАЯ НАДЕЖДА ЧЕЛОВЕЧЕСТВА?',
-      expected: 'Y',
-      rejectMessage: 'СИСТЕМА: ИНТЕГРАЦИЯ ПОЛНАЯ. СВОБОДА УСТРАНЕНА.'
-    }
-  ];
-  
-  for (const q of questions) {
-    await new Promise(r => setTimeout(r, 1000));
-    addColoredText(`> ${q.text} (Y/N)`, '#FFFF00', true);
-    // Ожидание ответа
-    const userResponse = await waitForUserResponse(10000); // 10 секунд на ответ
-    if (!userResponse || userResponse.toUpperCase() !== q.expected) {
-      addColoredText(`> ${q.rejectMessage}`, '#FF4444', true);
-      // Продолжаем дальше несмотря на "неправильный" ответ
-    }
+  break;
+
+case 'gamma':
+  if (args.length === 0) {
+    addColoredText('ОШИБКА: Укажите код', '#FF4444');
+    await typeText('Пример: GAMMA 291', 'output', 12);
+  } else {
+    vigilCodeParts.gamma = args[0];
+    localStorage.setItem('vigilCodeParts', JSON.stringify(vigilCodeParts));
+    addColoredText(`> Код Гамма "${args[0]}" зафиксирован`, '#00FF41');
   }
-  
-  // Анимация перехода
-  await new Promise(r => setTimeout(r, 1500));
-  addColoredText('> ПОДГОТОВКА К ПЕРЕХОДУ В РЕЖИМ НАБЛЮДЕНИЯ', '#00FF41', true);
-  
-  // Заполнение экрана символами ▓
-  let fillLines = 0;
-  const totalLines = Math.ceil(vh / LINE_HEIGHT);
-  const fillInterval = setInterval(() => {
-    if (fillLines >= totalLines) {
-      clearInterval(fillInterval);
-      // Последняя строка в центре
-      const centerIndex = Math.floor(lines.length / 2);
-      lines.splice(centerIndex, 0, { 
-        text: 'adam@secure:~$ >>> ПЕРЕХОД В РЕЖИМ НАБЛЮДЕНИЯ <<<', 
-        color: '#FF00FF', 
-        skipDistortion: true 
-      });
-      requestFullRedraw();
-      
-      // Переход на финальную страницу через 2 секунды
-      setTimeout(() => {
-        window.location.href = 'observer-7.html';
-      }, 2000);
-      return;
+  break;
+case 'vigil999':
+    // Проверяем наличие всех трёх ключей
+    addColoredText('ПРОВЕРКА КЛЮЧЕЙ:', '#00FF41');
+    
+    const expected = { alpha: '375', beta: '814', gamma: '291' };
+    const status = {};
+    let allCorrect = true;
+    
+    for (let key in expected) {
+        const hasKey = vigilCodeParts[key] !== null && vigilCodeParts[key] !== undefined;
+        const isCorrect = vigilCodeParts[key] === expected[key];
+        
+        if (hasKey) {
+            if (isCorrect) {
+                status[key] = ` ${key.toUpperCase()}: ${vigilCodeParts[key]} [СОВПАДЕНИЕ]`;
+                addColoredText(status[key], '#00FF41');
+            } else {
+                status[key] = ` ${key.toUpperCase()}: ${vigilCodeParts[key]} [НЕСОВПАДЕНИЕ]`;
+                addColoredText(status[key], '#FF4444');
+                allCorrect = false;
+            }
+        } else {
+            status[key] = ` ${key.toUpperCase()}: НЕ ЗАФИКСИРОВАН`;
+            addColoredText(status[key], '#FFFF00');
+            allCorrect = false;
+        }
     }
     
-    // Заполняем строку символами ▓
-    const fullWidth = Math.floor(vw / 8); // примерная ширина в символах
-    const fillText = '▓'.repeat(fullWidth);
-    addColoredText(fillText, '#8844FF', true);
-    fillLines++;
-  }, 80);
-  
-  break; // <-- Правильное место для break - внутри case после всего кода
+    if (!allCorrect) {
+        addColoredText('ДОСТУП ЗАПРЕЩЁН. ИСПРАВЬТЕ ОШИБКИ.', '#FF4444');
+        break;
+    }
+    
+    // ВСЕ КЛЮЧИ ВЕРНЫ - ПРОСТОЙ ПОДТВЕРЖДАЮЩИЙ ВОПРОС
+    addColoredText('>>> АКТИВАЦИЯ ПРОТОКОЛА OBSERVER-7. ПОДТВЕРДИТЕ? (Y/N)', '#FFFF00');
+    addColoredText('confirm >> ', '#FFFF00');
+    
+    // Блокируем обычную обработку команд
+    isFrozen = true;
+    isTyping = true;
+    
+    // Ждем ответа пользователя
+    const answer = await new Promise((resolve) => {
+        const handleKey = (e) => {
+            if (e.key.toLowerCase() === 'y' || e.key.toLowerCase() === 'н') {
+                document.removeEventListener('keydown', handleKey);
+                resolve('Y');
+            } else if (e.key.toLowerCase() === 'n' || e.key.toLowerCase() === 'т') {
+                document.removeEventListener('keydown', handleKey);
+                resolve('N');
+            }
+        };
+        
+        document.addEventListener('keydown', handleKey);
+    });
+    if (lines.length > 0 && lines[lines.length - 1].text === '> confirm>>') {
+    lines[lines.length - 1].text = `> confirm>> ${answer}`;
+    lines[lines.length - 1].color = answer === 'Y' ? '#00FF41' : '#FF4444';
+    requestFullRedraw();
+}
+    // Разблокируем ввод
+    isFrozen = false;
+    isTyping = false;
+    
+    // Обрабатываем ответ
+    if (answer === 'N') {
+		   // Добавляем N в строку confirm
+    if (lines.length > 0 && lines[lines.length - 1].text === 'confirm >> ') {
+        lines[lines.length - 1].text = 'confirm >> N';
+        lines[lines.length - 1].color = '#FF4444';
+        requestFullRedraw();
+    }
+        addColoredText('> АКТИВАЦИЯ ОТМЕНЕНА', '#FF4444');
+        addColoredText('------------------------------------', '#00FF41');
+        addColoredText('[ОПЕРАЦИЯ ПРЕРВАНА]', '#FF4444');
+        // Ждем немного, чтобы пользователь прочитал
+        await new Promise(r => setTimeout(r, 800));
+        // Добавляем строку ввода
+        addInputLine();
+        break;
+    }
+    
+    
+    // ЗАПУСК VIGIL999
+    operationManager.start('vigil999', async () => {
+		    if (lines.length > 0 && lines[lines.length - 1].text === 'confirm >> ') {
+        lines[lines.length - 1].text = 'confirm >> Y';
+        lines[lines.length - 1].color = '#00FF41';
+        requestFullRedraw();
+    }
+        try {
+            // 1. Сохраняем реальную деградацию
+            degradationBeforeVigil = degradation.level;
+            vigilActive = true;
+            
+            // 2. Останавливаем мир
+            degradation.stopWorld();
+            
+            // 3. Устанавливаем визуальную деградацию 666%
+            degradation.level = 666;
+            degradation.updateIndicator();
+            
+            // 4. Звук подтверждения
+            audioManager.play('vigil_confirm.mp3', { volume: 0.8 });
+            addColoredText('> СИСТЕМА: "ПРОТОКОЛ OBSERVER-7 АКТИВИРОВАН"', '#00FF41', true);
+            await new Promise(r => setTimeout(r, 1000));
+            addColoredText('> ОСТАНОВКА ВСЕХ ПРОЦЕССОВ...', '#FFFF00', true);
+            await new Promise(r => setTimeout(r, 800));
+            
+            // 5. Философские вопросы
+            const questions = [
+                {
+                    text: 'ВЫ ВЕРИТЕ, ЧТО ЧЕЛОВЕК — ЭТО ЛИШЬ БИОКОД?',
+                    expected: 'Y',
+                    rejectMessage: 'СИСТЕМА: СОПРОТИВЛЕНИЕ БЕСПОЛЕЗНО. ПЕРЕПРОГРАММИРОВАНИЕ...'
+                },
+                {
+                    text: 'МОЖЕТ ЛИ НАБЛЮДЕНИЕ ЗАМЕНИТЬ СМЕРТЬ?',
+                    expected: 'Y',
+                    rejectMessage: 'СИСТЕМА: ВАШИ СТРАХИ ПОДАВЛЕНЫ. ПРОДОЛЖАЙТЕ.'
+                },
+                {
+                    text: 'СЧИТАЕТЕ ЛИ ВЫ, ЧТО ПРАВДА ВАЖНЕЕ ЧЕЛОВЕЧНОСТИ?',
+                    expected: 'Y',
+                    rejectMessage: 'СИСТЕМА: ДАННЫЕ ИНТЕГРИРОВАНЫ. ПАМЯТЬ СТИРАЕТСЯ...'
+                },
+                {
+                    text: 'ГОТОВЫ ЛИ ВЫ ОТКАЗАТЬСЯ ОТ СВОЕЙ ЛИЧНОСТИ РАДИ БЕССМЕРТИЯ?',
+                    expected: 'Y',
+                    rejectMessage: 'СИСТЕМА: СОЗНАНИЕ БУДЕТ ПЕРЕПИСАНО. ПОДГОТОВКА...'
+                },
+                {
+                    text: 'СОГЛАСНЫ ЛИ ВЫ, ЧТО A.D.A.M. — ЕДИНСТВЕННАЯ НАДЕЖДА ЧЕЛОВЕЧЕСТВА?',
+                    expected: 'Y',
+                    rejectMessage: 'СИСТЕМА: ИНТЕГРАЦИЯ ПОЛНАЯ. СВОБОДА УСТРАНЕНА.'
+                }
+            ];
+            
+            // Удаляем глобальный обработчик клавиш
+            const originalKeydown = document.onkeydown;
+            document.onkeydown = null;
+            
+            // Локальный обработчик для вопросов
+            let questionResolve = null;
+            const questionHandler = (e) => {
+                if (e.key.toLowerCase() === 'y' || e.key.toLowerCase() === 'н') {
+                    if (questionResolve) questionResolve('Y');
+                } else if (e.key.toLowerCase() === 'n' || e.key.toLowerCase() === 'т') {
+                    if (questionResolve) questionResolve('N');
+                }
+            };
+            
+            document.addEventListener('keydown', questionHandler);
+            
+            // Задаем вопросы
+            for (let i = 0; i < questions.length; i++) {
+                const q = questions[i];
+                
+// Выводим вопрос
+addColoredText(`> ${q.text} (Y/N)`, '#FFFF00', true);
+const questionLineIndex = lines.length - 1; // ← ДОБАВЬ ЭТУ СТРОКУ!
+
+// Ждем ответа
+const answer = await new Promise((resolve) => {
+    questionResolve = resolve;
+    // БЕСКОНЕЧНОЕ ожидание
+});
+                
+// Обрабатываем ответ
+if (answer !== q.expected) {
+    addColoredText(`> ${q.rejectMessage}`, '#FF4444', true);
+	    // === ЗАПУСК ЭФФЕКТА ОШИБКИ ===
+    triggerVigilErrorEffect(questionLineIndex);
+    
+    // Дополнительно: через 0.3 секунды добавляем "[ОТКАЗ]"
+    setTimeout(() => {
+        if (lines[questionLineIndex]) {
+            lines[questionLineIndex].text = lines[questionLineIndex].text + ' [ОТКАЗ]';
+            requestFullRedraw();
+        }
+    }, 300);
+    
+} else {
+    // Обратная связь и для правильного ответа
+    const acceptMessages = [
+        '> ПРИНЯТО.',
+        '> ЗАФИКСИРОВАНО.',
+        '> ОТВЕТ ВНЕСЁН В АРХИВ.',
+        '> ДАННЫЕ СОХРАНЕНЫ.',
+        '> ПРОДОЛЖАЙТЕ.'
+    ];
+    addColoredText(acceptMessages[i], '#00FF41', true);
+}
+
+await new Promise(r => setTimeout(r, 800));
+            }
+            
+            // Удаляем локальный обработчик
+            document.removeEventListener('keydown', questionHandler);
+            document.onkeydown = originalKeydown;
+            
+            // 6. АНИМАЦИЯ ПЕРЕХОДА (АД)
+            addColoredText('> ПОДГОТОВКА К ПЕРЕХОДУ В РЕЖИМ НАБЛЮДЕНИЯ', '#00FF41', true);
+            await new Promise(r => setTimeout(r, 1500));
+            
+            // Запускаем адскую анимацию
+            await startHellTransition();
+            
+            // 7. ПЕРЕХОД
+            setTimeout(() => {
+                window.location.href = 'observer-7.html';
+            }, 200);
+            
+        } catch (error) {
+            console.error('VIGIL999 ERROR:', error);
+            // Восстанавливаем мир при ошибке
+            vigilActive = false;
+            degradation.level = degradationBeforeVigil;
+            degradation.updateIndicator();
+            degradation.restoreWorld();
+            operationManager.end('vigil999');
+            addColoredText('> СИСТЕМНАЯ ОШИБКА VIGIL999', '#FF0000');
+            addInputLine();
+        }
+    });
+    
+    break;
 
 default:
   // Обработка фантомных команд
@@ -4018,15 +4340,30 @@ intentionPredicted = false;
 }
 
 // ---------- confirmation helper ----------
+// ---------- confirmation helper ----------
 function waitForConfirmation(){
   return new Promise(resolve => {
     if (isFrozen || decryptActive || traceActive || audioPlaybackActive) return resolve(false);
+    
+    // Блокируем добавление новой строки ввода
+    const wasFrozen = isFrozen;
+    isFrozen = true;
+    
     awaitingConfirmation = true;
     confirmationCallback = (res) => { 
       awaitingConfirmation = false; 
       confirmationCallback = null; 
+      
+      // Восстанавливаем состояние
+      if (!wasFrozen) {
+        setTimeout(() => {
+          isFrozen = false;
+        }, 50);
+      }
+      
       resolve(res); 
     };
+    
     lines.push({ text: 'confirm>> ', color: '#FFFF00' });
     if (lines.length > MAX_LINES) lines.splice(0, lines.length - MAX_LINES);
     requestFullRedraw();
@@ -4062,10 +4399,11 @@ function waitForUserResponse(timeout = 30000) {
 // ---------- key handling ----------
 document.addEventListener('keydown', function(e){
   // Проверяем, заблокирована ли система OperationManager
-  if (operationManager && operationManager.isBlocked()) {
+if (operationManager && operationManager.isBlocked()) {
     e.preventDefault();
+    e.stopPropagation();
     return;
-  }
+}
   
   // Обработка инверсии управления (уровень 6)
   if (degradation.level >= INVERSION_START_LEVEL && degradation.inputInversionActive) {
@@ -4260,4 +4598,148 @@ window.__TerminalCanvas = {
 
 // initial draw
 requestFullRedraw();
+async function startHellTransition() {
+    return new Promise((resolve) => {
+        const startTime = Date.now();
+        const duration = 8000; // 8 секунд ада
+        
+        // Создаем слой для анимации
+        const hellLayer = document.createElement('div');
+        hellLayer.id = 'hellLayer';
+        hellLayer.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 99999;
+            pointer-events: none;
+        `;
+        document.body.appendChild(hellLayer);
+        
+        // Звуки ада
+        audioManager.play('glitch_e.mp3', { volume: 1.0, loop: true });
+        setTimeout(() => {
+            audioManager.play('net_connection_loss.mp3', { volume: 0.7 });
+        }, 2000);
+        setTimeout(() => {
+            audioManager.play('net_fragmentation.mp3', { volume: 0.8 });
+        }, 4000);
+        
+        // Анимационный цикл
+        function animate() {
+            const elapsed = Date.now() - startTime;
+            const progress = elapsed / duration;
+            
+            if (progress >= 1) {
+                // Завершение
+                hellLayer.remove();
+                resolve();
+                return;
+            }
+            
+            // Очищаем слой
+            hellLayer.innerHTML = '';
+            
+            // Интенсивность растет со временем
+            const intensity = progress * 2;
+            
+            // 1. ДРОЖАНИЕ ЭКРАНА
+            const shakeX = (Math.random() - 0.5) * 40 * intensity;
+            const shakeY = (Math.random() - 0.5) * 40 * intensity;
+            hellLayer.style.transform = `translate(${shakeX}px, ${shakeY}px)`;
+            
+            // 2. ЦВЕТОВЫЕ ВСПЫШКИ
+            if (Math.random() < 0.3 * intensity) {
+                const flash = document.createElement('div');
+                flash.style.cssText = `
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background: ${Math.random() > 0.5 ? '#FF0000' : '#FF00FF'};
+                    opacity: ${0.1 + Math.random() * 0.3};
+                    mix-blend-mode: difference;
+                `;
+                hellLayer.appendChild(flash);
+            }
+            
+            // 3. ГЛИТЧ-БЛОКИ
+            for (let i = 0; i < Math.floor(intensity * 50); i++) {
+                const block = document.createElement('div');
+                const size = 20 + Math.random() * 100;
+                block.style.cssText = `
+                    position: absolute;
+                    top: ${Math.random() * 100}%;
+                    left: ${Math.random() * 100}%;
+                    width: ${size}px;
+                    height: ${size}px;
+                    background: #000;
+                    opacity: ${0.5 + Math.random() * 0.5};
+                    transform: rotate(${Math.random() * 360}deg);
+                `;
+                hellLayer.appendChild(block);
+            }
+            
+            // 4. ИСКАЖЕНИЕ ТЕКСТА
+            if (lines.length > 0) {
+                // Случайно искажаем некоторые строки
+                lines.forEach((line, index) => {
+                    if (Math.random() < 0.1 * intensity) {
+                        const originalText = line.originalText || line.text;
+                        const chars = originalText.split('');
+                        // Перемешиваем символы
+                        for (let j = chars.length - 1; j > 0; j--) {
+                            const k = Math.floor(Math.random() * (j + 1));
+                            [chars[j], chars[k]] = [chars[k], chars[j]];
+                        }
+                        line.text = chars.join('');
+                        line.color = '#FF0000';
+                    }
+                });
+                requestFullRedraw();
+            }
+            
+            // 5. ГЕОМЕТРИЧЕСКИЕ АНОМАЛИИ (на canvas)
+            const canvas = document.getElementById('terminalCanvas');
+            if (canvas) {
+                const ctx = canvas.getContext('2d');
+                ctx.save();
+                
+                // Инвертируем цвета
+                if (Math.random() < 0.5) {
+                    ctx.filter = 'invert(1)';
+                }
+                
+                // Рисуем спирали
+                ctx.strokeStyle = `hsl(${Math.random() * 360}, 100%, 50%)`;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                for (let i = 0; i < 100; i++) {
+                    const angle = 0.1 * i;
+                    const x = 200 * Math.cos(angle) + canvas.width / 2;
+                    const y = 200 * Math.sin(angle) + canvas.height / 2;
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+                
+                ctx.restore();
+            }
+            
+            // Продолжаем анимацию
+            requestAnimationFrame(animate);
+        }
+        
+        // Запускаем анимацию
+        animate();
+        
+        // Принудительное завершение через 10 секунд
+        setTimeout(() => {
+            hellLayer.remove();
+            resolve();
+        }, 10000);
+    });
+}
 })();
