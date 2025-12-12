@@ -624,6 +624,18 @@ const glitchEngine = new GlitchTextEngine();
     }
     
     play(file, options = {}) {
+		  // 🔴 ЕСЛИ ЭТО GLITCH_E - ПРИГЛУШАЕМ AMBIENT
+  if (file === 'glitch_e.mp3' && ambientSound && isAmbientPlaying) {
+    // Быстро убавляем громкость до 5%
+    ambientSound.volume = 0;
+    
+    // Через 7 секунд возвращаем нормальную громкость
+    setTimeout(() => {
+      if (ambientSound && isAmbientPlaying) {
+        ambientSound.volume = ambientVolume;
+      }
+    }, 8200);
+  }
       try {
         const paths = [
           `sounds/${file}`,
@@ -685,7 +697,172 @@ const glitchEngine = new GlitchTextEngine();
   }
   
   const audioManager = new AudioManager();
+  // ---------- Web Audio API для бесшовного ambient ----------
+class AmbientWebAudio {
+  constructor() {
+    this.audioContext = null;
+    this.audioBuffer = null;
+    this.sourceNode = null;
+    this.gainNode = null;
+    this.isPlaying = false;
+    this.volume = 0.12;
+    this.isLoading = false;
+    
+    this.init();
+  }
   
+  init() {
+    try {
+      // Создаём контекст Web Audio API
+      this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      console.log('[Ambient] Web Audio API контекст создан');
+      
+      // Загружаем аудиофайл
+      this.loadAmbientSound();
+      
+      // Автозапуск при взаимодействии пользователя (обход ограничений браузера)
+      this.setupAutoplay();
+      
+    } catch (error) {
+      console.error('[Ambient] Web Audio API не поддерживается:', error);
+    }
+  }
+  
+  loadAmbientSound() {
+    if (this.isLoading) return;
+    this.isLoading = true;
+    
+    fetch('sounds/ambient_terminal.mp3')
+      .then(response => {
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        return response.arrayBuffer();
+      })
+      .then(arrayBuffer => this.audioContext.decodeAudioData(arrayBuffer))
+      .then(buffer => {
+        this.audioBuffer = buffer;
+        console.log('[Ambient] Звук загружен, длина:', buffer.duration, 'секунд');
+        this.startLoop();
+        this.isLoading = false;
+      })
+      .catch(error => {
+        console.error('[Ambient] Ошибка загрузки звука:', error);
+        this.isLoading = false;
+      });
+  }
+  
+  startLoop() {
+    if (!this.audioContext || !this.audioBuffer || this.isPlaying) return;
+    
+    try {
+      // Останавливаем предыдущий источник, если есть
+      if (this.sourceNode) {
+        this.sourceNode.stop();
+        this.sourceNode.disconnect();
+      }
+      
+      // Создаём новый источник
+      this.sourceNode = this.audioContext.createBufferSource();
+      this.sourceNode.buffer = this.audioBuffer;
+      this.sourceNode.loop = true; // ВКЛЮЧАЕМ ЗАЦИКЛИВАНИЕ НА УРОВНЕ API
+      
+      // Создаём узел громкости для контроля
+      if (!this.gainNode) {
+        this.gainNode = this.audioContext.createGain();
+        this.gainNode.gain.value = this.volume;
+      }
+      
+      // Подключаем: источник → громкость → выход
+      this.sourceNode.connect(this.gainNode);
+      this.gainNode.connect(this.audioContext.destination);
+      
+      // Запускаем воспроизведение
+      this.sourceNode.start(0);
+      this.isPlaying = true;
+      
+      console.log('[Ambient] Бесшовный цикл запущен');
+      
+    } catch (error) {
+      console.error('[Ambient] Ошибка запуска цикла:', error);
+      this.isPlaying = false;
+    }
+  }
+  
+  // Приглушить ambient при glitch_e
+  muteForGlitch(duration = 7000) {
+    if (!this.gainNode || !this.isPlaying) return;
+    
+    const currentTime = this.audioContext.currentTime;
+    
+    // Плавно убавляем громкость до 5% за 0.3 секунды
+    this.gainNode.gain.cancelScheduledValues(currentTime);
+    this.gainNode.gain.setValueAtTime(this.volume, currentTime);
+    this.gainNode.gain.exponentialRampToValueAtTime(0.05, currentTime + 0.3);
+    
+    // Возвращаем громкость через указанное время (минус 1 секунда на плавное восстановление)
+    setTimeout(() => {
+      if (this.gainNode && this.isPlaying) {
+        const resumeTime = this.audioContext.currentTime;
+        this.gainNode.gain.cancelScheduledValues(resumeTime);
+        this.gainNode.gain.setValueAtTime(0.05, resumeTime);
+        this.gainNode.gain.exponentialRampToValueAtTime(this.volume, resumeTime + 1.0);
+      }
+    }, duration - 1000);
+  }
+  
+  // Восстановить громкость
+  restoreVolume() {
+    if (!this.gainNode || !this.isPlaying) return;
+    
+    const currentTime = this.audioContext.currentTime;
+    this.gainNode.gain.cancelScheduledValues(currentTime);
+    this.gainNode.gain.setValueAtTime(this.gainNode.gain.value, currentTime);
+    this.gainNode.gain.exponentialRampToValueAtTime(this.volume, currentTime + 1.5);
+  }
+  
+  // Настройка автозапуска при взаимодействии
+  setupAutoplay() {
+    const startOnInteraction = () => {
+      if (this.audioContext.state === 'suspended') {
+        this.audioContext.resume().then(() => {
+          console.log('[Ambient] Контекст возобновлён после взаимодействия');
+          if (!this.isPlaying && this.audioBuffer) {
+            this.startLoop();
+          }
+        });
+      }
+      
+      // Убираем обработчики после первого успешного взаимодействия
+      document.removeEventListener('click', startOnInteraction);
+      document.removeEventListener('keydown', startOnInteraction);
+      document.removeEventListener('touchstart', startOnInteraction);
+    };
+    
+    document.addEventListener('click', startOnInteraction);
+    document.addEventListener('keydown', startOnInteraction);
+    document.addEventListener('touchstart', startOnInteraction);
+  }
+  
+  // Остановить полностью (при переходе на другую страницу)
+  stop() {
+    if (this.sourceNode) {
+      this.sourceNode.stop();
+      this.sourceNode.disconnect();
+      this.sourceNode = null;
+    }
+    this.isPlaying = false;
+  }
+}
+
+// Создаём глобальный экземпляр
+const ambientWebAudio = new AmbientWebAudio();
+
+// Принудительный перезапуск, если звук пропал (на всякий случай)
+setInterval(() => {
+  if (ambientWebAudio && ambientWebAudio.isPlaying === false && ambientWebAudio.audioBuffer) {
+    console.log('[Ambient] Перезапускаем упавший звук...');
+    ambientWebAudio.startLoop();
+  }
+}, 30000); // Проверяем каждые 30 секунд
   // ---------- sizing ----------
   let vw = 0, vh = 0;
   
@@ -2083,7 +2260,7 @@ function pushLine(text, color, skipDistortion = false, _ephemeral = false, _isIn
   
 // ========== ОБНОВЛЕННАЯ addColoredText (ЭТАП 2) ==========
 function addColoredText(text, color = '#00FF41', skipDistortion = false) {
-  if (isFrozen || decryptActive || traceActive || audioPlaybackActive) return;
+  if (isFrozen || decryptActive || traceActive || audioPlaybackActive) return; // ← ЗДЕСЬ!
   pushLine(text, color, skipDistortion);
   scrollOffset = 0;
   requestFullRedraw();
@@ -2770,13 +2947,20 @@ decryptInputBuffer = '';
 updateDecryptDisplay();
       
       // === ПРОВЕРКА ПОПЫТОК ===
-      if (decryptAttempts <= 0) {
-        endDecryptGame(false);
-      } else {
-        addColoredTextForDecrypt(`> ПОПЫТКИ: ${decryptAttempts}`, '#FFFF00');
-        decryptInputBuffer = '';
-        updateDecryptDisplay();
-      }
+if (decryptAttempts <= 0) {
+  // Удаляем строку "ВВЕДИТЕ КОД" перед завершением
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (lines[i].text && lines[i].text.startsWith('> ВВЕДИТЕ КОД:')) {
+      lines.splice(i, 1);
+      break;
+    }
+  }
+  endDecryptGame(false);
+} else {
+  addColoredTextForDecrypt(`> ПОПЫТКИ: ${decryptAttempts}`, '#FFFF00');
+  decryptInputBuffer = '';
+  updateDecryptDisplay();
+}
     }
   }
 }
@@ -2940,9 +3124,7 @@ if (decryptFileId === 'CORE') {
     // Снижение деградации
     degradation.addDegradation(-5);
     
-    if (decryptFileId === '0XE09' && !vigilCodeParts.alpha) {
-      degradation.revealVigilAlpha();
-    }
+	
   } else {
     audioManager.play('decrypt_failure.mp3', { volume: 0.7 });
     addColoredTextForDecrypt('> СИСТЕМА: ДОСТУП ЗАПРЕЩЕН', '#FF4444');
@@ -3950,52 +4132,53 @@ case 'deg':
     }
   }
   break;
-      case 'reset':
-        if (falseResetActive) {
-          addColoredText('ОШИБКА: ПРОТОКОЛ СБРОСА УЖЕ АКТИВЕН', '#FF4444');
-          return;
-        }
+case 'reset':
+  if (falseResetActive) {
+    addColoredText('ОШИБКА: ПРОТОКОЛ СБРОСА УЖЕ АКТИВЕН', '#FF4444');
+    return;
+  }
 
-        await typeText('[ПРОТОКОЛ СБРОСА СИСТЕМЫ]', 'output', 12);
-        addColoredText('------------------------------------', '#00FF41');
-        addColoredText('ВНИМАНИЕ: операция приведёт к очистке активной сессии.', '#FFFF00');
-        await typeText('> Подтвердить сброс? (Y/N)', 'output', 12);
-        addColoredText('------------------------------------', '#00FF41');
-        {
-          const resetConfirmed = await waitForConfirmation();
-          if (resetConfirmed) {
-			    operationManager.start('reset');
-            addColoredText('> Y', '#00FF41');
-            
-            // Плавная анимация сброса
-            lines.length = 0;
-            addColoredText('> ЗАВЕРШЕНИЕ АКТИВНЫХ МОДУЛЕЙ [          ]', '#FFFF00');
-            await new Promise(r=>setTimeout(r,400));
-            lines[lines.length - 1].text = '> ЗАВЕРШЕНИЕ АКТИВНЫХ МОДУЛЕЙ [||||      ]';
-            requestFullRedraw();
-            await new Promise(r=>setTimeout(r,400));
-            lines[lines.length - 1].text = '> ЗАВЕРШЕНИЕ АКТИВНЫХ МОДУЛЕЙ [||||||||||]';
-            requestFullRedraw();
-            
-            addColoredText('> ПЕРЕЗАПУСК ИНТЕРФЕЙСА [          ]', '#FFFF00');
-            await new Promise(r=>setTimeout(r,400));
-            lines[lines.length - 1].text = '> ПЕРЕЗАПУСК ИНТЕРФЕЙСА [||||      ]';
-            requestFullRedraw();
-            await new Promise(r=>setTimeout(r,400));
-            lines[lines.length - 1].text = '> ПЕРЕЗАПУСК ИНТЕРФЕЙСА [||||||||||]';
-            requestFullRedraw();
-            
-            addColoredText('> ВОССТАНОВЛЕНИЕ БАЗОВОГО СОСТОЯНИЯ [          ]', '#FFFF00');
-            await new Promise(r=>setTimeout(r,400));
-            lines[lines.length - 1].text = '> ВОССТАНОВЛЕНИЕ БАЗОВОГО СОСТОЯНИЯ [||||      ]';
-            requestFullRedraw();
-            await new Promise(r=>setTimeout(r,400));
-            lines[lines.length - 1].text = '> ВОССТАНОВЛЕНИЕ БАЗОВОГО СОСТОЯНИЯ [||||||||||]';
-            requestFullRedraw();
+  await typeText('[ПРОТОКОЛ СБРОСА СИСТЕМЫ]', 'output', 12);
+  addColoredText('------------------------------------', '#00FF41');
+  addColoredText('ВНИМАНИЕ: операция приведёт к очистке активной сессии.', '#FFFF00');
+  await typeText('> Подтвердить сброс? (Y/N)', 'output', 12);
+  addColoredText('------------------------------------', '#00FF41');
+  {
+    const resetConfirmed = await waitForConfirmation();
+    if (resetConfirmed) {
+      // === НАЧАЛО СБРОСА ===
+      operationManager.start('reset');
+      pushLine('> Y', '#00FF41', true); // ← pushLine вместо addColoredText
+
+      // Плавная анимация сброса
+      lines.length = 0;
+      pushLine('> ЗАВЕРШЕНИЕ АКТИВНЫХ МОДУЛЕЙ [          ]', '#FFFF00', true); // ← pushLine
+      await new Promise(r=>setTimeout(r,400));
+      lines[lines.length - 1].text = '> ЗАВЕРШЕНИЕ АКТИВНЫХ МОДУЛЕЙ [||||      ]';
+      requestFullRedraw();
+      await new Promise(r=>setTimeout(r,400));
+      lines[lines.length - 1].text = '> ЗАВЕРШЕНИЕ АКТИВНЫХ МОДУЛЕЙ [||||||||||]';
+      requestFullRedraw();
+
+      pushLine('> ПЕРЕЗАПУСК ИНТЕРФЕЙСА [          ]', '#FFFF00', true); // ← pushLine
+      await new Promise(r=>setTimeout(r,400));
+      lines[lines.length - 1].text = '> ПЕРЕЗАПУСК ИНТЕРФЕЙСА [||||      ]';
+      requestFullRedraw();
+      await new Promise(r=>setTimeout(r,400));
+      lines[lines.length - 1].text = '> ПЕРЕЗАПУСК ИНТЕРФЕЙСА [||||||||||]';
+      requestFullRedraw();
+
+      pushLine('> ВОССТАНОВЛЕНИЕ БАЗОВОГО СОСТОЯНИЯ [          ]', '#FFFF00', true); // ← pushLine
+      await new Promise(r=>setTimeout(r,400));
+      lines[lines.length - 1].text = '> ВОССТАНОВЛЕНИЕ БАЗОВОГО СОСТОЯНИЯ [||||      ]';
+      requestFullRedraw();
+      await new Promise(r=>setTimeout(r,400));
+      lines[lines.length - 1].text = '> ВОССТАНОВЛЕНИЕ БАЗОВОГО СОСТОЯНИЯ [||||||||||]';
+      requestFullRedraw();
                     window.__netGrid.setSystemDegradation(0);
   window.__netGrid.addDegradation(-100);
-            addColoredText('----------------------------------', '#00FF41');
-            addColoredText('[СИСТЕМА ГОТОВА К РАБОТЕ]', '#00FF41');
+      pushLine('----------------------------------', '#00FF41', true); // ← pushLine
+      pushLine('[СИСТЕМА ГОТОВА К РАБОТЕ]', '#00FF41', true); // ← pushLine
 			        operationManager.end('reset');
 
                 if (window.__netGrid) {
@@ -4601,39 +4784,43 @@ requestFullRedraw();
 async function startHellTransition() {
     return new Promise((resolve) => {
         const startTime = Date.now();
-        const duration = 7000; // 7 секунд
+        const duration = 7000;
         
-        // Создаем основной слой
+        // Размеры окна
+        const windowWidth = window.innerWidth;
+        const windowHeight = window.innerHeight;
+        
+        // 1. Создаём ЧЁРНЫЙ саван (полностью непрозрачный)
         const hellLayer = document.createElement('div');
         hellLayer.id = 'hellLayer';
         hellLayer.style.cssText = `
             position: fixed;
             top: 0;
             left: 0;
-            width: 100%;
-            height: 100%;
+            width: ${windowWidth}px;
+            height: ${windowHeight}px;
+            background: #000000;
             z-index: 99999;
             pointer-events: none;
             overflow: hidden;
         `;
+        document.body.appendChild(hellLayer);
         
-        // Canvas для эффектов
+        // 2. Canvas для эффектов НА саване
         const effectCanvas = document.createElement('canvas');
         const ctx = effectCanvas.getContext('2d');
-        effectCanvas.width = window.innerWidth;
-        effectCanvas.height = window.innerHeight;
+        effectCanvas.width = windowWidth;
+        effectCanvas.height = windowHeight;
         effectCanvas.style.cssText = `
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            opacity: 0;
-            transition: opacity 0.3s;
         `;
         hellLayer.appendChild(effectCanvas);
         
-        // Слой для финальной вспышки (изначально скрыт)
+        // 3. Слой для финальной вспышки
         const flashLayer = document.createElement('div');
         flashLayer.style.cssText = `
             position: absolute;
@@ -4648,12 +4835,11 @@ async function startHellTransition() {
         `;
         hellLayer.appendChild(flashLayer);
         
-        document.body.appendChild(hellLayer);
-        
-        // Скрываем основной терминал сразу
+        // 4. УДАЛЯЕМ ОСНОВНОЙ ТЕРМИНАЛ СРАЗУ
         canvas.style.opacity = '0';
+        canvas.style.display = 'none';
         
-        // Звуки
+        // 5. Звуковая дорожка
         audioManager.play('glitch_e.mp3', { volume: 1.0, loop: true });
         setTimeout(() => {
             audioManager.play('net_connection_loss.mp3', { volume: 0.7 });
@@ -4662,45 +4848,42 @@ async function startHellTransition() {
             audioManager.play('net_fragmentation.mp3', { volume: 0.8 });
         }, 4000);
         
-        // 1. ЭФФЕКТ ПРОВАЛИВАНИЯ СТРОК
-        let lineOffsets = [];
-        function initLineOffsets() {
-            const contentH = window.innerHeight - PADDING * 2;
-            const visibleLines = Math.max(1, Math.floor(contentH / LINE_HEIGHT));
-            const maxScroll = Math.max(0, lines.length - visibleLines);
-            const start = Math.max(0, lines.length - visibleLines - scrollOffset);
-            const end = Math.min(lines.length, start + visibleLines);
-            
-            lineOffsets = [];
-            for (let i = start; i < end; i++) {
-                lineOffsets.push({
-                    y: PADDING + (i - start) * LINE_HEIGHT,
-                    speed: 0.5 + Math.random() * 2,
-                    delay: Math.random() * 0.3,
-                    fallen: false
-                });
-            }
-        }
-        initLineOffsets();
+        // 6. ЭФФЕКТ ПРОВАЛИВАНИЯ (КРАСНЫЕ ПОЛОСЫ, КОТОРЫЕ СТАНОВЯТСЯ ЧЁРНЫМИ)
+        const stripCount = 30;
+        const strips = [];
         
-        // 2. БИНАРНЫЙ ШУМ (символы 0 и 1)
+        for (let i = 0; i < stripCount; i++) {
+            strips.push({
+                y: (i / stripCount) * windowHeight,
+                height: windowHeight / stripCount,
+                speed: 0.8 + Math.random() * 1.5,
+                delay: Math.random() * 0.4,
+                fallen: false,
+                // Начальный цвет - ярко-красный, затем темнеет до чёрного
+                color: '#FF0000',
+                colorProgress: 0
+            });
+        }
+        
+        // 7. БИНАРНЫЙ ШУМ (БЕЛЫЕ ЦИФРЫ НА ЧЁРНОМ ФОНЕ)
         let noiseParticles = [];
+        
         function generateNoise(count) {
             for (let i = 0; i < count; i++) {
                 noiseParticles.push({
-                    x: Math.random() * effectCanvas.width,
-                    y: Math.random() * effectCanvas.height,
+                    x: Math.random() * windowWidth,
+                    y: Math.random() * windowHeight,
                     char: Math.random() > 0.5 ? '0' : '1',
                     speed: 0.1 + Math.random() * 0.5,
                     size: 8 + Math.random() * 16,
-                    opacity: 0.1 + Math.random() * 0.3,
+                    opacity: 0.3 + Math.random() * 0.4,
                     createdAt: Date.now(),
                     lifetime: 2000 + Math.random() * 3000
                 });
             }
         }
         
-        // 3. УЛУЧШЕННЫЕ СИГНАЛЫ ОТКАЗА С ГЛИТЧАМИ
+        // 8. СИГНАЛЫ ОТКАЗА (ЯРКИЕ, КОНТРАСТНЫЕ)
         const errorMessages = [
             'CRITICAL FAILURE',
             'SYSTEM CORRUPTED',
@@ -4718,8 +4901,8 @@ async function startHellTransition() {
             if (Math.random() < 0.08 + progress * 0.15 && errorSignals.length < 4) {
                 const message = errorMessages[Math.floor(Math.random() * errorMessages.length)];
                 errorSignals.push({
-                    x: Math.random() * (effectCanvas.width - 300) + 150,
-                    y: Math.random() * (effectCanvas.height - 60) + 30,
+                    x: Math.random() * (windowWidth - 300) + 150,
+                    y: Math.random() * (windowHeight - 60) + 30,
                     text: message,
                     glitchText: message,
                     opacity: 1.0,
@@ -4757,80 +4940,69 @@ async function startHellTransition() {
             return result.join('');
         }
         
-        // 4. ПРОСТЫЕ ГОРИЗОНТАЛЬНЫЕ ПОЛОСЫ (редкие)
-        let lastStripeTime = 0;
-        
-        // Постепенно показываем canvas с эффектами
-        setTimeout(() => {
-            effectCanvas.style.opacity = '1';
-        }, 100);
-        
-        // Анимационный цикл
+        // 9. Анимационный цикл
         function animate() {
             const elapsed = Date.now() - startTime;
             const progress = Math.min(1, elapsed / duration);
             
+            // Завершение анимации
             if (progress >= 1) {
-                // Плавно затемняем всё перед вспышкой
-                flashLayer.style.transition = 'opacity 0.5s';
-                flashLayer.style.opacity = '1';
+                // Финальная белая вспышка
+                flashLayer.style.transition = 'none';
+                flashLayer.style.background = '#FFFFFF';
+                flashLayer.style.opacity = '0.95';
                 
+                audioManager.play('glitch_error.mp3', { volume: 0.9 });
+                
+                // НЕ УДАЛЯЕМ hellLayer! Оставляем его на месте
+                // Сразу переходим, не показывая терминал
                 setTimeout(() => {
-                    // Белая вспышка
-                    flashLayer.style.background = '#FFFFFF';
-                    flashLayer.style.transition = 'opacity 0.1s';
-                    flashLayer.style.opacity = '0.9';
-                    
-                    audioManager.play('glitch_error.mp3', { volume: 0.9 });
-                    
-                    setTimeout(() => {
-                        flashLayer.style.opacity = '0';
-                        setTimeout(() => {
-                            hellLayer.remove();
-                            canvas.style.opacity = '1'; // Восстанавливаем основной канвас
-                            resolve();
-                        }, 300);
-                    }, 100);
-                }, 500);
+                    resolve(); // Разрешаем Promise для перехода
+                }, 100);
                 
                 return;
             }
             
-            // Очищаем canvas
-            ctx.clearRect(0, 0, effectCanvas.width, effectCanvas.height);
+            // Очищаем canvas (чёрный фон)
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, windowWidth, windowHeight);
             
-            // ========== ЭФФЕКТ 1: ПРОВАЛИВАНИЕ СТРОК ==========
-            const collapseIntensity = Math.min(1, progress * 3);
-            
-            lineOffsets.forEach((line, index) => {
-                if (progress > line.delay) {
-                    const lineProgress = (progress - line.delay) / (1 - line.delay);
-                    const fallDistance = lineProgress * line.speed * 100;
+            // ========== ЭФФЕКТ 1: КРАСНЫЕ ПОЛОСЫ, КОТОРЫЕ ТЕМНЕЮТ ==========
+            strips.forEach((strip) => {
+                if (progress > strip.delay) {
+                    const stripProgress = (progress - strip.delay) / (1 - strip.delay);
+                    const fallDistance = stripProgress * strip.speed * 100;
+                    const currentHeight = Math.min(fallDistance, strip.height);
                     
-                    // Рисуем черный прямоугольник, который "съедает" строку
-                    ctx.fillStyle = '#000';
-                    const fillHeight = Math.min(fallDistance, LINE_HEIGHT);
-                    ctx.fillRect(0, line.y, effectCanvas.width, fillHeight);
+                    // Цвет полосы: от красного к чёрному
+                    strip.colorProgress = stripProgress;
+                    const redValue = Math.floor(255 * (1 - stripProgress));
+                    const color = `rgb(${redValue}, 0, 0)`;
                     
-                    // Когда строка полностью упала
-                    if (fallDistance >= LINE_HEIGHT && !line.fallen) {
-                        line.fallen = true;
+                    // Рисуем полосу
+                    ctx.fillStyle = color;
+                    ctx.fillRect(0, strip.y, windowWidth, currentHeight);
+                    
+                    // Когда полоса полностью упала
+                    if (fallDistance >= strip.height && !strip.fallen) {
+                        strip.fallen = true;
                         generateNoise(8);
                     }
                 }
             });
             
-            // Дополнительное заполнение черным снизу (последние 20%)
+            // Дополнительное заполнение снизу (последние 20%)
             if (progress > 0.8) {
-                const bottomFillHeight = (progress - 0.8) / 0.2 * 100;
+                const bottomProgress = (progress - 0.8) / 0.2;
+                const bottomHeight = bottomProgress * windowHeight * 0.5;
                 ctx.fillStyle = '#000';
-                ctx.fillRect(0, effectCanvas.height - bottomFillHeight, effectCanvas.width, bottomFillHeight);
+                ctx.fillRect(0, windowHeight - bottomHeight, windowWidth, bottomHeight);
             }
             
-            // ========== ЭФФЕКТ 2: БИНАРНЫЙ ШУМ ==========
+            // ========== ЭФФЕКТ 2: БИНАРНЫЙ ШУМ (белые цифры) ==========
             if (progress > 0.2) {
-                if (noiseParticles.length < 250 && Math.random() < 0.3) {
-                    generateNoise(10);
+                if (noiseParticles.length < 250 && Math.random() < 0.4) {
+                    generateNoise(12);
                 }
                 
                 noiseParticles = noiseParticles.filter(particle => {
@@ -4840,24 +5012,31 @@ async function startHellTransition() {
                     const ageProgress = age / particle.lifetime;
                     const currentOpacity = particle.opacity * (1 - ageProgress);
                     
-                    if (Math.random() < 0.02) {
+                    if (Math.random() < 0.03) {
                         particle.char = particle.char === '0' ? '1' : '0';
                     }
                     
-                    ctx.fillStyle = `rgba(100, 100, 100, ${currentOpacity})`;
+                    // Белые цифры с серым свечением
+                    ctx.fillStyle = `rgba(255, 255, 255, ${currentOpacity})`;
                     ctx.font = `${particle.size}px ${FONT_FAMILY}`;
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
                     ctx.fillText(particle.char, particle.x, particle.y);
                     
-                    particle.y += particle.speed;
-                    particle.x += (Math.random() - 0.5) * 0.5;
+                    // Свечение
+                    ctx.globalAlpha = currentOpacity * 0.3;
+                    ctx.fillStyle = '#888888';
+                    ctx.fillText(particle.char, particle.x + 1, particle.y + 1);
+                    ctx.globalAlpha = 1.0;
                     
-                    return particle.y < effectCanvas.height + 50;
+                    particle.y += particle.speed;
+                    particle.x += (Math.random() - 0.5) * 0.8;
+                    
+                    return particle.y < windowHeight + 50;
                 });
             }
             
-            // ========== ЭФФЕКТ 3: УЛУЧШЕННЫЕ СИГНАЛЫ ОТКАЗА ==========
+            // ========== ЭФФЕКТ 3: СИГНАЛЫ ОТКАЗА ==========
             if (progress > 0.3) {
                 spawnErrorSignal(progress);
                 
@@ -4876,7 +5055,7 @@ async function startHellTransition() {
                     const pulse = Math.sin(age * 0.01) * 0.3 + 0.7;
                     
                     // Тень
-                    ctx.fillStyle = `rgba(0, 0, 0, ${currentOpacity * 0.5})`;
+                    ctx.fillStyle = `rgba(0, 0, 0, ${currentOpacity * 0.7})`;
                     ctx.font = `bold ${signal.size}px ${FONT_FAMILY}`;
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
@@ -4893,6 +5072,7 @@ async function startHellTransition() {
                     ctx.textBaseline = 'middle';
                     ctx.fillText(signal.glitchText, signal.x, signal.y);
                     
+                    // Движение
                     signal.x += (Math.random() - 0.5) * signal.shakeIntensity;
                     signal.y += (Math.random() - 0.5) * signal.shakeIntensity;
                     
@@ -4900,58 +5080,36 @@ async function startHellTransition() {
                 });
             }
             
-            // ========== ЭФФЕКТ 4: РЕДКИЕ ГОРИЗОНТАЛЬНЫЕ ПОЛОСЫ ==========
-            if (progress > 0.7 && Date.now() - lastStripeTime > 500) {
-                if (Math.random() < 0.3) {
-                    const stripeY = Math.random() * effectCanvas.height;
-                    const stripeHeight = 1;
-                    const stripeColor = progress > 0.85 ? '#FF4444' : '#00FF41';
-                    
-                    ctx.fillStyle = stripeColor;
-                    ctx.fillRect(0, stripeY, effectCanvas.width, stripeHeight);
-                    
-                    lastStripeTime = Date.now();
-                }
+            // ========== ЭФФЕКТ 4: ГОРИЗОНТАЛЬНЫЕ ПОЛОСЫ ==========
+            if (progress > 0.6 && Math.random() < 0.25) {
+                const stripeY = Math.random() * windowHeight;
+                const stripeHeight = 1;
+                const stripeColor = progress > 0.85 ? '#FF4444' : '#00FF41';
+                
+                // Полоса
+                ctx.fillStyle = stripeColor;
+                ctx.fillRect(0, stripeY, windowWidth, stripeHeight);
+                
+                // Свечение
+                ctx.globalAlpha = 0.2;
+                ctx.fillStyle = stripeColor;
+                ctx.fillRect(0, stripeY - 2, windowWidth, stripeHeight + 4);
+                ctx.globalAlpha = 1.0;
             }
             
-            // ========== ИСКАЖЕНИЕ ТЕКСТА ТЕРМИНАЛА ==========
-            if (lines.length > 0 && progress > 0.2) {
-                lines.forEach((line, index) => {
-                    if (Math.random() < 0.07 * progress) {
-                        if (!line.originalText) {
-                            line.originalText = line.text;
-                        }
-                        
-                        const glitchChars = ['▓', '█', '░', '▒', '▄', '▀'];
-                        const charArray = line.originalText.split('');
-                        
-                        const changes = Math.floor(Math.random() * 3) + 1;
-                        for (let i = 0; i < changes; i++) {
-                            const pos = Math.floor(Math.random() * charArray.length);
-                            if (charArray[pos] !== ' ') {
-                                charArray[pos] = glitchChars[Math.floor(Math.random() * glitchChars.length)];
-                            }
-                        }
-                        
-                        line.text = charArray.join('');
-                        
-                        // Плавный переход цвета от зеленого к красному
-                        const colorProgress = Math.min(1, progress * 1.2);
-                        const r = Math.floor(20 + colorProgress * 235);
-                        const g = Math.floor(255 - colorProgress * 235);
-                        const b = Math.floor(65 - colorProgress * 45);
-                        line.color = `rgb(${r}, ${g}, ${b})`;
-                    }
-                });
-                requestFullRedraw();
-            }
-            
-            // ========== ДРОЖАНИЕ ЭКРАНА ==========
-            if (progress > 0.6) {
-                const shakeIntensity = 10 * (progress - 0.6) * 2;
+            // ========== ЭФФЕКТ 5: ДРОЖАНИЕ ЭКРАНА ==========
+            if (progress > 0.5) {
+                const shakeIntensity = 15 * (progress - 0.5) * 2;
                 const shakeX = (Math.random() - 0.5) * shakeIntensity;
                 const shakeY = (Math.random() - 0.5) * shakeIntensity;
                 hellLayer.style.transform = `translate(${shakeX}px, ${shakeY}px)`;
+            }
+            
+            // ========== ЭФФЕКТ 6: ПЛАВНОЕ ЗАТЕМНЕНИЕ ==========
+            if (progress > 0.8) {
+                const darkenProgress = (progress - 0.8) / 0.2;
+                ctx.fillStyle = `rgba(0, 0, 0, ${darkenProgress * 0.5})`;
+                ctx.fillRect(0, 0, windowWidth, windowHeight);
             }
             
             requestAnimationFrame(animate);
@@ -4960,10 +5118,8 @@ async function startHellTransition() {
         // Запускаем анимацию
         animate();
         
-        // На всякий случай - таймаут
+        // Таймаут безопасности (8 секунд)
         setTimeout(() => {
-            hellLayer.remove();
-            canvas.style.opacity = '1';
             resolve();
         }, 8000);
     });
