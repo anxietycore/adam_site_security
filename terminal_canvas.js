@@ -575,14 +575,83 @@ const glitchEngine = new GlitchTextEngine();
   })();
   
   // ---------- audio manager ----------
-  class AudioManager {
-    constructor() {
-      this.audioElements = {};
-      this.audioCache = {};
-      this.volume = 0.7;
-      this.initSounds();
+class AudioManager {
+  constructor() {
+    this.audioElements = {};
+    this.audioCache = {};
+    this.volume = 0.7;
+    
+    // Веб-аудио контекст для бесшовного цикла
+    this.audioContext = null;
+    this.backgroundSource = null;
+    this.backgroundBuffer = null;
+    this.backgroundStarted = false;
+    this.backgroundPlaying = false;
+    
+    this.initSounds();
+    this.initBackground();
+  }
+  
+  async initBackground() {
+    try {
+      // Создаем AudioContext
+      this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      
+      // Загружаем аудиофайл
+      const response = await fetch('sounds/ambient_terminal.mp3');
+      const arrayBuffer = await response.arrayBuffer();
+      this.backgroundBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+      
+      // Если аудио-контекст приостановлен (браузерная политика), возобновляем при взаимодействии
+      if (this.audioContext.state === 'suspended') {
+        this.audioContext.resume();
+      }
+    } catch(e) {
+      console.warn('Background audio init failed:', e);
+    }
+  }
+  
+  startBackground() {
+    if (!this.audioContext || !this.backgroundBuffer || this.backgroundPlaying) return;
+    
+    // Останавливаем предыдущий источник, если есть
+    if (this.backgroundSource) {
+      this.backgroundSource.stop();
     }
     
+    // Создаем новый источник
+    this.backgroundSource = this.audioContext.createBufferSource();
+    this.backgroundSource.buffer = this.backgroundBuffer;
+    this.backgroundSource.loop = true; // Бесшовный цикл через Web Audio API
+    
+    // Подключаем к выходу с громкостью 20%
+    const gainNode = this.audioContext.createGain();
+    gainNode.gain.value = 0.2;
+    
+    this.backgroundSource.connect(gainNode);
+    gainNode.connect(this.audioContext.destination);
+    
+    // Запускаем
+    this.backgroundSource.start();
+    this.backgroundPlaying = true;
+    this.backgroundStarted = true;
+  }
+  
+  pauseBackground() {
+    if (!this.backgroundPlaying) return;
+    
+    // Для Web Audio API мы должны остановить и пересоздать
+    if (this.backgroundSource) {
+      this.backgroundSource.stop();
+      this.backgroundSource = null;
+    }
+    this.backgroundPlaying = false;
+  }
+  
+  resumeBackground() {
+    if (!this.backgroundStarted || this.backgroundPlaying) return;
+    this.startBackground();
+  }
     initSounds() {
       const sounds = [
         'signal_swap.mp3',
@@ -1106,14 +1175,22 @@ if (this.level >= AUTO_RESET_LEVEL && !isFrozen) {
 triggerGlitchApocalypse(){
     if (decryptActive || traceActive || audioPlaybackActive || vigilActive) return;
   
-  // Используем OperationManager для блокировки
-  operationManager.start('auto-reset', () => {
-    audioManager.play('glitch_e.mp3', { volume: 0.9, distort: true });
+operationManager.start('auto-reset', () => {
+    // Останавливаем фон
+    audioManager.pauseBackground();
     
-    // Запускаем визуальные эффекты
+    // Воспроизводим glitch_e.mp3 с задержкой возобновления 2 секунды
+    audioManager.play('glitch_e.mp3', { 
+      volume: 0.9, 
+      distort: true,
+      onEnded: () => {
+        // Возобновляем фон через 2 секунды
+        setTimeout(() => audioManager.resumeBackground(), 2000);
+      }
+    });
+    
     this.applyGlitchEffects();
     
-    // Через 4 секунды показываем прогресс сброса
     setTimeout(() => {
       this.showResetProgress();
     }, 4000);
@@ -1168,8 +1245,9 @@ showResetProgress() {
 performAutoReset() {
   console.log('[AUTO RESET] Starting...');
   vigilCodeParts = { alpha: null, beta: null, gamma: null };
-localStorage.removeItem('vigilCodeParts');
-gridCheckAlreadyRewarded = false;
+  localStorage.removeItem('vigilCodeParts');
+  gridCheckAlreadyRewarded = false;
+  
   // Очищаем экран
   lines.length = 0;
   
@@ -1203,7 +1281,7 @@ gridCheckAlreadyRewarded = false;
     pushLine('> ТЕРМИНАЛ A.D.A.M. // VIGIL-9 АКТИВЕН', '#00FF41');
     pushLine('> ВВЕДИТЕ "help" ДЛЯ СПИСКА КОМАНД', '#00FF41');
     
-    // ✅ Добавляем строку ввода
+    // Добавляем строку ввода
     currentLine = '';
     const newLine = { 
       text: 'adam@secure:~$ ', 
@@ -1215,7 +1293,7 @@ gridCheckAlreadyRewarded = false;
     scrollOffset = 0;
     requestFullRedraw();
     
-    // ✅ ПОЛНЫЙ СБРОС ВСЕХ ФЛАГОВ БЛОКИРОВКИ
+    // ПОЛНЫЙ СБРОС ВСЕХ ФЛАГОВ
     isFrozen = false;
     isTyping = false;
     awaitingConfirmation = false;
@@ -1225,12 +1303,20 @@ gridCheckAlreadyRewarded = false;
     intentionalPredictionActive = false;
     intentionPredicted = false;
     
-    // ✅ Если используем OperationManager - сбросим его тоже
+    // ✅ ВОССТАНАВЛИВАЕМ ФОНОВЫЙ ЗВУК
+    if (audioManager.backgroundStarted && !audioManager.backgroundPlaying) {
+      // Ждем еще 1 секунду после сообщения
+      setTimeout(() => {
+        audioManager.resumeBackground();
+      }, 1000);
+    }
+    
+    // Если OperationManager активен - сбросим его
     if (operationManager && operationManager.activeOperation === 'auto-reset') {
       operationManager.activeOperation = null;
     }
     
-    console.log('[AUTO RESET] Complete. Terminal ready. isFrozen:', isFrozen);
+    console.log('[AUTO RESET] Complete. Terminal ready.');
   }, 1000);
 }
   // ========== МЕТОД: ОЧИСТКА ЭФФЕКТОВ ГЛИТЧА ==========
@@ -4966,4 +5052,33 @@ async function startHellTransition() {
         }, 8000);
     });
 }
+// Запуск фона по первому взаимодействию
+(function initBackgroundMusic() {
+  let started = false;
+  
+  const startOnce = () => {
+    if (!started) {
+      started = true;
+      
+      // Если аудиоконтекст приостановлен (браузерная политика), возобновляем
+      if (audioManager.audioContext && audioManager.audioContext.state === 'suspended') {
+        audioManager.audioContext.resume().then(() => {
+          audioManager.startBackground();
+        });
+      } else {
+        audioManager.startBackground();
+      }
+      
+      // Удаляем все обработчики
+      ['click', 'keydown', 'touchstart'].forEach(event => {
+        document.removeEventListener(event, startOnce);
+      });
+    }
+  };
+  
+  // Вешаем на все события взаимодействия
+  document.addEventListener('click', startOnce, { passive: true });
+  document.addEventListener('keydown', startOnce, { passive: true });
+  document.addEventListener('touchstart', startOnce, { passive: true });
+})();
 })();
