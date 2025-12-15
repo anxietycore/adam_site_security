@@ -1,5 +1,6 @@
 // terminal_canvas.js - ПОЛНАЯ ВЕРСИЯ СО ВСЕМИ ФУНКЦИЯМИ
 (() => {
+	
   // ---------- CONFIG ----------
   const FONT_FAMILY = "'Press Start 2P', monospace";
   const FONT_SIZE_PX = 13;
@@ -654,15 +655,14 @@ class AudioManager {
   }
     initSounds() {
       const sounds = [
-        'signal_swap.mp3',
         'reset_com.mp3',
         'reset_com_reverse.mp3',
         'net_connection_loss.mp3',
-        'net_rotation.mp3',
-        'net_fragmentation.mp3',
-        'net_final_signal.mp3',
-        'net_resistance.mp3',
         'key_success.mp3',
+		    'grid_move.wav',
+    'grid_lock.wav',
+    'grid_unlock.wav',
+    'grid_select.wav',
         'key_reject.mp3',
         'decrypt_success.mp3',
         'decrypt_failure.mp3',
@@ -670,14 +670,14 @@ class AudioManager {
         'vigil_confirm.mp3',
         'glitch_e.mp3',
 		'glitch_error.mp3',
-        'connection_restored.mp3'
+        'connection_restored.mp3',
+		'trace_scan.mp3',
+		'trace_complete.mp3',
       ];
       
       sounds.forEach(sound => {
         const paths = [
           `sounds/${sound}`,
-          `audio/${sound}`,
-          sound
         ];
         
         paths.forEach(path => {
@@ -1024,11 +1024,7 @@ restoreWorld() {
       window.__netGrid.setSystemDegradation(this.level);
     }
     
-    // Звуковой эффект при достижении 45% и первом выполнении определенных команд
-    if (this.level >= 45 && !this.soundPlayedAt45) {
-      audioManager.play('signal_swap.mp3', { volume: 0.7 });
-      this.soundPlayedAt45 = true;
-    }
+
     
     // Аудио-предупреждения о сбросе
     if (this.level >= 55 && this.level < 70 && Math.floor(this.level / 5) !== Math.floor(this.lastSoundLevel / 5)) {
@@ -3127,7 +3123,8 @@ async function typeTextForTrace(text, speed = 14) {
   requestFullRedraw();
 }
 
-async function startTrace(target) {
+
+	async function startTrace(target) {
 	  if (operationManager.isBlocked()) {
     addColoredText('ОШИБКА: Другая операция уже выполняется', '#FF4444');
     addInputLine();
@@ -3254,7 +3251,14 @@ if (targetData.hidden && degradation.level < 60) {
   if (operationManager.activeOperation === 'trace') {
     operationManager.end('trace');
   }
+   clearTimeout(processSound);
+  if (window._traceProcessAudio) {
+    window._traceProcessAudio.pause();
+    window._traceProcessAudio.currentTime = 0;
+  }
   
+  // Звук завершения
+  audioManager.play('trace_complete.mp3', { volume: 0.6 });
   return;
 }
   
@@ -3448,8 +3452,12 @@ if (targetData.hidden && degradation.level < 60) {
   
   try {
     // Звук
-    audioManager.play('trace_active.mp3', { volume: 0.7 });
-    
+    const scanAudio = audioManager.play('trace_scan.mp3', { 
+  volume: 0.6, 
+  loop: false  // БЕЗ цикла!
+});
+    window._currentTraceAudio = scanAudio;
+
     // Заголовок
     await typeTextForTrace(`[СИСТЕМА: РАСКРЫТИЕ КАРТЫ КОНТРОЛЯ]`);
     await typeTextForTrace(`> ЦЕЛЬ: ${targetData.target}`);
@@ -3483,6 +3491,16 @@ if (target === 'monolith') {
   console.error('TRACE CRITICAL ERROR:', e);
   addColoredTextForTrace('ОШИБКА: Критическая ошибка при выполнении анализа', '#FF4444');
 } finally {
+// Останавливаем scan звук
+  if (window._currentTraceAudio) {
+    window._currentTraceAudio.pause();
+    window._currentTraceAudio.currentTime = 0;
+    window._currentTraceAudio = null;
+  }
+  
+  // Запускаем завершение
+  audioManager.play('trace_complete.mp3', { volume: 0.7 });
+  
   traceActive = false;
   operationManager.end('trace');
 }
@@ -4029,7 +4047,6 @@ case 'net_mode':
             // Сопротивление сетки при деградации > 93%
             if (degradation.level > 93 && Math.random() < 0.4) {
               addColoredText('> ОШИБКА: УЗЕЛ ЗАБЛОКИРОВАН СИСТЕМОЙ', '#FF4444');
-              audioManager.play('net_resistance.mp3', { volume: 0.5 });
               window.__netGrid.addDegradation(3);
             } else {
               window.__netGrid.addDegradation(2);
@@ -4772,9 +4789,7 @@ async function startHellTransition() {
         setTimeout(() => {
             audioManager.play('net_connection_loss.mp3', { volume: 0.7 });
         }, 2000);
-        setTimeout(() => {
-            audioManager.play('net_fragmentation.mp3', { volume: 0.8 });
-        }, 4000);
+
         
         // 6. ЭФФЕКТ ПРОВАЛИВАНИЯ (КРАСНЫЕ ПОЛОСЫ, КОТОРЫЕ СТАНОВЯТСЯ ЧЁРНЫМИ)
         const stripCount = 30;
