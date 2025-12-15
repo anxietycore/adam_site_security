@@ -38,7 +38,9 @@ const GLITCH_CONFIG = {
 };
 
 GLITCH_CONFIG.ALL = [...GLITCH_CONFIG.BLOCKS, ...GLITCH_CONFIG.GLYPHS, ...GLITCH_CONFIG.CUTS];
-
+// ---------- Audio Manager ----------
+const audioManager = new AudioManager();
+audioManager.preloadCriticalSounds();
 // Класс для управления глитч-фрагментами
 class GlitchFragment {
   constructor(startPos, length, isCorrosion = false) {
@@ -575,185 +577,7 @@ const glitchEngine = new GlitchTextEngine();
     return null;
   })();
   
-  // ---------- audio manager ----------
-class AudioManager {
-  constructor() {
-    this.audioElements = {};
-    this.audioCache = {};
-    this.volume = 0.7;
-    
-    // Веб-аудио контекст для бесшовного цикла
-    this.audioContext = null;
-    this.backgroundSource = null;
-    this.backgroundBuffer = null;
-    this.backgroundStarted = false;
-    this.backgroundPlaying = false;
-    
-    this.initSounds();
-    this.initBackground();
-  }
   
-  async initBackground() {
-    try {
-      // Создаем AudioContext
-      this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      
-      // Загружаем аудиофайл
-      const response = await fetch('sounds/ambient_terminal.mp3');
-      const arrayBuffer = await response.arrayBuffer();
-      this.backgroundBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
-      
-      // Если аудио-контекст приостановлен (браузерная политика), возобновляем при взаимодействии
-      if (this.audioContext.state === 'suspended') {
-        this.audioContext.resume();
-      }
-    } catch(e) {
-      console.warn('Background audio init failed:', e);
-    }
-  }
-  
-  startBackground() {
-    if (!this.audioContext || !this.backgroundBuffer || this.backgroundPlaying) return;
-    
-    // Останавливаем предыдущий источник, если есть
-    if (this.backgroundSource) {
-      this.backgroundSource.stop();
-    }
-    
-    // Создаем новый источник
-    this.backgroundSource = this.audioContext.createBufferSource();
-    this.backgroundSource.buffer = this.backgroundBuffer;
-    this.backgroundSource.loop = true; // Бесшовный цикл через Web Audio API
-    
-    // Подключаем к выходу с громкостью 20%
-    const gainNode = this.audioContext.createGain();
-    gainNode.gain.value = 0.2;
-    
-    this.backgroundSource.connect(gainNode);
-    gainNode.connect(this.audioContext.destination);
-    
-    // Запускаем
-    this.backgroundSource.start();
-    this.backgroundPlaying = true;
-    this.backgroundStarted = true;
-  }
-  
-  pauseBackground() {
-    if (!this.backgroundPlaying) return;
-    
-    // Для Web Audio API мы должны остановить и пересоздать
-    if (this.backgroundSource) {
-      this.backgroundSource.stop();
-      this.backgroundSource = null;
-    }
-    this.backgroundPlaying = false;
-  }
-  
-  resumeBackground() {
-    if (!this.backgroundStarted || this.backgroundPlaying) return;
-    this.startBackground();
-  }
-    initSounds() {
-      const sounds = [
-        'reset_com.mp3',
-        'reset_com_reverse.mp3',
-        'net_connection_loss.mp3',
-        'key_success.mp3',
-		    'grid_move.wav',
-    'grid_lock.wav',
-    'grid_unlock.wav',
-    'grid_select.wav',
-        'key_reject.mp3',
-        'decrypt_success.mp3',
-        'decrypt_failure.mp3',
-        'trace_active.mp3',
-        'vigil_confirm.mp3',
-        'glitch_e.mp3',
-		'glitch_error.mp3',
-        'connection_restored.mp3',
-		'trace_scan.mp3',
-		'trace_complete.mp3',
-      ];
-      
-      sounds.forEach(sound => {
-        const paths = [
-          `sounds/${sound}`,
-        ];
-        
-        paths.forEach(path => {
-          if (!this.audioCache[path]) {
-            try {
-              const audio = new Audio(path);
-              audio.volume = this.volume;
-              this.audioCache[path] = audio;
-            } catch(e) {}
-          }
-        });
-      });
-    }
-    
-    play(file, options = {}) {
-      try {
-        const paths = [
-          `sounds/${file}`,
-          `audio/${file}`,
-          file
-        ];
-        
-        for (let path of paths) {
-          if (this.audioCache[path]) {
-            const audio = this.audioCache[path].cloneNode();
-            audio.volume = options.volume !== undefined ? options.volume : this.volume;
-            
-            if (options.startTime) {
-              audio.currentTime = options.startTime;
-            }
-            
-            if (options.playbackRate) {
-              audio.playbackRate = options.playbackRate;
-            }
-            
-            if (options.loop) {
-              audio.loop = true;
-            }
-            
-            if (options.distort && degradation.level >= 70) {
-              audio.playbackRate = 0.8 + Math.random() * 0.4;
-              audio.volume = this.volume * (0.7 + Math.random() * 0.3);
-            }
-            
-            audio.play().catch(e => {
-              console.warn('Audio play failed:', e);
-            });
-            
-            if (options.onEnded) {
-              audio.onended = options.onEnded;
-            }
-            
-            return audio;
-          }
-        }
-        
-        console.warn(`Sound not found: ${file}`);
-        return null;
-      } catch(e) {
-        console.error('Audio playback error:', e);
-        return null;
-      }
-    }
-    
-    stop(file) {
-      try {
-        if (this.audioElements[file]) {
-          this.audioElements[file].pause();
-          this.audioElements[file].currentTime = 0;
-          delete this.audioElements[file];
-        }
-      } catch(e) {}
-    }
-  }
-  
-  const audioManager = new AudioManager();
   
   // ---------- sizing ----------
   let vw = 0, vh = 0;
@@ -1028,19 +852,17 @@ restoreWorld() {
     
     // Аудио-предупреждения о сбросе
     if (this.level >= 55 && this.level < 70 && Math.floor(this.level / 5) !== Math.floor(this.lastSoundLevel / 5)) {
-      audioManager.play('reset_com.mp3', { volume: 0.7 });
+      audioManager.playSystemSound('reset_com');
     }
     // Обратное звучание
     else if (this.level >= 70 && this.level < 80 && Math.floor(this.level / 5) !== Math.floor(this.lastSoundLevel / 5)) {
-      audioManager.play('reset_com_reverse.mp3', { volume: 0.7 });
+      audioManager.playSystemSound('reset_com_reverse');
     }
     // Обратное звучание (продолжение)
     else if (this.level >= 80 && this.level < 95 && Math.floor(this.level / 5) !== Math.floor(this.lastSoundLevel / 5)) {
-      audioManager.play('reset_com_reverse.mp3', { 
-        volume: 0.7, 
-        playbackRate: 0.8 + (95 - this.level) / 15 * 0.4,
-        distort: true
-      });
+audioManager.playSystemSound('reset_com_reverse', { 
+    playbackRate: 0.8 + (95 - this.level) / 15 * 0.4
+});
     }
     
     this.lastSoundLevel = this.level;
@@ -1173,17 +995,17 @@ triggerGlitchApocalypse(){
   
 operationManager.start('auto-reset', () => {
     // Останавливаем фон
-    audioManager.pauseBackground();
+    audioManager.stopBackgroundMusic();
+
     
     // Воспроизводим glitch_e.mp3 с задержкой возобновления 2 секунды
-    audioManager.play('glitch_e.mp3', { 
-      volume: 0.9, 
-      distort: true,
-      onEnded: () => {
-        // Возобновляем фон через 2 секунды
-        setTimeout(() => audioManager.resumeBackground(), 2000);
-      }
-    });
+audioManager.playSystemSound('glitch_e', { volume: 0.9 });
+// Ждем 5 секунд (3 сек звук + 2 сек пауза)
+setTimeout(() => {
+    if (!decryptActive && !traceActive && !vigilActive) {
+         audioManager.playAmbientSeamless('ambient_terminal.mp3', 0.2);
+    }
+}, 7000);
     
     this.applyGlitchEffects();
     
@@ -1303,8 +1125,8 @@ performAutoReset() {
     if (audioManager.backgroundStarted && !audioManager.backgroundPlaying) {
       // Ждем еще 1 секунду после сообщения
       setTimeout(() => {
-        audioManager.resumeBackground();
-      }, 1000);
+     audioManager.playAmbientSeamless('ambient_terminal.mp3', 0.2);
+}, 1000);
     }
     
     // Если OperationManager активен - сбросим его
@@ -2951,7 +2773,9 @@ if (normalizedId === 'CORE' && degradation.level < 50) {
   isFrozen = true; // Блокируем ввод для терминала, но не для decrypt
   
   // Звуковой сигнал
-  audioManager.play('decrypt_success.mp3', { volume: 0.5 });
+  audioManager.playOperationSound('start');
+  audioManager.playOperationSound('decrypt_success');
+
   
   // ПЛАВНЫЙ ВЫВОД С АНИМАЦИЕЙ
   await typeTextForDecrypt('[СИСТЕМА: ЗАПУЩЕН ПРОТОКОЛ РАСШИФРОВКИ]', 16);
@@ -3001,13 +2825,14 @@ async function endDecryptGame(success, cancelled = false) {
   const fileTitle = file ? file.title : 'НЕИЗВЕСТНЫЙ ФАЙЛ';
   
   if (cancelled) {
-    audioManager.play('net_connection_loss.mp3', { volume: 0.5 });
+    audioManager.playSystemSound('connection_loss');
     addColoredTextForDecrypt('> РАСШИФРОВКА ОТМЕНЕНА', '#FFFF00');
     await new Promise(resolve => setTimeout(resolve, 500));
 } else if (success) {
   // БЛОКИРУЕМ ввод ПОЛНОСТЬЮ до конца
   isFrozen = true; // ← ДОБАВИТЬ ЭТО
-  audioManager.play('connection_restored.mp3', { volume: 0.7 });
+  // Звук успеха уже проигрывается в startDecrypt
+  audioManager.playOperationSound('decrypt_success');
   addColoredTextForDecrypt('> СИГНАЛ: КОД ВЕРИФИЦИРОВАН', '#00FF41');
   await new Promise(resolve => setTimeout(resolve, 800));
     
@@ -3036,7 +2861,7 @@ if (decryptFileId === 'CORE') {
     
 	
   } else {
-    audioManager.play('decrypt_failure.mp3', { volume: 0.7 });
+    audioManager.playOperationSound('decrypt_failure');
     addColoredTextForDecrypt('> СИСТЕМА: ДОСТУП ЗАПРЕЩЕН', '#FF4444');
     addColoredTextForDecrypt(`> ${file.failureMessage}`, '#FF4444');
     
@@ -3144,6 +2969,8 @@ async function typeTextForTrace(text, speed = 14) {
     return;
   }
     if (!operationManager.start('trace')) return;
+	audioManager.playOperationSound('start');
+
   // Нормализация цели
   target = target.toLowerCase();
   
@@ -3452,7 +3279,7 @@ if (targetData.hidden && degradation.level < 60) {
   
   try {
     // Звук
-    const scanAudio = audioManager.play('trace_scan.mp3', { 
+    const scanAudio = audioManager.playOperationSound('trace_scan', { 
   volume: 0.6, 
   loop: false  // БЕЗ цикла!
 });
@@ -3492,14 +3319,14 @@ if (target === 'monolith') {
   addColoredTextForTrace('ОШИБКА: Критическая ошибка при выполнении анализа', '#FF4444');
 } finally {
 // Останавливаем scan звук
-  if (window._currentTraceAudio) {
-    window._currentTraceAudio.pause();
-    window._currentTraceAudio.currentTime = 0;
+if (window._currentTraceAudio) {
+    window._currentTraceAudio.stop();
     window._currentTraceAudio = null;
-  }
+}
   
   // Запускаем завершение
-  audioManager.play('trace_complete.mp3', { volume: 0.7 });
+  audioManager.playOperationSound('trace_complete');
+
   
   traceActive = false;
   operationManager.end('trace');
@@ -3578,33 +3405,39 @@ async function playAudio(dossierId) {
   }
   
   // ---------- loader ----------
-  function showLoading(duration = 2000, text = "АНАЛИЗ СИГНАЛА") {
-    return new Promise(resolve => {
-      if (isFrozen || decryptActive || traceActive || audioPlaybackActive) return resolve();
-      const loaderIndex = lines.length;
-      let progress = 0;
-      addOutput(`${text} [0%]`, 'output');
-      const interval = 50;
-      const steps = Math.max(4, Math.floor(duration / interval));
-      const increment = 100 / steps;
-      const id = setInterval(() => {
-        if (isFrozen || decryptActive || traceActive || audioPlaybackActive) { 
-          clearInterval(id); 
-          resolve(); 
-          return; 
-        }
-        progress += increment;
-        if (lines[loaderIndex]) lines[loaderIndex].text = `${text} [${Math.min(100, Math.round(progress))}%]`;
+function showLoading(duration = 2000, text = "АНАЛИЗ СИГНАЛА") {
+  return new Promise(resolve => {
+    if (isFrozen || decryptActive || traceActive) return resolve();
+    const loaderIndex = lines.length;
+    let progress = 0;
+    addOutput(`${text} [0%]`, 'output');
+    
+    // Запускаем звук процесса
+    const processSound = audioManager.playOperationSound('process');
+    
+    const interval = 50;
+    const steps = Math.max(4, Math.floor(duration / interval));
+    const increment = 100 / steps;
+    const id = setInterval(() => {
+      if (isFrozen || decryptActive || traceActive) { 
+        clearInterval(id); 
+        if (processSound) processSound.stop();
+        resolve(); 
+        return; 
+      }
+      progress += increment;
+      if (lines[loaderIndex]) lines[lines.length - 1].text = `${text} [${Math.min(100, Math.round(progress))}%]`;
+      requestFullRedraw();
+      if (progress >= 100) {
+        clearInterval(id);
+        if (processSound) processSound.stop();
+        if (lines[lines.length - 1]) lines[lines.length - 1].text = `${text} [ЗАВЕРШЕНО]`;
         requestFullRedraw();
-        if (progress >= 100) {
-          clearInterval(id);
-          if (lines[loaderIndex]) lines[loaderIndex].text = `${text} [ЗАВЕРШЕНО]`;
-          requestFullRedraw();
-          setTimeout(resolve, 300);
-        }
-      }, interval);
-    });
-  }
+        setTimeout(resolve, 300);
+      }
+    }, interval);
+  });
+}
   
   // ---------- fake spawn ----------
   function spawnFakeCommand(){
@@ -4238,9 +4071,14 @@ case 'vigil999':
     }
     
     if (!allCorrect) {
+        // ⬇⬇⬇ ДОБАВЬ ЗВУК ОШИБКИ ⬇⬇⬇
+        audioManager.playCommandSound('error');
         addColoredText('ДОСТУП ЗАПРЕЩЁН. ИСПРАВЬТЕ ОШИБКИ.', '#FF4444');
         break;
     }
+    
+    // ⬇⬇⬇ ДОБАВЬ ЗВУК ПОДТВЕРЖДЕНИЯ ⬇⬇⬇
+    audioManager.playVigilSound('confirm');
     
     // ВСЕ КЛЮЧИ ВЕРНЫ - ПРОСТОЙ ПОДТВЕРЖДАЮЩИЙ ВОПРОС
     addColoredText('>>> АКТИВАЦИЯ ПРОТОКОЛА OBSERVER-7. ПОДТВЕРДИТЕ? (Y/N)', '#FFFF00');
@@ -4575,6 +4413,26 @@ if (operationManager && operationManager.isBlocked()) {
     }
     return;
   }
+  // Звук нажатия клавиши
+if (!operationManager || !operationManager.isBlocked()) {
+    if (!isFrozen && !decryptActive && !traceActive && !vigilActive) {
+        // ⬇⬇⬇ ДОБАВЬ ЭТУ ПРОВЕРКУ ⬇⬇⬇
+        if (e.repeat) return;
+        
+        let keyType = 'generic';
+        if (e.key === 'Backspace') keyType = 'backspace';
+        else if (e.key === 'Enter') keyType = 'enter';
+        else if (e.key === ' ') keyType = 'space';
+        else if (e.key === 'Escape') keyType = 'escape';
+        else if (e.key === 'Shift') keyType = 'shift';
+        else if (e.key === 'Control') keyType = 'ctrl';
+        else if (e.key === 'Alt') keyType = 'alt';
+        else if (e.key === 'CapsLock') keyType = 'capslock';
+        else if (e.key.length === 1) keyType = 'generic';
+        
+        audioManager.playKeyPress(keyType);
+    }
+}
   
   if (isTyping) return;
   
@@ -4895,7 +4753,8 @@ async function startHellTransition() {
                 flashLayer.style.background = '#FFFFFF';
                 flashLayer.style.opacity = '0.95';
                 
-                audioManager.play('glitch_error.mp3', { volume: 0.9 });
+                audioManager.playSystemSound('glitch_error', { volume: 0.4 });
+
                 
                 // НЕ УДАЛЯЕМ hellLayer! Оставляем его на месте
                 // Сразу переходим, не показывая терминал
@@ -5078,10 +4937,10 @@ async function startHellTransition() {
       // Если аудиоконтекст приостановлен (браузерная политика), возобновляем
       if (audioManager.audioContext && audioManager.audioContext.state === 'suspended') {
         audioManager.audioContext.resume().then(() => {
-          audioManager.startBackground();
+          audioManager.playAmbientSeamless('ambient_terminal.mp3', 0.2);
         });
       } else {
-        audioManager.startBackground();
+         audioManager.playAmbientSeamless('ambient_terminal.mp3', 0.2);
       }
       
       // Удаляем все обработчики
