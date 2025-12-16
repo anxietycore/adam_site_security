@@ -3329,57 +3329,21 @@ async function playAudio(dossierId) {
   
   // ← ВОТ ЭТОТ БЛОК ДОБАВЛЯЕТ АВТОМАТИЧЕСКОЕ ЗАВЕРШЕНИЕ
   // Для WebAudio API
-  // ← ВОТ ЭТОТ БЛОК ДОБАВЛЯЕТ АВТОМАТИЧЕСКОЕ ЗАВЕРШЕНИЕ
-  
-  console.log(`[AUDIO DEBUG] Запуск аудио ${id}. Ожидание завершения...`);
-  console.log(`[AUDIO DEBUG] sound.source: ${sound.source ? 'ЕСТЬ' : 'НЕТ'}`);
-  console.log(`[AUDIO DEBUG] sound.element: ${sound.element ? 'ЕСТЬ' : 'НЕТ'}`);
-  console.log(`[AUDIO DEBUG] sound:`, sound);
-  
-  // Для WebAudio API
   if (sound.source) {
-    console.log(`[AUDIO DEBUG] Используем WebAudio API. Добавляем обработчик onended`);
-    
     sound.source.onended = () => {
-      console.log(`[AUDIO DEBUG] WebAudio API: событие onended сработало для ${id}`);
-      console.log(`[AUDIO DEBUG] Состояние перед cleanup: audioPlaybackActive=${audioPlaybackActive}`);
-      
       cleanup();
       addColoredText('[АУДИО: ЗАПИСЬ ЗАВЕРШЕНА]', '#FFFF00', true);
       addInputLine();
-      
-      console.log(`[AUDIO DEBUG] Состояние после cleanup: audioPlaybackActive=${audioPlaybackActive}`);
-      console.log(`[AUDIO DEBUG] Звук завершился через WebAudio API`);
     };
   } 
   // Для HTML5 Audio (fallback)
   else if (sound.element) {
-    console.log(`[AUDIO DEBUG] Используем HTML5 Audio. Добавляем обработчик ended`);
-    console.log(`[AUDIO DEBUG] sound.element.readyState: ${sound.element.readyState}`);
-    console.log(`[AUDIO DEBUG] sound.element.duration: ${sound.element.duration}`);
-    
     sound.element.addEventListener('ended', () => {
-      console.log(`[AUDIO DEBUG] HTML5 Audio: событие ended сработало для ${id}`);
-      console.log(`[AUDIO DEBUG] currentTime: ${sound.element.currentTime}, duration: ${sound.element.duration}`);
-      
       cleanup();
       addColoredText('[АУДИО: ЗАПИСЬ ЗАВЕРШЕНА]', '#FFFF00', true);
       addInputLine();
-      
-      console.log(`[AUDIO DEBUG] Звук завершился через HTML5 Audio событие ended`);
     }, { once: true });
-    
-    // Добавляем обработчик ошибок
-    sound.element.addEventListener('error', (e) => {
-      console.error(`[AUDIO DEBUG] HTML5 Audio ОШИБКА для ${id}:`, e);
-      console.error(`[AUDIO DEBUG] Код ошибки: ${sound.element.error?.code}`);
-      console.error(`[AUDIO DEBUG] Сообщение: ${sound.element.error?.message}`);
-    });
-  } else {
-    console.error(`[AUDIO DEBUG] НИКАКОЙ АУДИО-ИСТОЧНИК НЕ НАЙДЕН!`);
-    console.error(`[AUDIO DEBUG] Объект sound:`, JSON.stringify(sound, null, 2));
   }
-
 }
   
   // ---------- loader ----------
