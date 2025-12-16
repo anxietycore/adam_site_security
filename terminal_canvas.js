@@ -3337,13 +3337,22 @@ async function playAudio(dossierId) {
     };
   } 
   // Для HTML5 Audio (fallback)
-  else if (sound.element) {
-    sound.element.addEventListener('ended', () => {
-      cleanup();
-      addColoredText('[АУДИО: ЗАПИСЬ ЗАВЕРШЕНА]', '#FFFF00', true);
-      addInputLine();
-    }, { once: true });
+// Для HTML5 Audio (fallback)
+else if (sound.element) {
+  // ЖДЁМ ПОЛНОЙ ЗАГРУЗКИ
+  if (sound.element.readyState < 4) {
+    await new Promise(resolve => {
+      sound.element.addEventListener('canplaythrough', resolve, { once: true });
+      setTimeout(resolve, 2000); // Запасной таймаут 2 секунды
+    });
   }
+  
+  sound.element.addEventListener('ended', () => {
+    cleanup();
+    addColoredText('[АУДИО: ЗАПИСЬ ЗАВЕРШЕНА]', '#FFFF00', true);
+    addInputLine();
+  }, { once: true });
+}
 }
   
   // ---------- loader ----------
