@@ -95,22 +95,43 @@ let START_PATTERN = generateStartPattern(); // ← ВАЖНО: let, НЕ const!
     let isGridMode = false;
     let keyDegradation = 0;
     let systemDegradation = 0;
-
-    const AudioManager = {
-      play: (file, options = {}) => {
+const AudioManager = {
+  play: (file, options = {}) => {
+    try {
+      // Если файл УЖЕ содержит расширение .mp3, ищем как есть
+      if (file.endsWith('.mp3')) {
+        const audio = new Audio(`sounds/${file}`);
+        audio.volume = options.volume !== undefined ? options.volume : 0.7;
+        if (options.playbackRate) audio.playbackRate = options.playbackRate;
+        audio.play().catch(() => {});
+        return audio;
+      }
+      
+      // Для остальных (без расширения) ищем .wav, потом .mp3
+      const paths = [
+        `sounds/grid/${file}.wav`,
+        `sounds/grid/${file}.mp3`,
+        `sounds/grid/${file}`
+      ];
+      
+      for (let path of paths) {
         try {
-          const audio = new Audio(`sounds/${file}`);
+          const audio = new Audio(path);
           audio.volume = options.volume !== undefined ? options.volume : 0.7;
           if (options.playbackRate) audio.playbackRate = options.playbackRate;
-          if (options.loop) audio.loop = true;
           audio.play().catch(() => {});
           return audio;
-        } catch(e) {
-          console.warn(`Audio failed: ${file}`);
-          return null;
-        }
+        } catch(e) {}
       }
-    };
+      
+      console.warn(`Audio not found: ${file}`);
+      return null;
+    } catch(e) {
+      console.warn(`Audio failed: ${file}`);
+      return null;
+    }
+  }
+};
 
     function glowColor(a=1, degraded=false){ 
       const c = degraded ? COLOR_DEGRADED : COLOR;
@@ -284,7 +305,6 @@ forceReset() {
         selectedNode.selected = true;
         statusEl.textContent = '⚠ ОШИБКА: УЗЕЛ ЗАБЛОКИРОВАН СИСТЕМОЙ';
         setTimeout(updateStatusBar, 1500);
-        AudioManager.play('net_resistance.mp3', { volume: 0.6 });
         return;
       }
       
@@ -301,7 +321,6 @@ forceReset() {
       if (occupied) {
         statusEl.textContent = '⚠ КООРДИНАТА ЗАНЯТА';
         setTimeout(updateStatusBar, 1000);
-        AudioManager.play('key_reject.mp3', { volume: 0.4, playbackRate: 1.5 });
         return;
       }
       
@@ -321,7 +340,6 @@ forceReset() {
         selectedNode.selected = true;
         statusEl.textContent = '⚠ ОШИБКА: УЗЕЛ ЗАБЛОКИРОВАН СИСТЕМОЙ';
         setTimeout(updateStatusBar, 1500);
-        AudioManager.play('net_resistance.mp3', { volume: 0.6 });
         return;
       }
       
@@ -334,16 +352,15 @@ forceReset() {
         setTimeout(() => {
           const result = window.__netGrid.checkSolution();
           if (result.solved) {
-            AudioManager.play('key_success.mp3', { volume: 0.8 });
             if (window.__TerminalCanvas) {
               window.__TerminalCanvas.addColoredText('>>> КЛЮЧ ПОДОШЁЛ <<<', '#00FF41');
+AudioManager.play('interface_key_success', { volume: 0.5 });
               window.__TerminalCanvas.addColoredText('> Доступ к сектору OBSERVER-7 открыт', '#FFFF00');
             }
             flashGridSuccess();
             keyDegradation = Math.max(0, keyDegradation - 15);
             systemDegradation = Math.max(0, systemDegradation - 10);
           } else {
-            AudioManager.play('key_reject.mp3', { volume: 0.7 });
             if (window.__TerminalCanvas) {
               window.__TerminalCanvas.addColoredText('> Конфигурация не соответствует протоколу', '#FF4444');
               window.__TerminalCanvas.addColoredText(`> Правильных узлов: ${result.correct}/${result.total} | Неправильных: ${lockedCount - result.correct}`, '#FFFF00');
@@ -432,47 +449,62 @@ function updateAutonomousMovement() {
   }
 }
 
-    document.addEventListener('keydown', (e) => {
-      if (!isGridMode) return;
+document.addEventListener('keydown', (e) => {
+  if (!isGridMode) return;
+  
+  switch(e.key) {
+    case 'Tab':
+      e.preventDefault();
+      AudioManager.play('grid_select', { volume: 0.5 }); // БЕЗ расширения!
+      if (e.shiftKey) selectPrevNode();
+      else selectNextNode();
+      break;
       
-      switch(e.key) {
-        case 'Tab':
-          e.preventDefault();
-          if (e.shiftKey) selectPrevNode();
-          else selectNextNode();
-          break;
-        case ' ':
-          e.preventDefault();
-          toggleLockSelected();
-          break;
-        case 'Escape':
-          window.__netGrid.setGridMode(false);
-          if (window.__TerminalCanvas) {
-            window.__TerminalCanvas.addColoredText('> Выход из режима сетки', '#00FF41');
-          }
-          break;
-        case 'w':
-        case 'ArrowUp':
-          e.preventDefault();
-          moveSelectedNode(0, -1);
-          break;
-        case 's':
-        case 'ArrowDown':
-          e.preventDefault();
-          moveSelectedNode(0, 1);
-          break;
-        case 'a':
-        case 'ArrowLeft':
-          e.preventDefault();
-          moveSelectedNode(-1, 0);
-          break;
-        case 'd':
-        case 'ArrowRight':
-          e.preventDefault();
-          moveSelectedNode(1, 0);
-          break;
+    case ' ':
+      e.preventDefault();
+      if (selectedNode) {
+        if (selectedNode.locked) {
+          AudioManager.play('grid_unlock', { volume: 0.6 });
+        } else {
+          AudioManager.play('grid_lock', { volume: 0.6 });
+        }
       }
-    });
+      toggleLockSelected();
+      break;
+      
+    case 'Escape':
+      window.__netGrid.setGridMode(false);
+      if (window.__TerminalCanvas) {
+		  AudioManager.play('interface_mode_to_terminal', { volume: 0.4 });
+        window.__TerminalCanvas.addColoredText('> Выход из режима сетки', '#00FF41');
+      }
+      break;
+      
+    case 'w': case 'ц': case 'ArrowUp':
+      e.preventDefault();
+      AudioManager.play('grid_move', { volume: 0.4 });
+      moveSelectedNode(0, -1);
+      break;
+      
+    case 's': case 'ы': case 'ArrowDown':
+      e.preventDefault();
+      AudioManager.play('grid_move', { volume: 0.4 });
+      moveSelectedNode(0, 1);
+      break;
+      
+    case 'a': case 'ф': case 'ArrowLeft':
+      e.preventDefault();
+      AudioManager.play('grid_move', { volume: 0.4 });
+      moveSelectedNode(-1, 0);
+      break;
+      
+    case 'd': case 'в': case 'ArrowRight':
+      e.preventDefault();
+      AudioManager.play('grid_move', { volume: 0.4 });
+      moveSelectedNode(1, 0);
+      break;
+  }
+});
 
     function selectNextNode() {
       if (!selectedNode || nodes.length === 0) return;
@@ -584,23 +616,19 @@ function updateAutonomousMovement() {
       
       if (degradationLevel >= 80 && degradationLevel < 85) {
         effectState.globalAlpha = 0.85 + 0.15 * Math.sin(tick * 0.1);
-        if (Math.random() < 0.05) AudioManager.play('net_connection_loss.mp3', { volume: 0.2 });
       }
       
       if (degradationLevel >= 85 && degradationLevel < 90) {
         effectState.rotation = 0.3 * Math.sin(tick * 0.002) * Math.PI / 180;
-        if (Math.random() < 0.03) AudioManager.play('net_rotation.mp3', { volume: 0.3 });
       }
       
       if (degradationLevel >= 90 && degradationLevel < 95) {
         effectState.breatheScale = 1 + 0.05 * Math.sin(tick * 0.005);
-        if (Math.random() < 0.02) AudioManager.play('net_fragmentation.mp3', { volume: 0.4 });
       }
       
       if (degradationLevel >= 95) {
         effectState.globalAlpha = Math.max(0.3, 1 - (degradationLevel - 95) / 5);
         effectState.isVignetteActive = false;
-        if (Math.random() < 0.01) AudioManager.play('net_final_signal.mp3', { volume: 0.5 });
       }
       
       if (effectState.isVignetteActive) {
