@@ -3318,79 +3318,32 @@ async function playAudio(dossierId) {
     }
   };
   
-  let checkInterval = null;
-  let audioElement = null;
-  
-  // ПОЛУЧАЕМ АУДИО-ЭЛЕМЕНТ для polling-проверки
-  if (sound.element) {
-    audioElement = sound.element;
-  } else if (sound.source && sound.source._htmlAudio) {
-    // Если WebAudio создал HTMLAudio элемент как fallback
-    audioElement = sound.source._htmlAudio;
-  }
-  
   const cleanup = () => {
     isFrozen = false;
     document.removeEventListener('keydown', handleEsc);
     audioPlaybackActive = false;
     audioPlaybackFile = null;
-    
-    if (checkInterval) {
-      clearInterval(checkInterval);
-      checkInterval = null;
-    }
   };
   
   document.addEventListener('keydown', handleEsc);
   
-  // ПОЛИНГ-ПРОВЕРКА: каждые 500мс проверяем, не закончилось ли аудио
-  if (audioElement && audioElement instanceof HTMLAudioElement) {
-    checkInterval = setInterval(() => {
-      if (audioElement.ended || 
-          (audioElement.duration > 0 && audioElement.currentTime >= audioElement.duration - 0.5)) {
-        
-        console.log('Audio ended via polling');
-        cleanup();
-        addColoredText('[АУДИО: ЗАПИСЬ ЗАВЕРШЕНА]', '#FFFF00', true);
-        addInputLine();
-      }
-    }, 500); // Проверяем каждые 500мс
-  }
-  
-  // ДУБЛИРУЕМ ОБЫЧНУЮ ЛОГИКУ (на случай если работает)
+  // ← ВОТ ЭТОТ БЛОК ДОБАВЛЯЕТ АВТОМАТИЧЕСКОЕ ЗАВЕРШЕНИЕ
+  // Для WebAudio API
   if (sound.source) {
     sound.source.onended = () => {
-      console.log('Audio ended via onended event');
       cleanup();
       addColoredText('[АУДИО: ЗАПИСЬ ЗАВЕРШЕНА]', '#FFFF00', true);
       addInputLine();
     };
   } 
+  // Для HTML5 Audio (fallback)
   else if (sound.element) {
     sound.element.addEventListener('ended', () => {
-      console.log('Audio ended via ended event');
       cleanup();
       addColoredText('[АУДИО: ЗАПИСЬ ЗАВЕРШЕНА]', '#FFFF00', true);
       addInputLine();
     }, { once: true });
   }
-  
-  // АВАРИЙНЫЙ ТАЙМАУТ: на случай если polling тоже не сработает
-  const emergencyTimeout = setTimeout(() => {
-    if (audioPlaybackActive) {
-      console.log('Emergency timeout: forcing audio to end');
-      cleanup();
-      addColoredText('[АУДИО: ЗАПИСЬ ЗАВЕРШЕНА]', '#FFFF00', true);
-      addInputLine();
-    }
-  }, 300000); // 5 минут максимум
-  
-  // Дополняем cleanup для очистки таймаута
-  const originalCleanup = cleanup;
-  cleanup = () => {
-    originalCleanup();
-    clearTimeout(emergencyTimeout);
-  };
 }
   
   // ---------- loader ----------
