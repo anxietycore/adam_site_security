@@ -3337,32 +3337,13 @@ async function playAudio(dossierId) {
     };
   } 
   // Для HTML5 Audio (fallback)
-// Для HTML5 Audio (fallback)
-else if (sound.element) {
-  // ГАРАНТИРОВАННАЯ проверка загрузки через setInterval
-  const readyCheck = setInterval(() => {
-    if (sound.element.readyState >= 4) {
-      clearInterval(readyCheck);
-      
-      sound.element.addEventListener('ended', () => {
-        cleanup();
-        addColoredText('[АУДИО: ЗАПИСЬ ЗАВЕРШЕНА]', '#FFFF00', true);
-        addInputLine();
-      }, { once: true });
-    }
-  }, 100);
-  
-  // Запасной таймаут 3 секунды на всякий случай
-  setTimeout(() => clearInterval(readyCheck), 3000);
-
-
-  
-  sound.element.addEventListener('ended', () => {
-    cleanup();
-    addColoredText('[АУДИО: ЗАПИСЬ ЗАВЕРШЕНА]', '#FFFF00', true);
-    addInputLine();
-  }, { once: true });
-}
+  else if (sound.element) {
+    sound.element.addEventListener('ended', () => {
+      cleanup();
+      addColoredText('[АУДИО: ЗАПИСЬ ЗАВЕРШЕНА]', '#FFFF00', true);
+      addInputLine();
+    }, { once: true });
+  }
 }
   
   // ---------- loader ----------
