@@ -29,14 +29,14 @@ const AudioManager = {
     this.isInitialized = true;
     
     // Обычные звуки
-    this.loadSound('confirm', 'sounds/confirm.mp3');
-    this.loadSound('reject', 'sounds/reject.mp3');
-    this.loadSound('glitch_error', 'sounds/glitch_error.mp3');
-    this.loadSound('success', 'sounds/success.mp3');
-    this.loadSound('boot', 'sounds/boot_sequence.mp3');
+    this.loadSound('confirm', 'sounds/index/confirm.mp3');
+    this.loadSound('reject', 'sounds/index/reject.mp3');
+    this.loadSound('glitch_error', 'sounds/index/glitch_error.mp3');
+    this.loadSound('success', 'sounds/index/success.mp3');
+    this.loadSound('boot', 'sounds/index/boot_sequence.mp3');
     
     // Ambient через Web Audio API
-    this.loadAmbientSound('ambient_terminal', 'sounds/ambient_terminal.mp3');
+    this.loadAmbientSound('ambient_terminal', 'sounds/ambient/ambient_terminal.mp3');
     
     console.log('[Звук] Менеджер инициализирован');
   },
