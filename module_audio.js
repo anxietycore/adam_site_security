@@ -60,6 +60,7 @@ class AudioManager {
             // Fallback на HTML5 Audio
             const audio = new Audio(path);
             audio.preload = 'auto';
+			audio.load();
             this.soundCache.set(path, { type: 'html5', element: audio });
             return { type: 'html5', element: audio };
         }
@@ -128,21 +129,14 @@ playWebAudio(audioBuffer, options) {
         source.connect(gainNode);
         gainNode.connect(this.audioContext.destination);
         
-        // ДЛЯ БЕСШОВНОГО ЦИКЛА:
-        source.loop = options.loop || false;
-        source.loopStart = 0;
-        source.loopEnd = audioBuffer.duration;
-        
         source.start(0, options.startTime || 0);
         
         const soundId = Date.now() + Math.random();
         this.activeSounds.set(soundId, source);
         
-        if (!options.loop) {
-            source.onended = () => {
-                this.activeSounds.delete(soundId);
-            };
-        }
+        source.onended = () => {
+            this.activeSounds.delete(soundId);
+        };
         
         return {
             id: soundId,
@@ -159,7 +153,9 @@ playWebAudio(audioBuffer, options) {
                 if (source.playbackRate) {
                     source.playbackRate.value = rate;
                 }
-            }
+            },
+            source: source,  // ← ВОТ ЭТО ДОБАВЬ!
+            _isWebAudio: true // ← И ЭТО ДЛЯ ОПРЕДЕЛЕНИЯ ТИПА
         };
     } catch(e) {
         console.warn('Ошибка воспроизведения Web Audio:', e);
