@@ -532,7 +532,7 @@ const glitchEngine = new GlitchTextEngine();
     width: '100%',
     height: '100%',
     zIndex: CANVAS_Z,
-    pointerEvents: 'none',
+    pointerEvents: 'auto',
     userSelect: 'none'
   });
   document.body.appendChild(canvas);
