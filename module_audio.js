@@ -167,50 +167,52 @@ playWebAudio(audioBuffer, options) {
     }
 }
     
-    // Воспроизведение через HTML5 Audio (fallback)
-    playHTML5Sound(audioElement, options) {
-        try {
-            const audio = audioElement.cloneNode();
-            const volume = options.volume !== undefined ? options.volume : this.effectsVolume;
-            
-            audio.volume = volume;
-            audio.loop = options.loop || false;
-            
-            if (options.playbackRate) {
-                audio.playbackRate = options.playbackRate;
-            }
-            
-            if (options.startTime) {
-                audio.currentTime = options.startTime;
-            }
-            
-            audio.play().catch(e => console.warn('HTML5 Audio play error:', e));
-            
-            const soundId = Date.now() + Math.random();
-            this.activeSounds.set(soundId, audio);
-            
-            if (!options.loop) {
-                audio.onended = () => {
-                    this.activeSounds.delete(soundId);
-                };
-            }
-            
-            return {
-                id: soundId,
-                stop: () => {
-                    audio.pause();
-                    audio.currentTime = 0;
-                    this.activeSounds.delete(soundId);
-                },
-                setVolume: (vol) => {
-                    audio.volume = vol;
-                }
-            };
-        } catch(e) {
-            console.warn('Ошибка воспроизведения HTML5 Audio:', e);
-            return null;
-        }
+ // ВОТ ЭТОТ МЕТОД НУЖНО ЗАМЕНИТЬ В КЛАССЕ AudioManager (строка ~200)
+// Воспроизведение через HTML5 Audio (fallback)
+playHTML5Sound(audioElement, options) {
+  try {
+    const audio = audioElement.cloneNode();
+    const volume = options.volume !== undefined ? options.volume : this.effectsVolume;
+    
+    audio.volume = volume;
+    audio.loop = options.loop || false;
+    
+    if (options.playbackRate) {
+      audio.playbackRate = options.playbackRate;
     }
+    
+    if (options.startTime) {
+      audio.currentTime = options.startTime;
+    }
+    
+    audio.play().catch(e => console.warn('HTML5 Audio play error:', e));
+    
+    const soundId = Date.now() + Math.random();
+    this.activeSounds.set(soundId, audio);
+    
+    if (!options.loop) {
+      audio.onended = () => {
+        this.activeSounds.delete(soundId);
+      };
+    }
+    
+    return {
+      id: soundId,
+      stop: () => {
+        audio.pause();
+        audio.currentTime = 0;
+        this.activeSounds.delete(soundId);
+      },
+      setVolume: (vol) => {
+        audio.volume = vol;
+      },
+      element: audio // ← ВОТ ЭТА СТРОЧКА ДОБАВЛЯЕТ ССЫЛКУ НА AUDIO ЭЛЕМЕНТ
+    };
+  } catch(e) {
+    console.warn('Ошибка воспроизведения HTML5 Audio:', e);
+    return null;
+  }
+}
     
     // Остановка звука
     stopSound(sound) {
@@ -544,27 +546,27 @@ async loadAmbientViaXHR(path, filename, volume) {
     }
     
     // Звуки операций
-    playOperationSound(type) {
-        switch(type) {
-            case 'start':
-                return this.playSound('operations', 'operations_start.mp3', { volume: 0.7 });
-            case 'decrypt_success':
-                return this.playSound('operations', 'operations_decrypt_success.mp3', { volume: 0.85 });
-            case 'decrypt_failure':
-                return this.playSound('operations', 'operations_decrypt_failure.mp3', { volume: 0.85 });
-            case 'trace_scan':
-                return this.playSound('operations', 'operations_trace_scan.mp3', { 
-                    volume: 0.75,
-                    loop: true 
-                });
-            case 'trace_complete':
-                return this.playSound('operations', 'operations_trace_complete.mp3', { volume: 0.75 });
-            case 'process':
-                return this.playSound('operations', 'operations_process.mp3', { volume: 0.7 });
-            default:
-                return null;
-        }
+   async playOperationSound(type) {
+    switch(type) {
+        case 'start':
+            return await this.playSound('operations', 'operations_start.mp3', { volume: 0.7 });
+        case 'decrypt_success':
+            return await this.playSound('operations', 'operations_decrypt_success.mp3', { volume: 0.85 });
+        case 'decrypt_failure':
+            return await this.playSound('operations', 'operations_decrypt_failure.mp3', { volume: 0.85 });
+        case 'trace_scan':
+            return await this.playSound('operations', 'operations_trace_scan.mp3', { 
+                volume: 0.75,
+                loop: true
+            });
+        case 'trace_complete':
+            return await this.playSound('operations', 'operations_trace_complete.mp3', { volume: 0.75 });
+        case 'process':
+            return await this.playSound('operations', 'operations_process.mp3', { volume: 0.7 });
+        default:
+            return null;
     }
+}
     
     // Системные звуки
     playSystemSound(type, options = {}) {
