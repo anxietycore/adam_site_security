@@ -1110,7 +1110,6 @@ performAutoReset() {
     decryptActive = false;
     traceActive = false;
     audioPlaybackActive = false;
-    intentionalPredictionActive = false;
     intentionPredicted = false;
     
     // ✅ ВОССТАНАВЛИВАЕМ ФОНОВЫЙ ЗВУК
@@ -1186,7 +1185,6 @@ fullSystemReset(){
   sessionStartTime = Date.now();
   resetAttempts = 0;
   falseResetActive = false;
-  intentionalPredictionActive = false;
   intentionPredicted = false;
   decryptActive = false;
   traceActive = false;
@@ -3413,7 +3411,7 @@ async function showLoading(duration = 2000, text = "АНАЛИЗ СИГНАЛА"
   }
   if (isTyping || operationManager.isBlocked()) return;
     // Инверсия управления при высокой деградации
-    if (degradation.level >= INVERSION_START_LEVEL && !intentionalPredictionActive) {
+    if (degradation.level >= INVERSION_START_LEVEL) {
       if (degradation.inputInversionActive && Math.random() < 0.3) {
         // Инверсия backspace
         if (rawCmd === 'backspace') {
