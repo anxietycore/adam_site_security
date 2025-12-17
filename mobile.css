@@ -1,9 +1,9 @@
-/* mobile.css v3.0 — ДВУМЕРНАЯ ПРОКРУТКА (ВЛЕВО/ВПРАВО + ВВЕРХ/ВНИЗ) */
+/* mobile.css v2.0 — ПОЛНАЯ ВЕРСИЯ С ПРОКРУТКОЙ */
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body {
-  height: auto; /* Убираем 100% высоту */
+  height: auto; /* ← РАЗРЕШАЕМ РАСТЯЖЕНИЕ */
   min-height: 100%;
   background: #000;
   color: #00FF41;
@@ -12,22 +12,21 @@ html, body {
   line-height: 1.4;
   -webkit-text-size-adjust: none;
   touch-action: manipulation;
-  overflow: auto; /* Включаем ОБЕ прокрутки */
-  overflow-x: auto; /* Горизонтальная прокрутка */
-  overflow-y: auto; /* Вертикальная прокрутка */
+  overflow-y: auto; /* ← ВКЛЮЧАЕМ ВЕРТИКАЛЬНУЮ ПРОКРУТКУ */
+  overflow-x: hidden;
 }
 
-/* УБИРАЕМ ФИКСИРОВАННЫЙ ТЕРМИНАЛ — ДЕЛАЕМ ЕГО БОЛЬШИМ ПОЛЕМ */
+/* Терминал занимает весь экран */
 #terminal {
-  position: relative;
+  position: relative; /* ← УБИРАЕМ ФИКСАЦИЮ */
   min-height: 100vh;
-  width: 200%; /* ← В ДВА РАЗА ШИРЕ ЭКРАНА */
+  width: 100%;
   z-index: 1;
   pointer-events: auto;
-  padding-bottom: 180px;
+  padding-bottom: 180px; /* ← ОТСТУП СНИЗУ ПОД ПЛАШКУ */
 }
 
-/* Боковая панель ОСТАЁТСЯ ФИКСИРОВАННОЙ */
+/* Боковая панель */
 #sidePanel {
   position: fixed;
   right: 8px;
@@ -321,23 +320,10 @@ canvas:not(#terminalCanvas) {
 }
 
 /* =========================================
-   ДВУМЕРНАЯ ПРОКРУТКА: ГОРИЗОНТАЛЬ + ВЕРТИКАЛЬ
+   TOUCH-SCROLL FIX: ПЛАШКА ДЕГРАДАЦИИ И КАНВАС
    ========================================= */
 
-/* КОНТЕЙНЕР ДЛЯ БОЛЬШОГО ТЕРМИНАЛА */
-#terminal {
-  width: 200%; /* ← В ДВА РАЗА ШИРЕ ЭКРАНА */
-  overflow: visible; /* Видим всё содержимое */
-}
-
-/* Canvas растягивается на всю ширину контейнера */
-#terminalCanvas {
-  width: 100% !important; /* ← 200% от viewport */
-  height: 100% !important;
-  min-height: 100vh;
-}
-
-/* Плашка деградации ОСТАЁТСЯ ФИКСИРОВАННОЙ */
+/* Плашка деградации внизу */
 #degradationDisplay {
   position: fixed !important;
   bottom: 20px !important;
@@ -345,7 +331,54 @@ canvas:not(#terminalCanvas) {
   right: 20px !important;
 }
 
-/* Убираем защитный слой — он больше не нужен */
+/* Убираем защитный слой */
+#mobileDegradationOverlay {
+  display: none !important;
+}
+
+/* Canvas растягивается под контент */
+#terminalCanvas {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 100vh;
+}
+/* ==================== БОЛЬШОЙ СТОЛ ДЛЯ ТЕРМИНАЛА ==================== */
+
+/* Убираем фиксацию у body */
+html, body {
+  overflow: auto !important; /* Разрешаем двигать страницу */
+  touch-action: auto; /* Разрешаем зум пальцами */
+}
+
+/* Контейнер-стол: В ДВА РАЗА БОЛЬШЕ ЭКРАНА */
+#terminal {
+  position: relative !important;
+  width: 200% !important;  /* ← В ДВА РАЗА ШИРЕ */
+  height: 200% !important; /* ← В ДВА РАЗА ВЫШЕ */
+  min-height: 200vh !important;
+  min-width: 200vw !important;
+}
+
+/* Canvas — огромный холст на столе */
+#terminalCanvas {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 200vw !important; /* ← ХОЛС ТОЖЕ В ДВА РАЗА БОЛЬШЕ */
+  height: 200vh !important;
+}
+
+/* Плашка деградации остаётся на экране */
+#degradationDisplay {
+  position: fixed !important;
+  bottom: 20px !important;
+  right: 20px !important;
+}
+
+/* Убираем защитный слой (он мешает) */
 #mobileDegradationOverlay {
   display: none !important;
 }
