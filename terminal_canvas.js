@@ -36,7 +36,14 @@ const GLITCH_CONFIG = {
   CUTS: ['│', '╫', '┼', '▌', '▐'],
   ALL: null
 };
-
+window.__adamTerminalState = {
+  get isFrozen() { return isFrozen; },
+  get decryptActive() { return decryptActive; },
+  get traceActive() { return traceActive; },
+  get audioPlaybackActive() { return audioPlaybackActive; },
+  get degradation() { return degradation; },
+  get lines() { return lines; }
+};
 GLITCH_CONFIG.ALL = [...GLITCH_CONFIG.BLOCKS, ...GLITCH_CONFIG.GLYPHS, ...GLITCH_CONFIG.CUTS];
 // ---------- Audio Manager ----------
 const audioManager = new AudioManager();
@@ -594,27 +601,20 @@ const glitchEngine = new GlitchTextEngine();
     }
   }
   
-function onResize(w,h){
-  // External resize helper: if width/height passed, use them; otherwise fallback to window size
-  vw = Math.max(320, w || window.innerWidth);
-  vh = Math.max(240, h || window.innerHeight);
-  canvas.width = Math.floor(vw * DPR);
-  canvas.height = Math.floor(vh * DPR);
-  canvas.style.width = vw + 'px';
-  canvas.style.height = vh + 'px';
-  ctx.setTransform(1,0,0,1,0,0);
-  ctx.scale(DPR, DPR);
-  requestFullRedraw();
-}
-
-// legacy compatibility: keep resize() wrapper
-function resize(){
-  return onResize();
-}
-
-window.addEventListener('resize', resize);
-// call initial sizing
-onResize();
+  function resize() {
+    vw = Math.max(320, window.innerWidth);
+    vh = Math.max(240, window.innerHeight);
+    canvas.width = Math.floor(vw * DPR);
+    canvas.height = Math.floor(vh * DPR);
+    canvas.style.width = vw + 'px';
+    canvas.style.height = vh + 'px';
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.scale(DPR, DPR);
+    requestFullRedraw();
+  }
+  
+  window.addEventListener('resize', resize);
+  resize();
   
   // ---------- terminal state ----------
   const lines = [];
@@ -4600,6 +4600,24 @@ requestAnimationFrame(backgroundTick);
 window.__TerminalCanvas = {
   addOutput, addColoredText, typeText, processCommand, degradation, lines
 };
+// Добавьте эти методы в window.__TerminalCanvas:
+
+// Для мобильного UI нужен доступ к состоянию
+window.__TerminalCanvas.lines = lines;
+window.__TerminalCanvas.isBlocked = () => {
+  return isFrozen || decryptActive || traceActive || audioPlaybackActive || 
+         operationManager?.isBlocked() || false;
+};
+
+// Добавьте метод для безопасного добавления строки ввода
+window.__TerminalCanvas.addInputLine = () => {
+  if (!isFrozen && !decryptActive && !traceActive && !audioPlaybackActive) {
+    addInputLine();
+  }
+};
+
+// Событие готовности (важно!)
+window.__TerminalCanvas.isInitialized = true;
 
 // initial draw
 requestFullRedraw();
