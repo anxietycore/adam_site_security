@@ -873,8 +873,7 @@ if (!this.isVoicePlaying) {
   }
   // Обратное звучание (продолжение)
   else if (this.level >= 80 && this.level < 95 && Math.floor(this.level / 10) !== Math.floor(this.lastSoundLevel / 10)) {
-    audioManager.playSystemSound('reset_com_reverse', { 
-      playbackRate: 0.8 + (95 - this.level) / 15 * 0.4
+    audioManager.playSystemSound('reset_com_reverse', {
     });
   }
 }
