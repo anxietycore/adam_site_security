@@ -35,6 +35,7 @@
       await this.loadData();
       this.generateUI();
       this.hideNetGridInitially();
+
       this.state.isInitialized = true;
       console.log('[Mobile] ✅ Инициализация завершена!');
     }
