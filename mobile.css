@@ -1,87 +1,316 @@
-/* mobile.css — мобильный упрощённый стиль */
-*{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%;background:#000;color:#00FF41;font-family:'Press Start 2P',monospace;-webkit-text-size-adjust:none}
-#terminal{position:fixed;inset:0;z-index:1;pointer-events:auto;background:transparent}
+/* mobile.css v2.0 — ЧИСТАЯ АДАПТИВНОСТЬ */
 
-/* ensure terminal canvas is visible (some terminals draw black background; transparency helps) */
-#terminal canvas{position:relative;z-index:1;display:block;width:100%!important;height:100%!important;background:transparent!important}
+* { box-sizing: border-box; margin: 0; padding: 0; }
 
-/* status bar */
-#statusBar{
-  position:fixed;top:8px;left:8px;right:8px;z-index:99990;
-  display:flex;align-items:center;background:rgba(0,0,0,0.55);padding:8px;border-radius:8px;border:1px solid rgba(0,255,65,0.06);
-  font-size:12px;
+html, body {
+  height: 100%;
+  background: #000;
+  color: #00FF41;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  -webkit-text-size-adjust: none;
+  touch-action: manipulation; /* Убираем задержку тапа */
+  overflow: hidden; /* Блокируем скролл страницы */
 }
 
-/* side panel */
-#sidePanel{
-  position:fixed;right:8px;top:84px;bottom:16px;width:88px;z-index:99991;
-  display:flex;flex-direction:column;padding:6px;border-radius:12px;background:linear-gradient(180deg, rgba(0,0,0,0.18), rgba(0,0,0,0.6));gap:8px;
-}
-.panel-handle{position:absolute;left:-18px;top:12px;width:18px;height:36px;display:flex;align-items:center;justify-content:center;background:linear-gradient(90deg, rgba(0,0,0,0.7), rgba(0,0,0,0.2));color:#00FF41;border-radius:6px;font-weight:700;cursor:pointer;z-index:99992}
-.panel-content{display:flex;flex-direction:column;gap:8px}
-#sidePanel .cmd{background:rgba(0,0,0,0.45);color:#00FF41;border:1px solid rgba(0,255,65,0.08);padding:10px 6px;font-size:11px;border-radius:8px;cursor:pointer;text-align:center}
-#sidePanel .cmd:active{transform:translateY(1px)}
-#sidePanel .danger{border-color:rgba(255,80,80,0.18);color:#FF8888}
-.spacer{flex:1}
-.small-btn{font-size:10px;padding:8px;border-radius:8px;background:rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.04);color:#00FF41}
-
-/* modals */
-.modal{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:99995;padding:18px}
-.modal.hidden{display:none}
-.modal-card{width:100%;max-width:520px;background:rgba(1,8,6,0.97);border-radius:12px;padding:12px;border:2px solid rgba(0,255,65,0.09);box-shadow:0 12px 40px rgba(0,0,0,0.6);color:#00FF41}
-.modal-card.small{max-width:320px}
-.modal-card.grid-card{display:flex;flex-direction:column;gap:8px;height:78vh;max-height:820px}
-.modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:12px}
-.close-x{background:transparent;border:0;color:#00FF41;font-size:14px;cursor:pointer}
-.modal-text{font-size:12px;line-height:1.4;padding:8px 0}
-#subMenuItems.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-#subMenuItems .item{background:rgba(0,0,0,0.45);padding:10px;border-radius:8px;text-align:center;border:1px solid rgba(0,255,65,0.06);font-size:11px;cursor:pointer}
-
-/* grid */
-.grid-body{display:flex;gap:10px;flex:1}
-.map-area{flex:1;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.3);border-radius:8px;padding:6px;min-height:160px}
-.map-area canvas{width:100%;height:100%;border-radius:6px}
-.controls{width:180px;display:flex;flex-direction:column;gap:8px;align-items:center}
-.control-row{display:flex;gap:8px;justify-content:center}
-.ctrl{padding:10px 8px;border-radius:8px;background:rgba(0,0,0,0.5);color:#00FF41;border:1px solid rgba(255,255,255,0.03);cursor:pointer;font-size:12px;min-width:56px;text-align:center}
-.ctrl.danger{border-color:rgba(255,80,80,0.18);color:#FF8888}
-
-/* confirm */
-.confirm-actions{display:flex;gap:10px;justify-content:center;padding-top:8px}
-.confirm-yes,.confirm-no{padding:10px 20px;border-radius:8px;border:2px solid #00FF41;background:rgba(0,0,0,0.6);color:#00FF41;cursor:pointer}
-.confirm-no{border-color:rgba(255,80,80,0.18);color:#FF8888}
-
-/* responsive */
-@media (max-width:420px){
-  #sidePanel{right:6px;top:70px;width:72px;padding:6px}
-  .controls{width:150px}
-  .ctrl{font-size:11px;padding:8px}
-  .panel-handle{left:-16px}
-}
-/* terminal container should be scrollable on mobile */
+/* Терминал занимает весь экран */
 #terminal {
-  position:fixed;
-  inset:0;
-  z-index:1;
-  pointer-events:auto;
-  overflow:auto;                     /* allow scrolling/panning */
-  -webkit-overflow-scrolling:touch;   /* smooth scrolling on iOS */
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: auto;
 }
 
-/* ensure canvas inside terminal can be scaled and is visible */
-#terminal canvas {
-  display:block !important;
-  max-width: none !important;
-  width: auto !important;
-  height: auto !important;
-  background: transparent !important;
-  transform-origin: 0 0;
+/* Боковая панель */
+#sidePanel {
+  position: fixed;
+  right: 8px;
+  top: 60px; /* Ниже статус-бара */
+  bottom: 8px;
+  width: 90px;
+  z-index: 99991;
+  display: flex;
+  flex-direction: column;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(0, 255, 65, 0.1);
+  border-radius: 12px;
+  padding: 8px;
+  gap: 6px;
+  transition: transform 0.3s ease;
 }
 
-/* if terminal writes text nodes (<pre>, .lines etc.), make them wrap */
-#terminal pre, #terminal .terminal-lines, #terminal .lines, #terminal .output {
-  white-space: pre-wrap !important;
-  word-break: break-word !important;
-  overflow-wrap: anywhere !important;
+#sidePanel.collapsed {
+  transform: translateX(100%);
+}
+
+.panel-handle {
+  position: absolute;
+  left: -20px;
+  top: 12px;
+  width: 20px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.7);
+  border: 1px solid rgba(0, 255, 65, 0.15);
+  border-radius: 8px 0 0 8px;
+  color: #00FF41;
+  font-weight: bold;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.panel-content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* Кнопки команд */
+.cmd {
+  width: 100%;
+  min-height: 44px; /* Apple/Google стандарт */
+  padding: 10px 4px;
+  background: rgba(0, 0, 0, 0.45);
+  color: #00FF41;
+  border: 1px solid rgba(0, 255, 65, 0.12);
+  border-radius: 8px;
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.1s;
+  text-align: center;
+}
+
+.cmd:active {
+  transform: translateY(1px);
+  background: rgba(0, 255, 65, 0.15);
+}
+
+.cmd.danger {
+  border-color: rgba(255, 80, 80, 0.25);
+  color: #FF8888;
+}
+
+.spacer {
+  flex: 1;
+}
+
+/* Подменю DSCR */
+.submenu {
+  position: absolute;
+  right: 100%;
+  top: 40px;
+  background: rgba(1, 8, 6, 0.97);
+  border: 2px solid rgba(0, 255, 65, 0.15);
+  border-radius: 12px;
+  padding: 8px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  max-width: 280px;
+  max-height: 60vh;
+  overflow-y: auto;
+  z-index: 99999;
+}
+
+.submenu-item {
+  min-height: 38px;
+  padding: 8px 4px;
+  background: rgba(0, 0, 0, 0.45);
+  color: #00FF41;
+  border: 1px solid rgba(0, 255, 65, 0.1);
+  border-radius: 6px;
+  font-size: 9px;
+  cursor: pointer;
+  text-align: center;
+}
+
+/* Модальное окно сетки */
+.modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 99995;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.7);
+}
+
+.modal.hidden {
+  display: none;
+}
+
+.modal-card {
+  width: 100%;
+  max-width: 580px;
+  background: rgba(1, 8, 6, 0.98);
+  border: 2px solid rgba(0, 255, 65, 0.15);
+  border-radius: 14px;
+  padding: 14px;
+  color: #00FF41;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 85vh;
+}
+
+.modal-card.grid-card {
+  max-height: 90vh;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.modal-header button {
+  background: transparent;
+  border: none;
+  color: #00FF41;
+  font-size: 18px;
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Тело сетки */
+.grid-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+}
+
+.map-area {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 10px;
+  min-height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Контролы сетки */
+.grid-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.control-row {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.ctrl {
+  min-width: 52px;
+  min-height: 44px;
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.5);
+  color: #00FF41;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  font-size: 11px;
+  cursor: pointer;
+  font-family: 'Press Start 2P';
+}
+
+.ctrl:active {
+  background: rgba(0, 255, 65, 0.2);
+}
+
+.ctrl.danger {
+  border-color: rgba(255, 80, 80, 0.25);
+  color: #FF8888;
+}
+
+/* Виртуальная клавиатура */
+.keyboard {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.95);
+  backdrop-filter: blur(8px);
+  border-top: 2px solid rgba(0, 255, 65, 0.2);
+  padding: 8px;
+  z-index: 99998;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.keyboard.hidden {
+  display: none;
+}
+
+.keyboard-row {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+}
+
+.keyboard button {
+  min-height: 48px;
+  min-width: 48px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #00FF41;
+  border: 1px solid rgba(0, 255, 65, 0.15);
+  border-radius: 8px;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: 'Press Start 2P';
+}
+
+.keyboard button.wide {
+  flex: 1;
+  min-width: 80px;
+}
+
+.keyboard button:active {
+  background: rgba(0, 255, 65, 0.25);
+}
+
+/* Адаптивность */
+@media (max-width: 420px) {
+  #sidePanel {
+    width: 76px;
+    right: 6px;
+    top: 50px;
+  }
+  
+  .cmd {
+    font-size: 9px;
+    min-height: 40px;
+  }
+  
+  .modal-card {
+    margin: 8px;
+  }
+  
+  .keyboard button {
+    min-width: 42px;
+    min-height: 44px;
+    font-size: 10px;
+  }
+}
+
+/* Скрытие canvas сетки по умолчанию */
+canvas:not(#terminalCanvas) {
+  display: none !important;
 }
