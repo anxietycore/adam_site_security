@@ -1,34 +1,40 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="utf-8" />
   <meta
     name="viewport"
     content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
   />
+  <meta name="theme-color" content="#000000" />
   <title>TERMINAL :: MOBILE</title>
 
-  <!-- Шрифт (опционально, можно убрать) -->
+  <!-- Опциональный шрифт -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link
-    href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap"
-    rel="stylesheet"
-  >
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="mobile.css" />
 </head>
 
 <body>
-
-  <!-- CANVAS ТЕРМИНАЛ -->
+  <!-- Canvas терминала — id важно: terminalCanvas -->
   <canvas id="terminalCanvas"></canvas>
+
+  <!-- Небольшой помощник для теста на десктопе (удалите в продакшн) -->
+  <script>
+    // Разрешает форсировать мобильный режим на десктопе при разработке:
+    // window.FORCE_MOBILE_TERMINAL = true;
+  </script>
 
   <!-- СКРИПТЫ (ВАЖЕН ПОРЯДОК) -->
   <script src="module_audio.js"></script>
   <script src="netGrid_v3.js"></script>
   <script src="terminal_canvas.js"></script>
-  <script src="terminal_mobile.js"></script>
 
+  <!-- ЗАМЕНА: подключаем мобильную обёртку, которую я сделал -->
+  <script src="terminal_mobile_v2.js"></script>
+
+  <!-- НОТАТКА: если у тебя есть старый terminal_mobile.js — НЕ подключай его одновременно -->
 </body>
 </html>
