@@ -755,6 +755,8 @@ class DegradationSystem {
   constructor() {
     this.level = parseInt(localStorage.getItem('adam_degradation')) || 0;
     this.lastSoundLevel = 0;
+	  this.glitchAmbientActive = false;
+
     this.ghostActive = false;
     this.autoActive = false;
     this.effectsActive = false;
@@ -770,9 +772,9 @@ class DegradationSystem {
   
   // Генерируем рандомные пороги в БЕЗОПАСНЫХ зонах
   this.voiceAdam03Threshold = parseInt(localStorage.getItem('voiceAdam03Threshold')) || 
-                               (61 + Math.floor(Math.random() * 9)); // 60-69
+                               (63 + Math.floor(Math.random() * 9)); // 60-69
   this.voiceWhisper03Threshold = parseInt(localStorage.getItem('voiceWhisper03Threshold')) || 
-                                 (81 + Math.floor(Math.random() * 9)); // 80-89
+                                 (83 + Math.floor(Math.random() * 9)); // 80-89
   
   // Сохраняем пороги
   localStorage.setItem('voiceAdam03Threshold', this.voiceAdam03Threshold.toString());
@@ -992,7 +994,13 @@ if (this.level >= AUTO_RESET_LEVEL && !isFrozen) {
     if (this.level >= GRID_DEGRADATION_START_LEVEL && window.__netGrid) {
       window.__netGrid.setSystemDegradation(this.level);
     }
-    
+    if (this.level >= 70 && !this.glitchAmbientActive) {
+  audioManager.startBackgroundMusic(true);
+  this.glitchAmbientActive = true;
+} else if (this.level < 70 && this.glitchAmbientActive) {
+  audioManager.stopBackgroundMusic('ambient_glitch.mp3');
+  this.glitchAmbientActive = false;
+}
     // Цветовые классы для CSS
     document.body.classList.remove('degradation-2','degradation-3','degradation-4','degradation-5','degradation-6','degradation-glitch');
     if (this.level >= 30 && this.level < 60) document.body.classList.add('degradation-2');
@@ -1077,6 +1085,8 @@ showResetProgress() {
 // ========== МЕТОД: ВЫПОЛНЕНИЕ АВТОМАТИЧЕСКОГО СБРОСА ==========
 // ========== МЕТОД: ВЫПОЛНЕНИЕ АВТОМАТИЧЕСКОГО СБРОСА ==========
 performAutoReset() {
+	  degradation.glitchAmbientActive = false;
+
   console.log('[AUTO RESET] Starting...');
 // Сброс флагов голосов и перегенерация порогов
 localStorage.setItem('voiceAdam03Played', 'false');
@@ -1211,6 +1221,8 @@ if (degradation) {
   }
   // ========== МЕТОД: ПОЛНЫЙ СБРОС ВСЕХ СОСТОЯНИЙ ==========
 fullSystemReset(){
+	this.glitchAmbientActive = false;
+
  // Сброс голосов и порогов
 this.voiceAdam03Played = false;
 this.voiceWhisper03Played = false;
@@ -1372,6 +1384,7 @@ localStorage.setItem('voiceWhisper03Threshold', this.voiceWhisper03Threshold.toS
 reset(){
 // Сброс флагов голосов и перегенерация порогов
 this.voiceAdam03Played = false;
+this.glitchAmbientActive = false;
 this.voiceWhisper03Played = false;
 this.voiceAdam03Threshold = 63 + Math.floor(Math.random() * 9); // 60-69
 this.voiceWhisper03Threshold = 83 + Math.floor(Math.random() * 9); // 80-89
@@ -2785,7 +2798,6 @@ async function startDecrypt(fileId) {
   const file = decryptFiles[normalizedId];
   if (!file) {
     addColoredText(`ОШИБКА: Файл ${fileId} не найден`, '#FF4444');
-    addColoredText('Доступные файлы: 0XA71, 0XB33, 0XC44, 0XD22, 0XE09, CORE', '#FFFF00');
 	audioManager.playCommandSound('error');
     addInputLine();
     return;
@@ -3990,7 +4002,7 @@ gridCheckAlreadyRewarded = false;
   if (args.length === 0) {
 audioManager.playCommandSound('error');
     addColoredText('ОШИБКА: Укажите код', '#FF4444');
-    await typeText('Пример: ALPHA 375', 'output', 12);
+    await typeText('Пример: ALPHA 111', 'output', 12);
   } else {
 	  audioManager.playVigilSound('key_accept');
     vigilCodeParts.alpha = args[0];
@@ -4004,7 +4016,7 @@ case 'beta':
   if (args.length === 0) {
 audioManager.playCommandSound('error');
     addColoredText('ОШИБКА: Укажите код', '#FF4444');
-    await typeText('Пример: BETA 814', 'output', 12);
+    await typeText('Пример: BETA 111', 'output', 12);
   } else {
 	  audioManager.playVigilSound('key_accept');
     vigilCodeParts.beta = args[0];
@@ -4018,7 +4030,7 @@ case 'gamma':
   if (args.length === 0) {
 audioManager.playCommandSound('error');
     addColoredText('ОШИБКА: Укажите код', '#FF4444');
-    await typeText('Пример: GAMMA 291', 'output', 12);
+    await typeText('Пример: GAMMA 111', 'output', 12);
   } else {
 	  audioManager.playVigilSound('key_accept');
     vigilCodeParts.gamma = args[0];
