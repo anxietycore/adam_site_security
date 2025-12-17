@@ -38,6 +38,7 @@
     #terminal .prompt {
       color: #00FF41;
       margin-right: 8px;
+      user-select: none;
     }
     
     #terminal .cursor {
@@ -54,54 +55,13 @@
       51%, 100% { opacity: 0; }
     }
     
-    /* Виртуальная клавиатура */
-    #keyboard {
-      background: rgba(0, 10, 6, 0.95);
-      border-top: 2px solid #00FF41;
-      padding: 8px;
-      max-height: 40vh;
-      overflow-y: auto;
-    }
-    
-    .kb-row {
-      display: flex;
-      gap: 4px;
-      margin-bottom: 4px;
-    }
-    
-    .kb-key {
-      flex: 1;
-      background: rgba(0, 20, 10, 0.8);
-      color: #00FF41;
-      border: 1px solid #00FF41;
-      padding: 12px 4px;
-      font-family: 'Press Start 2P', monospace;
-      font-size: 10px;
-      cursor: pointer;
-      border-radius: 4px;
-      text-align: center;
-      user-select: none;
-      -webkit-user-select: none;
-      touch-action: manipulation;
-    }
-    
-    .kb-key:active {
-      transform: scale(0.95);
-      background: rgba(0, 255, 65, 0.2);
-    }
-    
-    .kb-key.space {
-      flex: 2.5;
-    }
-    
-    .kb-key.enter {
-      flex: 1.5;
-      background: rgba(0, 255, 65, 0.15);
-    }
-    
-    .kb-key.ctrl {
-      flex: 1.2;
-      font-size: 8px;
+    /* СКРЫТОЕ ПОЛЕ ДЛЯ ВВОДА */
+    #hiddenInput {
+      position: absolute;
+      opacity: 0;
+      width: 0;
+      height: 0;
+      pointer-events: none;
     }
     
     /* Быстрые команды */
@@ -112,6 +72,7 @@
       background: rgba(0, 0, 0, 0.8);
       overflow-x: auto;
       scrollbar-width: none;
+      border-top: 2px solid #00FF41;
     }
     
     #quickCommands::-webkit-scrollbar {
@@ -128,6 +89,7 @@
       border-radius: 6px;
       cursor: pointer;
       white-space: nowrap;
+      user-select: none;
     }
     
     .quick-btn:active {
@@ -147,7 +109,44 @@
       z-index: 100;
     }
     
-    .hidden { display: none !important; }
+    /* Модальное окно для подтверждения */
+    #confirmModal {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0, 10, 6, 0.95);
+      border: 3px solid #00FF41;
+      padding: 20px;
+      z-index: 1000;
+      display: none;
+      text-align: center;
+    }
+    
+    .modal-text {
+      margin-bottom: 15px;
+      font-size: 12px;
+    }
+    
+    .modal-buttons {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+    }
+    
+    .modal-btn {
+      padding: 10px 20px;
+      border: 1px solid #00FF41;
+      background: rgba(0, 20, 10, 0.8);
+      color: #00FF41;
+      font-family: 'Press Start 2P', monospace;
+      font-size: 10px;
+      cursor: pointer;
+    }
+    
+    .modal-btn:active {
+      background: rgba(0, 255, 65, 0.3);
+    }
   </style>
 </head>
 <body>
@@ -163,51 +162,20 @@
   <div id="quickCommands">
     <button class="quick-btn" data-cmd="help">help</button>
     <button class="quick-btn" data-cmd="syst">syst</button>
-    <button class="quick-btn" data-cmd="net_mode">net_mode</button>
+    <button class="quick-btn" data-cmd="subj">subj</button>
     <button class="quick-btn" data-cmd="clear">clear</button>
     <button class="quick-btn" data-cmd="reset">reset</button>
   </div>
 
-  <!-- Виртуальная клавиатура -->
-  <div id="keyboard">
-    <div class="kb-row">
-      <button class="kb-key" data-key="q">q</button>
-      <button class="kb-key" data-key="w">w</button>
-      <button class="kb-key" data-key="e">e</button>
-      <button class="kb-key" data-key="r">r</button>
-      <button class="kb-key" data-key="t">t</button>
-      <button class="kb-key" data-key="y">y</button>
-      <button class="kb-key" data-key="u">u</button>
-      <button class="kb-key" data-key="i">i</button>
-      <button class="kb-key" data-key="o">o</button>
-      <button class="kb-key" data-key="p">p</button>
-    </div>
-    <div class="kb-row">
-      <button class="kb-key" data-key="a">a</button>
-      <button class="kb-key" data-key="s">s</button>
-      <button class="kb-key" data-key="d">d</button>
-      <button class="kb-key" data-key="f">f</button>
-      <button class="kb-key" data-key="g">g</button>
-      <button class="kb-key" data-key="h">h</button>
-      <button class="kb-key" data-key="j">j</button>
-      <button class="kb-key" data-key="k">k</button>
-      <button class="kb-key" data-key="l">l</button>
-      <button class="kb-key" data-key="Backspace">←</button>
-    </div>
-    <div class="kb-row">
-      <button class="kb-key ctrl" data-key="Tab">Tab</button>
-      <button class="kb-key" data-key="z">z</button>
-      <button class="kb-key" data-key="x">x</button>
-      <button class="kb-key" data-key="c">c</button>
-      <button class="kb-key" data-key="v">v</button>
-      <button class="kb-key" data-key="b">b</button>
-      <button class="kb-key" data-key="n">n</button>
-      <button class="kb-key" data-key="m">m</button>
-      <button class="kb-key ctrl" data-key="Escape">ESC</button>
-    </div>
-    <div class="kb-row">
-      <button class="kb-key space" data-key=" ">Space</button>
-      <button class="kb-key enter" data-key="Enter">Enter ⏎</button>
+  <!-- Скрытое поле для ввода (активирует системную клавиатуру) -->
+  <input type="text" id="hiddenInput" autocapitalize="off" autocorrect="off" autocomplete="off">
+
+  <!-- Модальное окно подтверждения -->
+  <div id="confirmModal">
+    <div class="modal-text" id="confirmText"></div>
+    <div class="modal-buttons">
+      <button class="modal-btn" id="confirmY">Y</button>
+      <button class="modal-btn" id="confirmN">N</button>
     </div>
   </div>
 
@@ -215,8 +183,8 @@
     // Загрузчик скриптов
     const scripts = [
       'module_audio.js',
-      'terminal_canvas.js', // Загружаем только для данных
-      'mobile.js' // Новый мобильный терминал
+      'terminal_canvas.js',
+      'mobile.js' // <-- ГЛАВНЫЙ ФАЙЛ НАЗЫВАЕТСЯ mobile.js
     ];
     
     let loadedCount = 0;
@@ -225,10 +193,9 @@
       script.src = src;
       script.onload = () => {
         loadedCount++;
-        console.log(`[MOBILE] ${src} loaded (${loadedCount}/${scripts.length})`);
+        console.log(`[MOBILE] ${scripts.indexOf(src)+1}/${scripts.length}: ${src} loaded`);
         if (loadedCount === scripts.length) {
-          console.log('[MOBILE] All scripts loaded, initializing...');
-          // Запуск мобильного терминала
+          console.log('[MOBILE] All scripts loaded, initializing terminal...');
           if (window.MobileTerminal) {
             window.MobileTerminal.init();
           }
@@ -236,7 +203,7 @@
       };
       script.onerror = () => {
         console.error(`[MOBILE] FAILED to load ${src}`);
-        document.body.innerHTML = `<div style="color: red; padding: 20px;">Ошибка загрузки ${src}</div>`;
+        document.body.innerHTML = `<div style="color: red; padding: 20px; font-family: monospace;">ОШИБКА ЗАГРУЗКИ: ${src}</div>`;
       };
       document.body.appendChild(script);
     });
