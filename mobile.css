@@ -1,151 +1,87 @@
-* { margin: 0; padding: 0; box-sizing: border-box; }
+/* mobile.css — мобильный упрощённый стиль */
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#000;color:#00FF41;font-family:'Press Start 2P',monospace;-webkit-text-size-adjust:none}
+#terminal{position:fixed;inset:0;z-index:1;pointer-events:auto;background:transparent}
 
-html, body {
-    height: 100%;
-    overflow: hidden;
-    background: #000;
-    color: #00FF41;
-    font-family: 'Press Start 2P', monospace;
-    font-size: 12px;
+/* ensure terminal canvas is visible (some terminals draw black background; transparency helps) */
+#terminal canvas{position:relative;z-index:1;display:block;width:100%!important;height:100%!important;background:transparent!important}
+
+/* status bar */
+#statusBar{
+  position:fixed;top:8px;left:8px;right:8px;z-index:99990;
+  display:flex;align-items:center;background:rgba(0,0,0,0.55);padding:8px;border-radius:8px;border:1px solid rgba(0,255,65,0.06);
+  font-size:12px;
 }
 
-body {
-    display: flex;
-    flex-direction: column;
-    touch-action: manipulation;
+/* side panel */
+#sidePanel{
+  position:fixed;right:8px;top:84px;bottom:16px;width:88px;z-index:99991;
+  display:flex;flex-direction:column;padding:6px;border-radius:12px;background:linear-gradient(180deg, rgba(0,0,0,0.18), rgba(0,0,0,0.6));gap:8px;
 }
+.panel-handle{position:absolute;left:-18px;top:12px;width:18px;height:36px;display:flex;align-items:center;justify-content:center;background:linear-gradient(90deg, rgba(0,0,0,0.7), rgba(0,0,0,0.2));color:#00FF41;border-radius:6px;font-weight:700;cursor:pointer;z-index:99992}
+.panel-content{display:flex;flex-direction:column;gap:8px}
+#sidePanel .cmd{background:rgba(0,0,0,0.45);color:#00FF41;border:1px solid rgba(0,255,65,0.08);padding:10px 6px;font-size:11px;border-radius:8px;cursor:pointer;text-align:center}
+#sidePanel .cmd:active{transform:translateY(1px)}
+#sidePanel .danger{border-color:rgba(255,80,80,0.18);color:#FF8888}
+.spacer{flex:1}
+.small-btn{font-size:10px;padding:8px;border-radius:8px;background:rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.04);color:#00FF41}
 
+/* modals */
+.modal{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:99995;padding:18px}
+.modal.hidden{display:none}
+.modal-card{width:100%;max-width:520px;background:rgba(1,8,6,0.97);border-radius:12px;padding:12px;border:2px solid rgba(0,255,65,0.09);box-shadow:0 12px 40px rgba(0,0,0,0.6);color:#00FF41}
+.modal-card.small{max-width:320px}
+.modal-card.grid-card{display:flex;flex-direction:column;gap:8px;height:78vh;max-height:820px}
+.modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:12px}
+.close-x{background:transparent;border:0;color:#00FF41;font-size:14px;cursor:pointer}
+.modal-text{font-size:12px;line-height:1.4;padding:8px 0}
+#subMenuItems.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+#subMenuItems .item{background:rgba(0,0,0,0.45);padding:10px;border-radius:8px;text-align:center;border:1px solid rgba(0,255,65,0.06);font-size:11px;cursor:pointer}
+
+/* grid */
+.grid-body{display:flex;gap:10px;flex:1}
+.map-area{flex:1;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.3);border-radius:8px;padding:6px;min-height:160px}
+.map-area canvas{width:100%;height:100%;border-radius:6px}
+.controls{width:180px;display:flex;flex-direction:column;gap:8px;align-items:center}
+.control-row{display:flex;gap:8px;justify-content:center}
+.ctrl{padding:10px 8px;border-radius:8px;background:rgba(0,0,0,0.5);color:#00FF41;border:1px solid rgba(255,255,255,0.03);cursor:pointer;font-size:12px;min-width:56px;text-align:center}
+.ctrl.danger{border-color:rgba(255,80,80,0.18);color:#FF8888}
+
+/* confirm */
+.confirm-actions{display:flex;gap:10px;justify-content:center;padding-top:8px}
+.confirm-yes,.confirm-no{padding:10px 20px;border-radius:8px;border:2px solid #00FF41;background:rgba(0,0,0,0.6);color:#00FF41;cursor:pointer}
+.confirm-no{border-color:rgba(255,80,80,0.18);color:#FF8888}
+
+/* responsive */
+@media (max-width:420px){
+  #sidePanel{right:6px;top:70px;width:72px;padding:6px}
+  .controls{width:150px}
+  .ctrl{font-size:11px;padding:8px}
+  .panel-handle{left:-16px}
+}
+/* terminal container should be scrollable on mobile */
 #terminal {
-    flex: 1;
-    overflow-y: auto;
-    padding: 12px;
-    line-height: 1.4;
-    word-wrap: break-word;
-    -webkit-overflow-scrolling: touch;
-    padding-bottom: 80px;
-    white-space: pre-wrap;
+  position:fixed;
+  inset:0;
+  z-index:1;
+  pointer-events:auto;
+  overflow:auto;                     /* allow scrolling/panning */
+  -webkit-overflow-scrolling:touch;   /* smooth scrolling on iOS */
 }
 
-.line {
-    margin-bottom: 6px;
-    word-break: break-word;
-    min-height: 18px;
+/* ensure canvas inside terminal can be scaled and is visible */
+#terminal canvas {
+  display:block !important;
+  max-width: none !important;
+  width: auto !important;
+  height: auto !important;
+  background: transparent !important;
+  transform-origin: 0 0;
 }
 
-#statusBar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    background: rgba(0, 0, 0, 0.95);
-    border-bottom: 2px solid #00FF41;
-    padding: 8px 12px;
-    font-size: 10px;
-    z-index: 100;
-    backdrop-filter: blur(5px);
+/* if terminal writes text nodes (<pre>, .lines etc.), make them wrap */
+#terminal pre, #terminal .terminal-lines, #terminal .lines, #terminal .output {
+  white-space: pre-wrap !important;
+  word-break: break-word !important;
+  overflow-wrap: anywhere !important;
 }
-
-#quickCommands {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    display: flex;
-    gap: 4px;
-    padding: 8px;
-    background: rgba(0, 10, 6, 0.95);
-    border-top: 2px solid #00FF41;
-    overflow-x: auto;
-    scrollbar-width: none;
-    backdrop-filter: blur(5px);
-}
-
-.quick-btn {
-    background: rgba(0, 20, 10, 0.8);
-    color: #00FF41;
-    border: 1px solid #00FF41;
-    padding: 10px 12px;
-    font-family: 'Press Start 2P', monospace;
-    font-size: 10px;
-    border-radius: 6px;
-    cursor: pointer;
-    white-space: nowrap;
-    user-select: none;
-    min-width: 60px;
-    flex-shrink: 0;
-}
-
-.quick-btn:active {
-    background: rgba(0, 255, 65, 0.3);
-    transform: scale(0.95);
-}
-
-#hiddenInput {
-    position: absolute;
-    opacity: 0;
-    width: 0;
-    height: 0;
-    pointer-events: none;
-}
-
-#confirmModal {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background: rgba(0, 10, 6, 0.98);
-    border: 3px solid #00FF41;
-    padding: 20px;
-    z-index: 1000;
-    display: none;
-    text-align: center;
-    border-radius: 8px;
-    box-shadow: 0 0 20px rgba(0, 255, 65, 0.5);
-    max-width: 90vw;
-}
-
-.modal-text {
-    margin-bottom: 15px;
-    font-size: 12px;
-    line-height: 1.5;
-}
-
-.modal-buttons {
-    display: flex;
-    gap: 10px;
-    justify-content: center;
-}
-
-.modal-btn {
-    padding: 12px 24px;
-    border: 2px solid #00FF41;
-    background: rgba(0, 20, 10, 0.8);
-    color: #00FF41;
-    font-family: 'Press Start 2P', monospace;
-    font-size: 10px;
-    cursor: pointer;
-    border-radius: 6px;
-}
-
-.modal-btn:active {
-    background: rgba(0, 255, 65, 0.3);
-}
-
-@media (max-width: 480px) {
-    body { font-size: 11px; }
-    #terminal { padding: 10px; padding-bottom: 70px; }
-    .quick-btn { font-size: 9px; padding: 8px 10px; }
-    #statusBar { font-size: 9px; }
-}
-
-@keyframes blink {
-    0%, 50% { opacity: 1; }
-    51%, 100% { opacity: 0; }
-}
-.menu-title { text-align: center; margin-bottom: 10px; font-size: 11px; color: #FFFF00; }
-.menu-buttons { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
-.digit-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin: 10px 0; }
-.digit-btn { background: rgba(0, 20, 10, 0.8); border: 1px solid #00FF41; color: #00FF41; font-family: 'Press Start 2P'; font-size: 16px; padding: 15px; border-radius: 6px; cursor: pointer; }
-.digit-btn:active { background: rgba(0, 255, 65, 0.3); }
-.code-display { text-align: center; font-size: 20px; letter-spacing: 5px; margin: 10px 0; color: #00FF41; }
-.back-btn { background: rgba(100, 0, 0, 0.5) !important; border-color: #FF4444 !important; color: #FF4444 !important; }
