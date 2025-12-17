@@ -563,7 +563,16 @@ async loadAmbientViaXHR(path, filename, volume) {
             return null;
     }
 }
-    
+    // В классе AudioManager добавьте:
+ensureAudioContext() {
+  if (!this.audioContext) {
+    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (this.audioContext.state === 'suspended') {
+    return this.audioContext.resume();
+  }
+  return Promise.resolve();
+}
     // Системные звуки
     playSystemSound(type, options = {}) {
         const soundMap = {
@@ -612,7 +621,7 @@ async loadAmbientViaXHR(path, filename, volume) {
             case 'question':
                 return this.playSound('vigil', 'vigil_question.mp3', { volume: 0.7 });
             case 'transition':
-                return this.playSound('vigil', 'vigil_transition.mp3', { volume: 0.9 });
+                return this.playSound('vigil', 'vigil_transition.mp3', { volume: 0.5 });
             default:
                 return null;
         }
