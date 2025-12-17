@@ -1,11 +1,10 @@
-// mobile.js - МОБИЛЬНАЯ ВЕРСИЯ ТЕРМИНАЛА A.D.A.M.
+// mobile.js - МОБИЛЬНАЯ ВЕРСИЯ ТЕРМИНАЛА A.D.A.M. (СТАБИЛЬНАЯ)
 (() => {
     'use strict';
 
     // ==================== КОНФИГУРАЦИЯ ====================
     const CONFIG = {
         MAX_LINES: 300,
-        TYPING_SPEED: 14,
         COLORS: {
             normal: '#00FF41',
             error: '#FF4444',
@@ -16,10 +15,8 @@
         }
     };
 
-    // ==================== ДАННЫЕ (ПРИМЕРЫ) ====================
-    // ИНСТРУКЦИЯ: Чтобы добавить остальные досье, скопируйте из terminal_canvas.js 
-    // и вставьте в этот объект, соблюдая формат:
-    // 'ID': { name: '...', role: '...', status: '...', outcome: ['...'], report: ['...'], missions: '...' }
+    // ==================== ДАННЫЕ (ДОБАВЬ ОСТАЛЬНЫЕ) ====================
+    // ПРИМЕР ФОРМАТА - ДОБАВЬ ОСТАЛЬНЫЕ ДАННЫЕ ИЗ terminal_canvas.js
     const DATA = {
         dossiers: {
             '0X001': {
@@ -31,7 +28,7 @@
                 missions: 'MARS, OBSERVER',
                 audioDesc: 'Последняя передача'
             }
-            // ДОБАВЬТЕ ОСТАЛЬНЫЕ ДОСЬЕ ЗДЕСЬ...
+            // ИНСТРУКЦИЯ: ВСТАВЬ ОСТАЛЬНЫЕ ДОСЬЕ ИЗ terminal_canvas.js СЮДА
         },
         
         notes: {
@@ -40,7 +37,7 @@
                 author: 'Dr. Rehn',
                 content: ['Оно дышит', 'Оно знает имена', 'Терминал отвечает сам']
             }
-            // ДОБАВЬТЕ ОСТАЛЬНЫЕ ЗАМЕТКИ ЗДЕСЬ...
+            // ИНСТРУКЦИЯ: ВСТАВЬ ОСТАЛЬНЫЕ ЗАМЕТКИ СЮДА
         },
         
         decryptFiles: {
@@ -51,7 +48,7 @@
                 success: 'Данные восстановлены',
                 failure: 'Попытки исчерпаны'
             }
-            // ДОБАВЬТЕ ОСТАЛЬНЫЕ ФАЙЛЫ ЗДЕСЬ...
+            // ИНСТРУКЦИЯ: ВСТАВЬ ОСТАЛЬНЫЕ ФАЙЛЫ СЮДА
         }
     };
 
@@ -90,40 +87,56 @@
         },
 
         setupEventListeners() {
-            // Клик на терминал = фокус на скрытый input
-            DOM.terminal.addEventListener('click', () => {
-                if (!State.isFrozen) DOM.hiddenInput.focus();
+            // КЛИК НА ТЕРМИНАЛ - ФОКУС ВВОДА (НЕ ПРОКРУЧИВАЕТ ВВЕРХ)
+            DOM.terminal.addEventListener('click', (e) => {
+                if (!State.isFrozen) {
+                    e.preventDefault();
+                    DOM.hiddenInput.focus();
+                }
             });
 
-            // Обработка ввода
+            // ОБРАБОТКА ВВОДА (ТОЛЬКО ОДИН ОБРАБОТЧИК, ЧТОБЫ НЕ БЫЛО ИНВЕРСИИ)
+            let inputBuffer = '';
+            
             DOM.hiddenInput.addEventListener('input', (e) => {
+                if (State.isFrozen) return;
+                
+                // Принимаем значение как есть, без манипуляций
                 State.currentLine = e.target.value;
                 this.updateInputLine();
+                
+                // Прокручиваем вниз, а не вверх
+                DOM.terminal.scrollTop = DOM.terminal.scrollHeight;
             });
 
-            // Клавиатура
+            // ОБРАБОТКА КЛАВИАТУРЫ
             DOM.hiddenInput.addEventListener('keydown', (e) => {
-                if (State.isConfirming) return;
-                
+                if (State.isConfirming) {
+                    e.preventDefault();
+                    return;
+                }
+
                 if (e.key === 'Enter') {
                     e.preventDefault();
                     this.submitCommand();
                 } else if (e.key === 'Escape') {
+                    e.preventDefault();
                     State.currentLine = '';
                     DOM.hiddenInput.value = '';
                     this.updateInputLine();
                 }
+                // НЕ ОБРАБАТЫВАЕМ ДРУГИЕ КЛАВИШИ - ОНИ ОБРАБАТЫВАЮТСЯ ЧЕРЕЗ 'input' СОБЫТИЕ
             });
 
-            // Быстрые кнопки
+            // БЫСТРЫЕ КНОПКИ (РАБОТАЮТ ЧЕРЕЗ setCommand)
             DOM.quickCmds.addEventListener('click', (e) => {
-                if (e.target.dataset.cmd) {
+                if (e.target.dataset.cmd && !State.isFrozen) {
                     this.setCommand(e.target.dataset.cmd);
                     this.submitCommand();
                 }
             });
 
-            // Модальное окно
+            // МОДАЛЬНОЕ ОКНО
             DOM.confirmY.addEventListener('click', () => this.handleConfirm(true));
             DOM.confirmN.addEventListener('click', () => this.handleConfirm(false));
         },
@@ -142,6 +155,7 @@
                 State.lines.shift();
             }
 
+            // ПРОКРУЧИВАЕМ ВНИЗ, А НЕ ВВЕРХ
             DOM.terminal.scrollTop = DOM.terminal.scrollHeight;
         },
 
@@ -152,10 +166,11 @@
             line.style.color = color;
             DOM.terminal.appendChild(line);
 
-            for (let i = 0; i < text.length; i++) {
-                line.textContent += text[i];
+            for (let char of text) {
+                line.textContent += char;
+                // ПРОКРУЧИВАЕМ ВНИЗ ПРИ ПЕЧАТИ
                 DOM.terminal.scrollTop = DOM.terminal.scrollHeight;
-                await new Promise(r => setTimeout(r, CONFIG.TYPING_SPEED));
+                await new Promise(r => setTimeout(r, 30));
             }
 
             State.lines.push({ text, color });
@@ -205,15 +220,10 @@
             State.currentLine = '';
             DOM.hiddenInput.value = '';
 
-            // Увеличение деградации
+            // ПРОКРУЧИВАЕМ ВНИЗ ПОСЛЕ КОМАНДЫ
+            DOM.terminal.scrollTop = DOM.terminal.scrollHeight;
+
             this.addDegradation(1);
-
-            // Блокировка при высокой деградации
-            if (State.degradation >= 80 && Math.random() < 0.3) {
-                this.addLine('> ДОСТУП ЗАПРЕЩЁН: СИСТЕМА ЗАБЛОКИРОВАНА', CONFIG.COLORS.error);
-                return;
-            }
-
             await this.processCommand(cmdLine);
             this.addInputLine();
         },
@@ -236,21 +246,20 @@
                 case 'trace': await this.cmdTrace(args[0]); break;
                 case 'playaudio': await this.cmdPlayAudio(args[0]); break;
                 case 'net_mode': this.cmdNetMode(); break;
-                case 'net_check': await this.cmdNetCheck(); break;
+                case 'net_check': this.cmdNetCheck(); break;
                 case 'clear': this.cmdClear(); break;
                 case 'reset': await this.cmdReset(); break;
                 case 'exit': await this.cmdExit(); break;
                 case 'deg': this.cmdDeg(args[0]); break;
                 case 'alpha': case 'beta': case 'gamma': this.cmdVigilKey(cmd, args[0]); break;
                 case 'vigil999': await this.cmdVigil999(); break;
-                default: 
-                    this.addLine(`команда не найдена: ${cmdLine}`, CONFIG.COLORS.error);
+                default: this.addLine(`команда не найдена: ${cmdLine}`, CONFIG.COLORS.error);
             }
         },
 
         // ==================== КОМАНДЫ ====================
         cmdHelp() {
-            const helpText = [
+            const help = [
                 'Доступные команды:',
                 '  SYST           — проверить состояние системы',
                 '  SYSLOG         — системный журнал активности',
@@ -270,7 +279,7 @@
                 '  ALPHA/BETA/GAMMA <код> — фиксировать коды',
                 '  VIGIL999       — активировать протокол'
             ];
-            helpText.forEach(line => this.addLine(line));
+            help.forEach(line => this.addLine(line));
         },
 
         cmdSyst() {
@@ -412,24 +421,26 @@
             this.addLine(`> ФАЙЛ: ${file.title}`);
             this.addLine(`> УРОВЕНЬ ДОСТУПА: ${file.accessLevel}`);
             
-            // Простая мини-игра: угадайте число от 100 до 999
+            // МИНИ-ИГРА: УГАДАЙ ЧИСЛО
             const code = Math.floor(100 + Math.random() * 900);
             let attempts = 5;
             let input = '';
             
-            this.addLine(`> КОД ДОСТУПА: 3 ЦИФРЫ (XXX)`);
+            this.addLine(`> КОД ДОСТУПА: 3 ЦИФРЫ`);
             this.addLine(`> ПОПЫТОК ОСТАЛОСЬ: ${attempts}`);
             this.addLine(`> ВВЕДИТЕ КОД: ___`);
             
-            const handleInput = async (e) => {
+            const handleInput = (e) => {
                 if (e.key === 'Enter') {
                     if (input.length === 3) {
                         const guess = parseInt(input);
                         attempts--;
                         
                         if (guess === code) {
+                            // УСПЕХ
+                            document.removeEventListener('keydown', handleInput);
+                            State.isFrozen = false;
                             this.addLine('> СИГНАЛ: КОД ВЕРИФИЦИРОВАН', CONFIG.COLORS.normal);
-                            await this.sleep(400);
                             this.addLine(`[ФАЙЛ РАСШИФРОВАН: ${file.title}]`);
                             this.addLine('------------------------------------');
                             file.content.forEach(line => this.addLine(line));
@@ -440,26 +451,23 @@
                                 this.addLine('> КЛЮЧ АЛЬФА: 375', CONFIG.COLORS.normal);
                                 this.addLine('> Используйте команду ALPHA для фиксации ключа', CONFIG.COLORS.warning);
                             }
-                            State.isFrozen = false;
-                            document.removeEventListener('keydown', handleInput);
                         } else {
+                            // НЕУДАЧА
                             const diff = Math.abs(guess - code);
                             const hint = guess < code ? '[↑] БОЛЬШЕ' : '[↓] МЕНЬШЕ';
                             this.addLine(`> ${hint}`);
-                            if (diff <= 100) this.addLine(`> ХОЛОДНО`);
-                            else if (diff <= 50) this.addLine(`> ТЕПЛО`);
-                            else if (diff <= 10) this.addLine(`> ГОРЯЧО`);
                             
                             if (attempts <= 0) {
+                                document.removeEventListener('keydown', handleInput);
+                                State.isFrozen = false;
                                 this.addLine('> СИСТЕМА: ДОСТУП ЗАПРЕЩЁН', CONFIG.COLORS.error);
                                 this.addLine(`> ${file.failure}`, CONFIG.COLORS.error);
                                 this.addDegradation(3);
-                                State.isFrozen = false;
-                                document.removeEventListener('keydown', handleInput);
                             } else {
                                 this.addLine(`> ПОПЫТОК ОСТАЛОСЬ: ${attempts}`);
                                 this.addLine(`> ВВЕДИТЕ КОД: ___`);
                                 input = '';
+                                DOM.hiddenInput.value = '';
                             }
                         }
                     }
@@ -497,11 +505,15 @@
             this.addLine(`> СТАТУС: ${t.status}`);
             this.addLine(`> РИСК: ${t.risk === 2 ? 'ВЫСОКИЙ' : 'СРЕДНИЙ'}`);
             
-            // Анимация загрузки
+            // АНИМАЦИЯ ЗАГРУЗКИ
             let progress = 0;
-            const loadingLine = this.addLine(`> АНАЛИЗ [${' '.repeat(10)}]`, CONFIG.COLORS.normal);
+            const loading = this.addLine(`> АНАЛИЗ [${' '.repeat(10)}]`, CONFIG.COLORS.normal);
+            
             const interval = setInterval(() => {
                 progress += 10;
+                const filled = Math.floor(progress / 10);
+                loading.textContent = `> АНАЛИЗ [${'|'.repeat(filled)}${' '.repeat(10 - filled)}] ${progress}%`;
+                
                 if (progress >= 100) {
                     clearInterval(interval);
                     State.isFrozen = false;
@@ -510,9 +522,6 @@
                         this.addLine('> КЛЮЧ ГАММА: 291', CONFIG.COLORS.normal);
                         this.addLine('> Используйте команду GAMMA для фиксации ключа', CONFIG.COLORS.warning);
                     }
-                } else {
-                    const filled = Math.floor(progress / 10);
-                    loadingLine.textContent = `> АНАЛИЗ [${'|'.repeat(filled)}${' '.repeat(10-filled)}] ${progress}%`;
                 }
             }, 100);
         },
@@ -529,17 +538,18 @@
             }
             this.addLine(`[АУДИО: ${d.audioDesc}]`, CONFIG.COLORS.warning);
             this.addLine('> Воспроизведение ограничено на мобильных', CONFIG.COLORS.gray);
+            await this.sleep(1000);
             this.addLine('> [АУДИО: ВОСПРОИЗВЕДЕНИЕ ЗАПИСИ]');
             await this.sleep(2000);
             this.addLine('> [АУДИО: ЗАПИСЬ ЗАВЕРШЕНА]');
         },
 
         cmdNetMode() {
-            this.addLine('> Режим управления сетью...');
+            this.addLine('> Режим управления сеткой...');
             this.addLine('> НЕ ДОСТУПНО НА МОБИЛЬНЫХ', CONFIG.COLORS.warning);
         },
 
-        async cmdNetCheck() {
+        cmdNetCheck() {
             this.addLine('> Проверка конфигурации...');
             this.addLine('> НЕ ДОСТУПНО НА МОБИЛЬНЫХ', CONFIG.COLORS.warning);
             this.addLine(`> Сет. деградация: ${Math.min(85, State.degradation)}%`);
@@ -547,40 +557,29 @@
 
         cmdClear() {
             this.clear();
-            this.typeText('> ТЕРМИНАЛ ОЧИЩЕН');
+            this.addLine('> ТЕРМИНАЛ ОЧИЩЕН');
         },
 
         async cmdReset() {
-            this.addLine('[ПРОТОКОЛ СБРОСА]');
-            this.addLine('ВНИМАНИЕ: Операция сбросит сессию.');
-            
             const confirmed = await this.showConfirmation('Подтвердить сброс? (Y/N)');
             if (confirmed) {
-                this.addLine('> Y');
-                await this.showLoading(2000, "Сброс");
                 this.clear();
                 State.degradation = 0;
                 this.updateDegradationDisplay();
-                this.welcome();
                 State.vigilCodes = { alpha: null, beta: null, gamma: null };
                 localStorage.setItem('vigilCodes', JSON.stringify(State.vigilCodes));
+                await this.welcome();
             } else {
-                this.addLine('> N');
                 this.addLine('[ОТМЕНА]');
             }
         },
 
         async cmdExit() {
-            this.addLine('[ЗАВЕРШЕНИЕ СЕССИИ]');
-            
             const confirmed = await this.showConfirmation('Выйти? (Y/N)');
             if (confirmed) {
-                this.addLine('> Y');
-                await this.showLoading(1000, "Отключение");
                 this.addLine('> СОЕДИНЕНИЕ ПРЕРВАНО.');
-                setTimeout(() => window.location.href = 'index.html', 2000);
+                setTimeout(() => window.location.href = 'index.html', 1500);
             } else {
-                this.addLine('> N');
                 this.addLine('[ОТМЕНА]');
             }
         },
@@ -633,11 +632,9 @@
             
             const confirmed = await this.showConfirmation('Подтвердить активацию? (Y/N)');
             if (confirmed) {
-                this.addLine('> Y');
                 this.addLine('> ПЕРЕХОД В РЕЖИМ НАБЛЮДЕНИЯ...');
                 setTimeout(() => window.location.href = 'observer-7.html', 3000);
             } else {
-                this.addLine('> N');
                 this.addLine('> АКТИВАЦИЯ ОТМЕНЕНА');
             }
         },
@@ -663,22 +660,17 @@
 
         async showLoading(duration, text = "ЗАГРУЗКА") {
             const start = Date.now();
+            const loading = this.addLine(`> ${text} [          ]`, CONFIG.COLORS.normal);
+            
             const interval = setInterval(() => {
                 const elapsed = Date.now() - start;
                 const progress = Math.min(100, (elapsed / duration) * 100);
                 const filled = Math.floor(progress / 10);
-                const bar = `[${'|'.repeat(filled)}${' '.repeat(10 - filled)}] ${Math.floor(progress)}%`;
-                
-                const lines = DOM.terminal.querySelectorAll('.line');
-                if (lines.length > 0) {
-                    lines[lines.length - 1].textContent = `> ${text} ${bar}`;
-                }
+                loading.textContent = `> ${text} [${'|'.repeat(filled)}${' '.repeat(10 - filled)}] ${Math.floor(progress)}%`;
                 
                 if (progress >= 100) {
                     clearInterval(interval);
-                    if (lines.length > 0) {
-                        lines[lines.length - 1].textContent = `> ${text} [ЗАВЕРШЕНО]`;
-                    }
+                    loading.textContent = `> ${text} [ЗАВЕРШЕНО]`;
                 }
             }, 50);
             
@@ -689,7 +681,6 @@
             return new Promise((resolve) => {
                 State.isConfirming = true;
                 State.confirmCallback = resolve;
-                
                 DOM.confirmText.textContent = text;
                 DOM.confirmModal.style.display = 'block';
                 DOM.hiddenInput.focus();
@@ -704,7 +695,6 @@
                         this.handleConfirm(false);
                     }
                 };
-                
                 document.addEventListener('keydown', keyHandler);
             });
         },
@@ -731,16 +721,13 @@
 
     // ==================== ИНИЦИАЛИЗАЦИЯ ====================
     window.MobileTerminal = MobileTerminal;
-    document.addEventListener('DOMContentLoaded', () => {
-        MobileTerminal.init();
-    });
-
+    document.addEventListener('DOMContentLoaded', () => MobileTerminal.init());
 })();
 
 // ==================== ИНСТРУКЦИЯ ПО ДОБАВЛЕНИЮ ДАННЫХ ====================
-// 1. Откройте terminal_canvas.js
-// 2. Найдите объект dossiers = { ... }
-// 3. Скопируйте ВСЕ содержимое dossiers
-// 4. Вставьте в mobile.js в объект DATA.dossiers (после '0X001')
-// 5. Тоже самое сделайте для notes и decryptFiles
-// 6. ГОТОВО! Больше ничего менять не нужно.
+// 1. Открой terminal_canvas.js
+// 2. Найди const dossiers = { ... }
+// 3. Скопируй ВСЕ содержимое dossiers
+// 4. Вставь в mobile.js в объект DATA.dossiers (после 0X001)
+// 5. Тоже самое сделай для notes и decryptFiles
+// 6. ГОТОВО. Никаких других файлов не нужно.
