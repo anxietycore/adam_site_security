@@ -998,7 +998,7 @@ if (this.level >= AUTO_RESET_LEVEL && !isFrozen) {
 if (this.level >= 70 && !this.glitchAmbientActive) {
   // ⬇⬇⬇ ВОТ ЭТО ДОБАВЬ ⬇⬇⬇
   this.glitchAudio = new Audio('sounds/ambient/ambient_glitch.mp3');
-  this.glitchAudio.volume = 0.3;
+  this.glitchAudio.volume = 0.4;
   this.glitchAudio.loop = true;
   this.glitchAudio.play().catch(e => console.warn('Glitch audio play failed:', e));
   // ⬆⬆⬆ ВОТ ЭТО ДОБАВЬ ⬆⬆⬆
@@ -4083,9 +4083,6 @@ if (!allCorrect) {
     addColoredText('ДОСТУП ЗАПРЕЩЁН. ИСПРАВЬТЕ ОШИБКИ.', '#FF4444');
     break;
 }
-
-// ⬇⬇⬇ ЗВУК ПОДТВЕРЖДЕНИЯ ⬇⬇⬇
-audioManager.playVigilSound('confirm');
     
     // ВСЕ КЛЮЧИ ВЕРНЫ - ПРОСТОЙ ПОДТВЕРЖДАЮЩИЙ ВОПРОС
     addColoredText('>>> АКТИВАЦИЯ ПРОТОКОЛА OBSERVER-7. ПОДТВЕРДИТЕ? (Y/N)', '#FFFF00');
@@ -4099,9 +4096,13 @@ audioManager.playVigilSound('confirm');
     const answer = await new Promise((resolve) => {
         const handleKey = (e) => {
             if (e.key.toLowerCase() === 'y' || e.key.toLowerCase() === 'н') {
+				        audioManager.playSystemSound('Y');
+
                 document.removeEventListener('keydown', handleKey);
                 resolve('Y');
             } else if (e.key.toLowerCase() === 'n' || e.key.toLowerCase() === 'т') {
+				        audioManager.playSystemSound('N');
+
                 document.removeEventListener('keydown', handleKey);
                 resolve('N');
             }
@@ -4654,10 +4655,7 @@ async function startHellTransition() {
         canvas.style.display = 'none';
         
         // 5. Звуковая дорожка
-        audioManager.playSystemSound('glitch_e', { volume: 1.0, loop: true });
-        setTimeout(() => {
-            audioManager.play('net_connection_loss.mp3', { volume: 0.7 });
-        }, 2000);
+audioManager.playVigilSound('transition');
 
         
         // 6. ЭФФЕКТ ПРОВАЛИВАНИЯ (КРАСНЫЕ ПОЛОСЫ, КОТОРЫЕ СТАНОВЯТСЯ ЧЁРНЫМИ)
