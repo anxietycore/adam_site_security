@@ -1,615 +1,825 @@
-/**
- * mobile.js - ЧИСТО МОБИЛЬНАЯ ВЕРСИЯ ТЕРМИНАЛА A.D.A.M.
- * 
- * ПРИНЦИП РАБОТЫ:
- * 1. Загружается ПОСЛЕ terminal_canvas.js
- * 2. ПОЛНОСТЬЮ перехватывает управление вводом (заменяет клавиатуру)
- * 3. Использует ТОЛЬКО API терминала (__TerminalCanvas)
- * 4. Не создает параллельных состояний
- * 5. Работает как event-driven адаптер
- */
-
+// mobile_terminal_v2.js - Чистая мобильная версия терминала A.D.A.M.
 (() => {
   'use strict';
   
-  // ==================== CONFIGURATION ====================
-  const UI_CONFIG = {
-    inputBarHeight: 70, // px (адаптивная)
-    quickBarHeight: 50, // px
-    buttonSize: 52,     // px (адаптивная)
-    gridModalHeight: 65, // vh
-    historyTipDuration: 800, // ms
-    scrollSensitivity: 3, // строки
-    debounceDelay: 150, // ms для resize
-    zIndex: 2147483646
-  };
-  
-  // ==================== MOBILE STATE MANAGER ====================
-  const MobileState = {
-    // Все состояния хранятся в терминале, здесь только кэши для UI
-    cmdHistory: [],
-    historyIndex: 0,
-    currentLine: '',
-    isReady: false,
-    isLiteMode: true,
-    lastCommandTime: 0,
-    
-    // Кэш для быстрого доступа
-    terminalAPI: null,
-    audioAPI: null,
-    netGridAPI: null,
-    
-    init() {
-      // Ждём полной загрузки терминала
-      const waitForTerminal = setInterval(() => {
-        if (window.__TerminalCanvas && window.audioManager && window.__netGrid) {
-          this.terminalAPI = window.__TerminalCanvas;
-          this.audioAPI = window.audioManager;
-          this.netGridAPI = window.__netGrid;
-          this.isReady = true;
-          clearInterval(waitForTerminal);
-          console.log('[mobile] State initialized');
-        }
-      }, 50);
+  // ==================== КОНФИГУРАЦИЯ ====================
+  const CONFIG = {
+    MAX_LINES: 500,
+    TYPING_SPEED: 16,
+    FONT_FAMILY: "'Press Start 2P', monospace",
+    COLORS: {
+      normal: '#00FF41',
+      error: '#FF4444',
+      warning: '#FFFF00',
+      system: '#FF00FF'
     }
   };
   
-  // ==================== DOM BUILDER (UI) ====================
-  const DOMBuilder = {
-    create(tag, props = {}, styles = {}) {
-      const el = document.createElement(tag);
-      Object.assign(el, props);
-      Object.assign(el.style, styles);
-      return el;
+  // ==================== СОСТОЯНИЕ ====================
+  const State = {
+    terminal: null,          // Ссылка на __TerminalCanvas
+    audio: null,             // Ссылка на audioManager
+    lines: [],               // Массив строк для отображения
+    currentLine: '',         // Текущая строка ввода
+    history: [],             // История команд
+    historyIndex: -1,
+    isFrozen: false,
+    isTyping: false,
+    awaitingConfirmation: false,
+    confirmationCallback: null,
+    // Данные из terminal_canvas.js
+    dossiers: {},
+    notes: {},
+    decryptFiles: {},
+    // Деградация (упрощенная)
+    degradationLevel: 0,
+    // VIGIL999
+    vigilCodeParts: { alpha: null, beta: null, gamma: null }
+  };
+  
+  // ==================== DOM ЭЛЕМЕНТЫ ====================
+  const DOM = {
+    terminal: null,
+    keyboard: null,
+    quickCommands: null,
+    statusBar: null,
+    degradationDisplay: null
+  };
+  
+  // ==================== ИНИЦИАЛИЗАЦИЯ ====================
+  const MobileTerminal = {
+    async init() {
+      console.log('[MOBILE] Initializing...');
+      
+      // Получаем DOM элементы
+      DOM.terminal = document.getElementById('terminal');
+      DOM.keyboard = document.getElementById('keyboard');
+      DOM.quickCommands = document.getElementById('quickCommands');
+      DOM.statusBar = document.getElementById('statusBar');
+      DOM.degradationDisplay = document.getElementById('degradationDisplay');
+      
+      // Ждем загрузки terminal_canvas.js
+      await this.waitForTerminal();
+      
+      // Загружаем данные из terminal_canvas.js
+      this.loadData();
+      
+      // Настраиваем UI
+      this.setupKeyboard();
+      this.setupQuickCommands();
+      
+      // Инициализируем аудио (требует первого взаимодействия)
+      this.initAudio();
+      
+      // Приветствие
+      await this.welcome();
+      
+      // Добавляем строку ввода
+      this.addInputLine();
+      
+      console.log('[MOBILE] Ready');
     },
     
-    buildUI() {
-      // 1. Виртуальная клавиатура
-      this._buildInputBar();
-      
-      // 2. Быстрые команды
-      this._buildQuickBar();
-      
-      // 3. Модальное окно сетки
-      this._buildGridModal();
-      
-      // 4. Подсказка истории
-      this._buildHistoryTip();
-      
-      console.log('[mobile] UI built');
-    },
-    
-    _buildInputBar() {
-      const bar = this.create('div', {
-        id: 'mobile_input_bar',
-        role: 'region',
-        'aria-label': 'Mobile terminal input'
-      }, {
-        position: 'fixed',
-        left: '0',
-        right: '0',
-        bottom: '0',
-        height: `${UI_CONFIG.inputBarHeight}px`,
-        background: 'rgba(0, 0, 0, 0.85)',
-        backdropFilter: 'blur(8px)',
-        borderTop: '2px solid #00FF41',
-        display: 'flex',
-        alignItems: 'center',
-        padding: '8px 12px',
-        gap: '8px',
-        zIndex: UI_CONFIG.zIndex,
-        transform: 'translateY(0)',
-        transition: 'transform 0.3s ease'
-      });
-      
-      // Поле ввода (только для мобильной клавиатуры)
-      const input = this.create('input', {
-        id: 'mobile_input_field',
-        type: 'text',
-        placeholder: 'Команда (help)',
-        autocapitalize: 'none',
-        spellcheck: false,
-        autocomplete: 'off'
-      }, {
-        flex: '1',
-        height: '100%',
-        background: 'rgba(0, 20, 10, 0.7)',
-        color: '#00FF41',
-        border: '1px solid rgba(0, 255, 65, 0.4)',
-        borderRadius: '8px',
-        padding: '10px 12px',
-        fontSize: '16px', // Предотвращает zoom на iOS
-        fontFamily: 'monospace'
-      });
-      
-      // Кнопка Enter
-      const enterBtn = this.create('button', {
-        innerText: '⏎',
-        title: 'Execute'
-      }, {
-        width: `${UI_CONFIG.buttonSize}px`,
-        height: `${UI_CONFIG.buttonSize}px`,
-        background: 'rgba(0, 255, 65, 0.15)',
-        color: '#00FF41',
-        border: '1px solid #00FF41',
-        borderRadius: '8px',
-        fontSize: '24px',
-        fontFamily: 'monospace'
-      });
-      
-      bar.append(input, enterBtn);
-      document.body.appendChild(bar);
-      
-      // Клик по Enter = отправка команды
-      enterBtn.onclick = () => InputManager.submitCommand();
-      input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          InputManager.submitCommand();
-        }
-      });
-      
-      // Показ/скрытие при открытии клавиатуры
-      if (window.visualViewport) {
-        let lastHeight = window.visualViewport.height;
-        window.visualViewport.addEventListener('resize', () => {
-          const currentHeight = window.visualViewport.height;
-          if (currentHeight < lastHeight * 0.85) {
-            // Клавиатура открылась
-            bar.style.transform = `translateY(-${lastHeight - currentHeight}px)`;
-          } else {
-            // Клавиатура закрылась
-            bar.style.transform = 'translateY(0)';
+    waitForTerminal() {
+      return new Promise((resolve) => {
+        const check = setInterval(() => {
+          if (window.__TerminalCanvas && window.audioManager) {
+            State.terminal = window.__TerminalCanvas;
+            State.audio = window.audioManager;
+            clearInterval(check);
+            resolve();
           }
-          lastHeight = currentHeight;
-          ViewportManager.adjustTerminal();
-        });
+        }, 50);
+      });
+    },
+    
+    loadData() {
+      // Экспортируем данные из terminal_canvas.js
+      if (State.terminal) {
+        State.dossiers = JSON.parse(JSON.stringify(State.terminal.dossiers || {}));
+        State.notes = JSON.parse(JSON.stringify(State.terminal.notes || {}));
+        // Копируем decryptFiles из глобальной области
+        State.decryptFiles = window.decryptFiles || {};
+      }
+      
+      // Загружаем VIGIL999 ключи из localStorage
+      const saved = localStorage.getItem('vigilCodeParts');
+      if (saved) {
+        State.vigilCodeParts = JSON.parse(saved);
       }
     },
     
-    _buildQuickBar() {
-      const quick = this.create('div', { id: 'mobile_quick_bar' }, {
-        position: 'fixed',
-        left: '8px',
-        right: '8px',
-        bottom: `${UI_CONFIG.inputBarHeight + 8}px`,
-        height: `${UI_CONFIG.quickBarHeight}px`,
-        display: 'flex',
-        gap: '6px',
-        padding: '6px',
-        background: 'rgba(0, 0, 0, 0.7)',
-        backdropFilter: 'blur(6px)',
-        borderRadius: '8px',
-        zIndex: UI_CONFIG.zIndex - 1,
-        overflowX: 'auto'
+    setupKeyboard() {
+      DOM.keyboard.addEventListener('click', (e) => {
+        if (e.target.classList.contains('kb-key')) {
+          const key = e.target.dataset.key;
+          this.handleKey(key);
+        }
       });
-      
-      const commands = ['help', 'syst', 'net_mode', 'clear', 'reset'];
-      commands.forEach(cmd => {
-        const btn = this.create('button', {
-          innerText: cmd,
-          title: `Quick: ${cmd}`
-        }, {
-          minWidth: '60px',
-          height: '100%',
-          background: 'rgba(0, 20, 10, 0.6)',
-          color: '#00FF41',
-          border: '1px solid rgba(0, 255, 65, 0.3)',
-          borderRadius: '6px',
-          fontSize: '12px',
-          fontFamily: 'monospace',
-          whiteSpace: 'nowrap',
-          padding: '0 8px'
-        });
-        
-        btn.onclick = () => {
-          InputManager.setCommand(cmd);
-          this.showHistoryTip();
-        };
-        quick.appendChild(btn);
-      });
-      
-      document.body.appendChild(quick);
     },
     
-    _buildGridModal() {
-      const modal = this.create('div', { id: 'mobile_grid_modal' }, {
-        position: 'fixed',
-        top: '0',
-        left: '0',
-        right: '0',
-        bottom: '0',
-        background: 'rgba(0, 0, 0, 0.9)',
-        display: 'none',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: UI_CONFIG.zIndex - 2
+    setupQuickCommands() {
+      DOM.quickCommands.addEventListener('click', (e) => {
+        if (e.target.classList.contains('quick-btn')) {
+          const cmd = e.target.dataset.cmd;
+          this.setCommand(cmd);
+          this.submitCommand();
+        }
       });
-      
-      const panel = this.create('div', { id: 'mobile_grid_panel' }, {
-        width: '95%',
-        maxWidth: '600px',
-        height: `${UI_CONFIG.gridModalHeight}vh`,
-        background: 'rgba(0, 10, 6, 0.95)',
-        border: '2px solid #00FF41',
-        borderRadius: '10px',
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden'
-      });
-      
-      const header = this.create('div', { innerText: 'NET GRID CONTROL' }, {
-        padding: '12px',
-        fontSize: '14px',
-        textAlign: 'center',
-        borderBottom: '1px solid #00FF41',
-        background: 'rgba(0, 20, 10, 0.5)'
-      });
-      
-      const map = this.create('div', { id: 'mobile_grid_map' }, {
-        flex: '1',
-        position: 'relative',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        overflow: 'hidden'
-      });
-      
-      const controls = this.create('div', {}, {
-        padding: '12px',
-        display: 'flex',
-        gap: '8px',
-        justifyContent: 'center',
-        borderTop: '1px solid #00FF41'
-      });
-      
-      const closeBtn = this.create('button', { innerText: 'CLOSE' }, {
-        padding: '10px 20px',
-        background: 'rgba(0, 20, 10, 0.7)',
-        color: '#00FF41',
-        border: '1px solid #00FF41',
-        borderRadius: '6px',
-        fontSize: '12px'
-      });
-      
-      closeBtn.onclick = () => GridManager.close();
-      controls.appendChild(closeBtn);
-      panel.append(header, map, controls);
-      modal.appendChild(panel);
-      document.body.appendChild(modal);
     },
     
-    _buildHistoryTip() {
-      const tip = this.create('div', { id: 'mobile_history_tip' }, {
-        position: 'fixed',
-        top: '8px',
-        left: '8px',
-        background: 'rgba(0, 0, 0, 0.7)',
-        color: '#00FF41',
-        padding: '6px 12px',
-        borderRadius: '6px',
-        fontSize: '12px',
-        zIndex: UI_CONFIG.zIndex,
-        display: 'none',
-        border: '1px solid #00FF41'
-      });
-      document.body.appendChild(tip);
+    initAudio() {
+      // Аудио инициализируется при первом взаимодействии
+      document.addEventListener('click', () => {
+        if (State.audio && State.audio.audioContext && State.audio.audioContext.state === 'suspended') {
+          State.audio.audioContext.resume();
+        }
+      }, { once: true });
     },
     
-    showHistoryTip() {
-      const tip = document.getElementById('mobile_history_tip');
-      tip.textContent = '↑↓ - История | ESC - Очистить';
-      tip.style.display = 'block';
-      setTimeout(() => tip.style.display = 'none', UI_CONFIG.historyTipDuration);
-    }
-  };
-  
-  // ==================== INPUT MANAGER ====================
-  const InputManager = {
-    submitCommand() {
-      if (!MobileState.isReady) return;
-      if (MobileState.terminalAPI.isBlocked?.()) return; // Проверка через API
+    async welcome() {
+      await this.typeText('> ТЕРМИНАЛ A.D.A.M. // MOBILE V2');
+      await this.typeText('> VIGIL-9 АКТИВЕН');
+      await this.typeText('> ВВЕДИТЕ "help" ДЛЯ СПИСКА КОМАНД');
+    },
+    
+    // ==================== ОТОБРАЖЕНИЕ ====================
+    addLine(text, color = CONFIG.COLORS.normal, isInput = false) {
+      const lineDiv = document.createElement('div');
+      lineDiv.className = 'line';
+      lineDiv.style.color = color;
       
-      const input = document.getElementById('mobile_input_field');
-      const cmd = String(input.value || MobileState.currentLine).trim();
-      
-      if (!cmd) return;
-      
-      // Сохраняем в историю
-      MobileState.cmdHistory.push(cmd);
-      MobileState.historyIndex = MobileState.cmdHistory.length;
-      if (MobileState.cmdHistory.length > 50) {
-        MobileState.cmdHistory.shift();
+      if (isInput) {
+        lineDiv.innerHTML = `<span class="prompt">adam@mobile:~$ </span><span class="input-text">${text}</span><span class="cursor"></span>`;
+      } else {
+        lineDiv.textContent = text;
       }
-      localStorage.setItem('mobile_cmdHistory', JSON.stringify(MobileState.cmdHistory));
       
-      // Воспроизводим звук
-      MobileState.audioAPI.playKeyPress('enter');
+      DOM.terminal.appendChild(lineDiv);
+      State.lines.push({ text, color, isInput });
       
-      // ОТПРАВЛЯЕМ В ТЕРМИНАЛ ЧЕРЕЗ API
-      MobileState.terminalAPI.processCommand(cmd);
+      // Ограничиваем количество строк
+      if (State.lines.length > CONFIG.MAX_LINES) {
+        State.lines.shift();
+        DOM.terminal.removeChild(DOM.terminal.firstChild);
+      }
       
-      // Очищаем поле
-      input.value = '';
-      MobileState.currentLine = '';
-      DOMBuilder.showHistoryTip();
+      // Прокрутка вниз
+      DOM.terminal.scrollTop = DOM.terminal.scrollHeight;
+    },
+    
+    async typeText(text, color = CONFIG.COLORS.normal) {
+      State.isTyping = true;
+      const lineDiv = document.createElement('div');
+      lineDiv.className = 'line';
+      lineDiv.style.color = color;
+      DOM.terminal.appendChild(lineDiv);
+      
+      let buffer = '';
+      for (let i = 0; i < text.length; i++) {
+        buffer += text[i];
+        lineDiv.textContent = buffer;
+        DOM.terminal.scrollTop = DOM.terminal.scrollHeight;
+        await this.sleep(CONFIG.TYPING_SPEED);
+      }
+      
+      State.lines.push({ text, color });
+      State.isTyping = false;
+    },
+    
+    addInputLine() {
+      if (State.isFrozen) return;
+      this.addLine(State.currentLine, CONFIG.COLORS.normal, true);
+    },
+    
+    updateInputLine() {
+      const lines = DOM.terminal.querySelectorAll('.line');
+      const lastLine = lines[lines.length - 1];
+      if (lastLine && lastLine.querySelector('.input-text')) {
+        lastLine.querySelector('.input-text').textContent = State.currentLine;
+      }
+    },
+    
+    clear() {
+      DOM.terminal.innerHTML = '';
+      State.lines = [];
+    },
+    
+    // ==================== ВВОД ====================
+    handleKey(key) {
+      if (State.isFrozen || State.isTyping) return;
+      
+      // Звук клавиши (если аудио доступно)
+      if (State.audio && State.audio.playKeyPress) {
+        State.audio.playKeyPress(key.length === 1 ? 'generic' : key);
+      }
+      
+      switch(key) {
+        case 'Backspace':
+          State.currentLine = State.currentLine.slice(0, -1);
+          break;
+        case 'Enter':
+          this.submitCommand();
+          return;
+        case 'Escape':
+          State.currentLine = '';
+          break;
+        case 'Tab':
+          // Циклический выбор быстрых команд
+          const buttons = Array.from(DOM.quickCommands.querySelectorAll('.quick-btn'));
+          const currentIndex = buttons.findIndex(btn => btn.dataset.cmd === State.currentLine);
+          const nextIndex = (currentIndex + 1) % buttons.length;
+          this.setCommand(buttons[nextIndex].dataset.cmd);
+          return;
+        case 'ArrowUp':
+          this.navigateHistory('up');
+          return;
+        case 'ArrowDown':
+          this.navigateHistory('down');
+          return;
+        default:
+          if (key.length === 1 || key === ' ') {
+            State.currentLine += key;
+          }
+      }
+      
+      this.updateInputLine();
+    },
+    
+    navigateHistory(dir) {
+      if (State.history.length === 0) return;
+      
+      if (dir === 'up') {
+        State.historyIndex = Math.max(0, State.historyIndex - 1);
+      } else {
+        State.historyIndex = Math.min(State.history.length - 1, State.historyIndex + 1);
+      }
+      
+      State.currentLine = State.history[State.historyIndex] || '';
+      this.updateInputLine();
     },
     
     setCommand(cmd) {
-      document.getElementById('mobile_input_field').value = cmd;
-      MobileState.currentLine = cmd;
+      State.currentLine = cmd;
+      this.updateInputLine();
     },
     
-    // Навигация по истории
-    navigateHistory(direction) {
-      if (!MobileState.cmdHistory.length) return;
-      
-      if (direction === 'up') {
-        MobileState.historyIndex = Math.max(0, MobileState.historyIndex - 1);
-      } else {
-        MobileState.historyIndex = Math.min(
-          MobileState.cmdHistory.length, 
-          MobileState.historyIndex + 1
-        );
-      }
-      
-      const cmd = MobileState.cmdHistory[MobileState.historyIndex] || '';
-      this.setCommand(cmd);
-    }
-  };
-  
-  // ==================== GRID MANAGER ====================
-  const GridManager = {
-    isOpen: false,
-    originalCanvas: null,
-    
-    open() {
-      if (!MobileState.netGridAPI) return;
-      
-      this.isOpen = true;
-      
-      // Прячем деградацию индикатор
-      try {
-        MobileState.terminalAPI.degradation?.indicator?.style?.display = 'none';
-      } catch(e) {}
-      
-      // Показываем модальное окно
-      const modal = document.getElementById('mobile_grid_modal');
-      modal.style.display = 'flex';
-      
-      // Находим canvas сетки
-      const canvas = document.getElementById('netCanvas') || 
-                    document.querySelector('canvas:not(#terminalCanvas)');
-      if (!canvas) {
-        console.warn('[mobile] Canvas сетки не найден');
+    async submitCommand() {
+      const cmdLine = State.currentLine.trim();
+      if (!cmdLine) {
+        this.addInputLine();
         return;
       }
       
-      this.originalCanvas = canvas;
-      
-      // Перемещаем canvas в модальное окно
-      const map = document.getElementById('mobile_grid_map');
-      map.innerHTML = '';
-      canvas.style.position = 'relative';
-      canvas.style.width = '100%';
-      canvas.style.height = '100%';
-      canvas.style.pointerEvents = 'auto';
-      map.appendChild(canvas);
-      
-      // Включаем режим сетки
-      MobileState.netGridAPI.setGridMode(true);
-      
-      // Адаптируем размеры
-      ViewportManager.adjustTerminal();
-    },
-    
-    close() {
-      if (!this.isOpen) return;
-      
-      this.isOpen = false;
-      
-      // Возвращаем canvas обратно
-      if (this.originalCanvas && this.originalCanvas.parentNode) {
-        this.originalCanvas.style.position = '';
-        this.originalCanvas.style.width = '';
-        this.originalCanvas.style.height = '';
-        document.body.appendChild(this.originalCanvas);
+      // Убираем строку ввода и выводим команду
+      const lines = DOM.terminal.querySelectorAll('.line');
+      if (lines.length > 0) {
+        lines[lines.length - 1].remove();
+        State.lines.pop();
       }
       
-      // Прячем модальное окно
-      document.getElementById('mobile_grid_modal').style.display = 'none';
+      this.addLine('adam@mobile:~$ ' + cmdLine, '#FFFFFF');
+      State.history.push(cmdLine);
+      State.historyIndex = State.history.length;
+      State.currentLine = '';
       
-      // Выключаем режим сетки
-      MobileState.netGridAPI.setGridMode(false);
-      
-      // Восстанавливаем деградацию индикатор
-      try {
-        MobileState.terminalAPI.degradation?.indicator?.style?.display = '';
-      } catch(e) {}
-      
-      ViewportManager.adjustTerminal();
+      // Обработка команды
+      await this.processCommand(cmdLine);
     },
     
-    toggle() {
-      this.isOpen ? this.close() : this.open();
-    }
-  };
-  
-  // ==================== VIEWPORT MANAGER ====================
-  const ViewportManager = {
-    resizeTimeout: null,
-    
-    init() {
-      this.adjustTerminal();
+    // ==================== ОБРАБОТКА КОМАНД ====================
+    async processCommand(cmdLine) {
+      const parts = cmdLine.toLowerCase().split(' ').filter(Boolean);
+      const command = parts[0];
+      const args = parts.slice(1);
       
-      // Debounced resize handler
-      const handler = () => this.scheduleAdjust();
-      window.visualViewport?.addEventListener('resize', handler);
-      window.addEventListener('orientationchange', () => {
-        setTimeout(() => this.adjustTerminal(), 300);
-      });
+      // Увеличиваем деградацию
+      this.addDegradation(1);
+      
+      // Проверка блокировки команд при высокой деградации
+      if (State.degradationLevel >= 80 && Math.random() < 0.3) {
+        this.addLine('> ДОСТУП ЗАПРЕЩЁН: СИСТЕМА ЗАБЛОКИРОВАНА', CONFIG.COLORS.error);
+        this.addInputLine();
+        return;
+      }
+      
+      switch(command) {
+        case 'help':
+          await this.cmdHelp();
+          break;
+        case 'syst':
+          await this.cmdSyst();
+          break;
+        case 'syslog':
+          await this.cmdSyslog();
+          break;
+        case 'subj':
+          await this.cmdSubj();
+          break;
+        case 'notes':
+          await this.cmdNotes();
+          break;
+        case 'open':
+          if (args.length === 0) {
+            this.addLine('ОШИБКА: Укажите ID файла', CONFIG.COLORS.error);
+          } else {
+            await this.cmdOpen(args[0]);
+          }
+          break;
+        case 'dscr':
+          if (args.length === 0) {
+            this.addLine('ОШИБКА: Укажите ID субъекта', CONFIG.COLORS.error);
+          } else {
+            await this.cmdDscr(args[0]);
+          }
+          break;
+        case 'decrypt':
+          if (args.length === 0) {
+            this.addLine('ОШИБКА: Укажите ID файла', CONFIG.COLORS.error);
+          } else {
+            await this.cmdDecrypt(args[0]);
+          }
+          break;
+        case 'trace':
+          if (args.length === 0) {
+            this.addLine('ОШИБКА: Укажите цель', CONFIG.COLORS.error);
+          } else {
+            await this.cmdTrace(args[0]);
+          }
+          break;
+        case 'playaudio':
+          if (args.length === 0) {
+            this.addLine('ОШИБКА: Укажите ID досье', CONFIG.COLORS.error);
+          } else {
+            await this.cmdPlayAudio(args[0]);
+          }
+          break;
+        case 'net_mode':
+          await this.cmdNetMode();
+          break;
+        case 'net_check':
+          await this.cmdNetCheck();
+          break;
+        case 'clear':
+          await this.cmdClear();
+          break;
+        case 'reset':
+          await this.cmdReset();
+          break;
+        case 'exit':
+          await this.cmdExit();
+          break;
+        case 'deg':
+          if (args.length === 0) {
+            this.addLine(`Текущий уровень деградации: ${State.degradationLevel}%`);
+          } else {
+            const level = parseInt(args[0]);
+            if (!isNaN(level) && level >= 0 && level <= 100) {
+              State.degradationLevel = level;
+              this.updateDegradationDisplay();
+              this.addLine(`Уровень деградации установлен: ${level}%`);
+            } else {
+              this.addLine('ОШИБКА: Уровень должен быть 0-100', CONFIG.COLORS.error);
+            }
+          }
+          break;
+        case 'alpha':
+        case 'beta':
+        case 'gamma':
+          if (args.length === 0) {
+            this.addLine(`ОШИБКА: Укажите код для ${command.toUpperCase()}`, CONFIG.COLORS.error);
+          } else {
+            State.vigilCodeParts[command] = args[0];
+            localStorage.setItem('vigilCodeParts', JSON.stringify(State.vigilCodeParts));
+            this.addLine(`> Код ${command.toUpperCase()} зафиксирован`);
+            if (State.vigilCodeParts.alpha && State.vigilCodeParts.beta && State.vigilCodeParts.gamma) {
+              this.addLine('> Все коды собраны. Введите VIGIL999 для активации', CONFIG.COLORS.warning);
+            }
+          }
+          break;
+        case 'vigil999':
+          await this.cmdVigil999();
+          break;
+        default:
+          this.addLine(`команда не найдена: ${cmdLine}`, CONFIG.COLORS.error);
+      }
+      
+      this.addInputLine();
     },
     
-    scheduleAdjust() {
-      clearTimeout(this.resizeTimeout);
-      this.resizeTimeout = setTimeout(() => this.adjustTerminal(), UI_CONFIG.debounceDelay);
+    // ==================== КОМАНДЫ ====================
+    async cmdHelp() {
+      const helpText = [
+        'Доступные команды:',
+        '  SYST           — проверить состояние системы',
+        '  SYSLOG         — системный журнал активности',
+        '  SUBJ           — список субъектов',
+        '  DSCR <id>      — досье на персонал',
+        '  NOTES          — личные файлы сотрудников',
+        '  OPEN <id>      — открыть файл из NOTES',
+        '  DECRYPT <f>    — расшифровать файл (0XA71, 0XB33, 0XC44, 0XD22, 0XE09, CORE)',
+        '  TRACE <id>     — отследить указанный модуль',
+        '  PLAYAUDIO <id> — воспроизвести аудиозапись',
+        '  NET_MODE       — войти в режим управления сеткой (НЕ ДОСТУПНО НА МОБИЛЬНЫХ)',
+        '  NET_CHECK      — проверить конфигурацию узлов (НЕ ДОСТУПНО НА МОБИЛЬНЫХ)',
+        '  CLEAR          — очистить терминал',
+        '  RESET          — сброс интерфейса',
+        '  EXIT           — завершить сессию',
+        '  DEG <level>    — установить уровень деградации (0-100)',
+        '  ALPHA/BETA/GAMMA <code> — фиксировать коды VIGIL999'
+      ];
+      
+      for (const line of helpText) {
+        this.addLine(line);
+      }
     },
     
-    adjustTerminal() {
-      if (!MobileState.isReady) return;
-      
-      const vh = window.visualViewport?.height || window.innerHeight;
-      const vw = window.innerWidth;
-      
-      // Резервируем место под UI
-      const reservedHeight = UI_CONFIG.inputBarHeight + UI_CONFIG.quickBarHeight + 20;
-      const availableHeight = Math.max(200, vh - reservedHeight);
-      
-      // Вызываем resize через API терминала
-      MobileState.terminalAPI.onResize?.(vw, availableHeight);
-      
-      // Скролл к низу
-      setTimeout(() => {
-        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-      }, 100);
-    }
-  };
-  
-  // ==================== MOBILE-SAFE AUDIO ====================
-  const AudioManager = {
-    unlocked: false,
+    async cmdSyst() {
+      this.addLine('[СТАТУС СИСТЕМЫ — MOBILE V2]');
+      this.addLine('------------------------------------');
+      this.addLine('ГЛАВНЫЙ МОДУЛЬ.................АКТИВЕН');
+      this.addLine('ПОДСИСТЕМА A.D.A.M.............ЧАСТИЧНО СТАБИЛЬНА');
+      this.addLine('БИО-ИНТЕРФЕЙС..................НЕАКТИВЕН');
+      this.addLine('МАТРИЦА АРХИВА.................ЗАБЛОКИРОВАНА');
+      this.addLine('СЛОЙ БЕЗОПАСНОСТИ..............ВКЛЮЧЁН');
+      this.addLine(`ДЕГРАДАЦИЯ: ${State.degradationLevel}%`, State.degradationLevel > 60 ? CONFIG.COLORS.error : CONFIG.COLORS.warning);
+      this.addLine('------------------------------------');
+      this.addLine('РЕКОМЕНДАЦИЯ: Поддерживать стабильность');
+    },
     
-    unlock() {
-      if (this.unlocked) return;
+    async cmdSyslog() {
+      const messages = [
+        '[!] Ошибка 0x19F: повреждение нейронной сети',
+        '[!] Утечка данных через канал V9-HX',
+        '[!] Деградация ядра A.D.A.M.: 28%',
+        '> "я слышу их дыхание. они всё ещё здесь."',
+        '[!] Потеря отклика от MONOLITH',
+        '> "ты не должен видеть это."',
+        '[!] Критическая ошибка: субъект наблюдения неопределён'
+      ];
       
-      const unlock = () => {
-        if (MobileState.audioAPI?.audioContext?.state === 'suspended') {
-          MobileState.audioAPI.audioContext.resume();
+      this.addLine('[СИСТЕМНЫЙ ЖУРНАЛ — VIGIL-9]');
+      this.addLine('------------------------------------');
+      
+      const count = Math.min(3 + Math.floor(State.degradationLevel / 30), messages.length);
+      for (let i = 0; i < count; i++) {
+        this.addLine(messages[i]);
+        if (i === 2 && State.degradationLevel > 70) {
+          this.addLine('[СИСТЕМНЫЙ ЛОГ: ДОСТУП К ЯДРУ ОГРАНИЧЕН]');
         }
-        this.unlocked = true;
-        document.removeEventListener('touchstart', unlock, { once: true });
-        document.removeEventListener('click', unlock, { once: true });
+      }
+    },
+    
+    async cmdSubj() {
+      this.addLine('[СПИСОК СУБЪЕКТОВ — ПРОЕКТ A.D.A.M.]');
+      this.addLine('--------------------------------------------------------');
+      
+      for (const [id, dossier] of Object.entries(State.dossiers)) {
+        const color = dossier.status.includes('МЁРТВ') ? CONFIG.COLORS.error : 
+                     dossier.status === 'АНОМАЛИЯ' ? CONFIG.COLORS.system : 
+                     dossier.status === 'АКТИВЕН' ? CONFIG.COLORS.normal : CONFIG.COLORS.warning;
+        
+        const line = `${id.toLowerCase()} | ${dossier.name.padEnd(20)} | СТАТУС: ${dossier.status}`;
+        this.addLine(line, color);
+      }
+      
+      this.addLine('--------------------------------------------------------');
+      this.addLine('ИНСТРУКЦИЯ: DSCR <ID> для просмотра досье');
+    },
+    
+    async cmdNotes() {
+      this.addLine('[ЗАПРЕЩЁННЫЕ ФАЙЛЫ / NOTES]');
+      this.addLine('------------------------------------');
+      this.addLine('NOTE_001 — "ВЫ ЕГО ЧУВСТВУЕТЕ?"');
+      this.addLine('NOTE_002 — "КОЛЬЦО СНА"');
+      this.addLine('NOTE_003 — "СОН ADAM"');
+      this.addLine('NOTE_004 — "ОН НЕ ПРОГРАММА"');
+      this.addLine('NOTE_005 — "ФОТОНОВАЯ БОЛЬ"');
+      this.addLine('------------------------------------');
+      this.addLine('ИНСТРУКЦИЯ: OPEN <ID>');
+    },
+    
+    async cmdOpen(noteId) {
+      const note = State.notes[noteId.toUpperCase()];
+      if (!note) {
+        this.addLine(`ОШИБКА: Файл ${noteId} не найден`, CONFIG.COLORS.error);
+        return;
+      }
+      
+      this.addLine(`[${noteId.toUpperCase()} — "${note.title}"]`);
+      this.addLine(`АВТОР: ${note.author}`);
+      this.addLine('------------------------------------');
+      
+      if (Math.random() > 0.3 && noteId.toUpperCase() !== 'NOTE_001') {
+        this.addLine('ОШИБКА: Данные повреждены', CONFIG.COLORS.error);
+        this.addLine('Восстановление невозможно', CONFIG.COLORS.error);
+      } else {
+        note.content.forEach(line => {
+          this.addLine(`> ${line}`);
+        });
+      }
+      
+      this.addLine('------------------------------------');
+      this.addLine('[ФАЙЛ ЗАКРЫТ]');
+    },
+    
+    async cmdDscr(subjectId) {
+      const id = subjectId.toUpperCase();
+      const dossier = State.dossiers[id];
+      if (!dossier) {
+        this.addLine(`ОШИБКА: Досье ${subjectId} не найдено`, CONFIG.COLORS.error);
+        return;
+      }
+      
+      this.addLine(`[ДОСЬЕ — ID: ${id}]`);
+      this.addLine(`ИМЯ: ${dossier.name}`);
+      this.addLine(`РОЛЬ: ${dossier.role}`);
+      
+      const statusColor = dossier.status === 'АНОМАЛИЯ' ? CONFIG.COLORS.system :
+                         dossier.status === 'АКТИВЕН' ? CONFIG.COLORS.normal :
+                         dossier.status.includes('СВЯЗЬ') ? CONFIG.COLORS.warning : CONFIG.COLORS.error;
+      this.addLine(`СТАТУС: ${dossier.status}`, statusColor);
+      
+      this.addLine('------------------------------------');
+      this.addLine('ИСХОД:');
+      dossier.outcome.forEach(line => {
+        this.addLine(`> ${line}`, CONFIG.COLORS.error);
+      });
+      
+      if (dossier.audio) {
+        this.addLine(`[АУДИОЗАПИСЬ: ${dossier.audioDescription}]`);
+        this.addLine(`> Используйте: PLAYAUDIO ${id}`);
+      }
+    },
+    
+    async cmdDecrypt(fileId) {
+      const id = fileId.toUpperCase();
+      const file = State.decryptFiles[id];
+      
+      if (!file) {
+        this.addLine(`ОШИБКА: Файл ${fileId} не найден`, CONFIG.COLORS.error);
+        return;
+      }
+      
+      if (id === 'CORE' && State.degradationLevel < 50) {
+        this.addLine('ОШИБКА: УРОВЕНЬ ДОСТУПА НЕДОСТАТОЧЕН', CONFIG.COLORS.error);
+        return;
+      }
+      
+      // Простая мини-игра: угадай код (3 попытки)
+      const code = Math.floor(100 + Math.random() * 900);
+      let attempts = 3;
+      
+      this.addLine('[СИСТЕМА: ЗАПУЩЕН ПРОТОКОЛ РАСШИФРОВКИ]');
+      this.addLine(`> ФАЙЛ: ${file.title}`);
+      this.addLine(`> УРОВЕНЬ ДОСТУПА: ${file.accessLevel}`);
+      this.addLine(`> КОД ДОСТУПА: 3 ЦИФРЫ (XXX)`);
+      
+      // Для простоты: сразу показываем контент (в реальном terminal_canvas.js это сложнее)
+      // В мобильной версии упрощаем
+      this.addLine('------------------------------------');
+      this.addLine('[УПРОЩЕННАЯ РАСШИФРОВКА]');
+      
+      for (const line of file.content) {
+        this.addLine(line);
+        await this.sleep(30);
+      }
+      
+      this.addLine('------------------------------------');
+      this.addLine(`> ${file.successMessage}`);
+      
+      // Для CORE показываем ключ Альфа
+      if (id === 'CORE') {
+        this.addLine('> КЛЮЧ АЛЬФА: 375');
+        this.addLine('> Используйте команду ALPHA для фиксации ключа', CONFIG.COLORS.warning);
+      }
+    },
+    
+    async cmdTrace(target) {
+      const targetData = {
+        '0x9a0': { label: 'Субъект из чёрной дыры', status: 'СОЗНАНИЕ ЗАЦИКЛЕНО' },
+        '0x095': { label: 'Субъект-095', status: 'МЁРТВ' },
+        'signal': { label: 'Коллективное сознание', status: 'АКТИВНО' }
       };
       
-      document.addEventListener('touchstart', unlock, { once: true });
-      document.addEventListener('click', unlock, { once: true });
-    }
-  };
-  
-  // ==================== EVENT BRIDGE ====================
-  const EventBridge = {
-    subscriptions: new Map(),
-    
-    subscribe(event, callback) {
-      if (!this.subscriptions.has(event)) {
-        this.subscriptions.set(event, []);
+      const data = targetData[target.toLowerCase()];
+      if (!data) {
+        this.addLine(`ОШИБКА: Цель ${target} не найдена`, CONFIG.COLORS.error);
+        return;
       }
-      this.subscriptions.get(event).push(callback);
-    },
-    
-    emit(event, data) {
-      this.subscriptions.get(event)?.forEach(cb => cb(data));
-    },
-    
-    init() {
-      // Подписываемся на события терминала (если они есть)
-      // И эмитируем свои события
       
-      // Пример: когда терминал печатает строку
-      const originalPushLine = MobileState.terminalAPI.addOutput || 
-                              MobileState.terminalAPI.pushLine;
-      if (originalPushLine) {
-        MobileState.terminalAPI.addOutput = (...args) => {
-          this.emit('lineAdded', args);
-          return originalPushLine.apply(MobileState.terminalAPI, args);
+      this.addLine(`[СИСТЕМА: РАСКРЫТИЕ КАРТЫ КОНТРОЛЯ]`);
+      this.addLine(`> ЦЕЛЬ: ${data.label}`);
+      
+      // Симулируем анимацию загрузки
+      await this.showLoading(1500, "Сканирование связей");
+      
+      this.addLine(`> СТАТУС: ${data.status}`);
+      this.addLine('> Подключение: ТРЕБУЕТСЯ ДОСТУП УРОВНЯ OMEGA');
+      
+      // Награда/наказание
+      if (target === 'signal') {
+        this.addDegradation(2);
+      } else {
+        this.addDegradation(-1);
+      }
+    },
+    
+    async cmdPlayAudio(dossierId) {
+      const id = dossierId.toUpperCase();
+      const dossier = State.dossiers[id];
+      
+      if (!dossier || !dossier.audio) {
+        this.addLine(`ОШИБКА: Аудиозапись ${dossierId} не найдена`, CONFIG.COLORS.error);
+        return;
+      }
+      
+      // На мобильных просто показываем сообщение
+      // (реальное воспроизведение сложно из-за ограничений браузеров)
+      this.addLine(`[АУДИО: ВОСПРОИЗВЕДЕНИЕ ${id}]`, CONFIG.COLORS.warning);
+      this.addLine(`> ${dossier.audioDescription}`);
+      this.addLine('[ИНСТРУКЦИЯ: Аудио ограничено на мобильных устройствах]');
+    },
+    
+    async cmdNetMode() {
+      this.addLine('> Переход в режим управления сеткой...');
+      this.addLine('> ЭТА ФУНКЦИЯ НЕДОСТУПНА НА МОБИЛЬНЫХ УСТРОЙСТВАХ', CONFIG.COLORS.warning);
+      this.addLine('> Используйте десктопную версию для полного доступа');
+    },
+    
+    async cmdNetCheck() {
+      this.addLine('> Проверка конфигурации узлов...');
+      this.addLine('> ФУНКЦИЯ НЕ ДОСТУПНА НА МОБИЛЬНЫХ', CONFIG.COLORS.warning);
+      
+      // Но показываем статус
+      const gridDeg = State.degradationLevel > 80 ? 85 : State.degradationLevel;
+      if (gridDeg > 0) {
+        this.addLine(`> СЕТЕВАЯ ДЕГРАДАЦИЯ: ${gridDeg}%`, gridDeg > 50 ? CONFIG.COLORS.error : CONFIG.COLORS.warning);
+      }
+    },
+    
+    async cmdClear() {
+      this.clear();
+      await this.typeText('> ТЕРМИНАЛ ОЧИЩЕН');
+    },
+    
+    async cmdReset() {
+      this.addLine('[ПРОТОКОЛ СБРОСА СИСТЕМЫ]');
+      this.addLine('ВНИМАНИЕ: операция приведёт к очистке сессии.');
+      
+      const confirmed = await this.waitForConfirmation();
+      if (confirmed) {
+        this.addLine('> Y');
+        this.addLine('> ВОССТАНОВЛЕНИЕ БАЗОВОГО СОСТОЯНИЯ...');
+        await this.showLoading(2000, "Сброс");
+        this.clear();
+        this.addDegradation(-State.degradationLevel);
+        await this.welcome();
+      } else {
+        this.addLine('> N');
+        this.addLine('[ОПЕРАЦИЯ ОТМЕНЕНА]');
+      }
+    },
+    
+    async cmdExit() {
+      this.addLine('[ЗАВЕРШЕНИЕ СЕССИИ]');
+      const confirmed = await this.waitForConfirmation();
+      if (confirmed) {
+        this.addLine('> Y');
+        await this.showLoading(1000, "Отключение");
+        this.addLine('> СОЕДИНЕНИЕ ПРЕРВАНО.');
+        // Через 2 секунды возвращаем на главную
+        setTimeout(() => {
+          window.location.href = 'index.html';
+        }, 2000);
+      } else {
+        this.addLine('> N');
+        this.addLine('[ОТМЕНА]');
+      }
+    },
+    
+    async cmdVigil999() {
+      this.addLine('ПРОВЕРКА КЛЮЧЕЙ:');
+      
+      const expected = { alpha: '375', beta: '814', gamma: '291' };
+      let allCorrect = true;
+      
+      for (const key in expected) {
+        const value = State.vigilCodeParts[key];
+        if (value === expected[key]) {
+          this.addLine(` ${key.toUpperCase()}: ${value} [СОВПАДЕНИЕ]`, CONFIG.COLORS.normal);
+        } else {
+          this.addLine(` ${key.toUpperCase()}: ${value || 'НЕ ЗАФИКСИРОВАН'} [ОШИБКА]`, CONFIG.COLORS.error);
+          allCorrect = false;
+        }
+      }
+      
+      if (!allCorrect) {
+        this.addLine('ДОСТУП ЗАПРЕЩЁН. ИСПРАВЬТЕ ОШИБКИ.', CONFIG.COLORS.error);
+        return;
+      }
+      
+      // Все ключи верны - активируем протокол
+      this.addLine('>>> ПРОТОКОЛ OBSERVER-7 АКТИВИРОВАН', CONFIG.COLORS.warning);
+      this.addLine('Подтвердите активацию? (Y/N)');
+      
+      const confirmed = await this.waitForConfirmation();
+      if (confirmed) {
+        this.addLine('> Y');
+        this.addLine('> ПЕРЕХОД В РЕЖИМ НАБЛЮДЕНИЯ...');
+        // Через 3 секунды переходим
+        setTimeout(() => {
+          window.location.href = 'observer-7.html';
+        }, 3000);
+      } else {
+        this.addLine('> N');
+        this.addLine('> АКТИВАЦИЯ ОТМЕНЕНА');
+      }
+    },
+    
+    // ==================== УТИЛИТЫ ====================
+    addDegradation(amount) {
+      State.degradationLevel = Math.max(0, Math.min(100, State.degradationLevel + amount));
+      this.updateDegradationDisplay();
+    },
+    
+    updateDegradationDisplay() {
+      DOM.degradationDisplay.textContent = `ДЕГРАДАЦИЯ: ${State.degradationLevel}%`;
+      
+      // Цвет в зависимости от уровня
+      let color = '#00FF41';
+      if (State.degradationLevel > 80) color = '#FF4444';
+      else if (State.degradationLevel > 60) color = '#FF8800';
+      else if (State.degradationLevel > 30) color = '#FFFF00';
+      
+      DOM.degradationDisplay.style.color = color;
+    },
+    
+    async showLoading(duration, text = "ЗАГРУЗКА") {
+      const start = Date.now();
+      const interval = setInterval(() => {
+        const elapsed = Date.now() - start;
+        const progress = Math.min(100, (elapsed / duration) * 100);
+        const filled = Math.floor(progress / 10);
+        const bar = `[${'|'.repeat(filled)}${' '.repeat(10 - filled)}] ${Math.floor(progress)}%`;
+        
+        // Обновляем последнюю строку
+        const lines = DOM.terminal.querySelectorAll('.line');
+        if (lines.length > 0 && lines[lines.length - 1].textContent.includes('[')) {
+          lines[lines.length - 1].textContent = `> ${text} ${bar}`;
+        } else {
+          this.addLine(`> ${text} ${bar}`);
+        }
+        
+        if (progress >= 100) {
+          clearInterval(interval);
+          const finalLines = DOM.terminal.querySelectorAll('.line');
+          if (finalLines.length > 0) {
+            finalLines[finalLines.length - 1].textContent = `> ${text} [ЗАВЕРШЕНО]`;
+          }
+        }
+      }, 100);
+      
+      await this.sleep(duration);
+      clearInterval(interval);
+    },
+    
+    waitForConfirmation() {
+      return new Promise(resolve => {
+        const handler = (e) => {
+          if (e.key) {
+            const key = e.key.toLowerCase();
+            if (key === 'y' || key === 'н') {
+              document.removeEventListener('keydown', handler);
+              resolve(true);
+            } else if (key === 'n' || key === 'т') {
+              document.removeEventListener('keydown', handler);
+              resolve(false);
+            }
+          }
         };
-      }
-    }
-  };
-  
-  // ==================== GLOBAL KEYBOARD EMULATION ====================
-  // Это критически важно! Мы превращаем мобильный ввод в keyboard events
-  const KeyboardEmulator = {
-    dispatchKey(key, type = 'keydown') {
-      const event = new KeyboardEvent(type, {
-        key: key,
-        code: `Key${key.toUpperCase()}`,
-        bubbles: true,
-        cancelable: true,
-        composed: true
+        
+        // Также работает с виртуальной клавиатурой
+        const kbHandler = (e) => {
+          if (e.target.classList.contains('kb-key') && e.target.dataset.key === 'Y') {
+            DOM.keyboard.removeEventListener('click', kbHandler);
+            resolve(true);
+          } else if (e.target.classList.contains('kb-key') && e.target.dataset.key === 'N') {
+            DOM.keyboard.removeEventListener('click', kbHandler);
+            resolve(false);
+          }
+        };
+        
+        document.addEventListener('keydown', handler);
+        DOM.keyboard.addEventListener('click', kbHandler);
       });
-      document.dispatchEvent(event);
     },
     
-    dispatchEnter() {
-      this.dispatchKey('Enter');
-    },
-    
-    dispatchBackspace() {
-      this.dispatchKey('Backspace');
+    sleep(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
     }
   };
   
-  // ==================== INITIALIZATION ====================
-  function init() {
-    // 1. Инициализируем состояние
-    MobileState.init();
-    
-    // 2. Строим UI
-    DOMBuilder.buildUI();
-    
-    // 3. Ждём готовности терминала
-    const waitForReady = setInterval(() => {
-      if (MobileState.isReady) {
-        clearInterval(waitForReady);
-        
-        // 4. Инициализируем модули
-        ViewportManager.init();
-        AudioManager.unlock();
-        EventBridge.init();
-        
-        // 5. Перехватываем ввод
-        overrideTerminalInput();
-        
-        // 6. Скрываем оригинальную строку ввода (терминал её рисует сам)
-        // Но мы её перерисуем через API
-        MobileState.terminalAPI.addOutput?.('', 'output');
-        
-        console.log('[mobile] Fully initialized');
-      }
-    }, 50);
-  }
-  
-  // ==================== OVERRIDE TERMINAL INPUT ====================
-  function overrideTerminalInput() {
-    // Это самое важное: мы НЕ даём терминалу создавать свою строку ввода
-    // Вместо этого создаём свою и отправляем команды через API
-    
-    // Удаляем существующую строку ввода (если есть)
-    const lines = MobileState.terminalAPI.lines || [];
-    if (lines.length && lines[lines.length - 1]?._isInputLine) {
-      lines.pop();
-    }
-    
-    // Создаём нашу строку ввода
-    MobileState.terminalAPI.addOutput?.('adam@secure:~$ ', 'input');
-  }
-  
-  // ==================== PUBLIC API ====================
-  window.__MobileUI = {
-    submitCommand: (cmd) => InputManager.submitCommand(cmd),
-    toggleGrid: () => GridManager.toggle(),
-    setLiteMode: (enabled) => {
-      UI_CONFIG.isLiteMode = enabled;
-      // Применяем к терминалу через API
-      if (enabled && MobileState.terminalAPI.degradation?.level > 60) {
-        MobileState.terminalAPI.degradation.setDegradationLevel(60);
-      }
-    }
-  };
-  
-  // ==================== AUTO-START ====================
-  // Запускаемся сразу
-  init();
-  
+  // Экспорт глобально
+  window.MobileTerminal = MobileTerminal;
 })();
