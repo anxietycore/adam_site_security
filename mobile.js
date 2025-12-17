@@ -1,373 +1,615 @@
-/* mobile.js — мобильная обёртка, совместимая с terminal_canvas.js, когда в нём доступен __TerminalCanvas.onResize
-   Подключать ПОСЛЕ:
-     - module_audio.js (опционально)
-     - netGrid_v3.js (опционально)
-     - terminal_canvas.js  (обязательно; в нём должна быть __TerminalCanvas.onResize)
-     - crt_overlay.js / screenGlass.js (если есть)
-*/
+/**
+ * mobile.js - ЧИСТО МОБИЛЬНАЯ ВЕРСИЯ ТЕРМИНАЛА A.D.A.M.
+ * 
+ * ПРИНЦИП РАБОТЫ:
+ * 1. Загружается ПОСЛЕ terminal_canvas.js
+ * 2. ПОЛНОСТЬЮ перехватывает управление вводом (заменяет клавиатуру)
+ * 3. Использует ТОЛЬКО API терминала (__TerminalCanvas)
+ * 4. Не создает параллельных состояний
+ * 5. Работает как event-driven адаптер
+ */
 
-(function(){
+(() => {
   'use strict';
-
-  // -------- Config --------
-  const INPUT_BAR_H = 64;           // px - высота панели ввода
-  const GRID_MODAL_VH = 64;         // сетка занимает %vh внутри модалки
-  const Z_TOP = 2147483646;         // очень большой z-index для UI
-  const QUICK_CMD_LIST = ['help','syslog','net_mode','clear','reset']; // кнопки быстрого доступа
-
-  // If you want to force mobile UI on desktop for testing:
-  const FORCE = !!window.FORCE_MOBILE_TERMINAL || !!window.FORCE_MOBILE;
-
-  const IS_MOBILE = FORCE || /Mobi|Android|iPhone|iPad|iPod|Phone/i.test(navigator.userAgent);
-
-  // If not mobile and not forced, still load (for easier dev), but UI is meant for phones.
-  // -------- Helpers --------
-  const $ = (s, ctx=document) => ctx.querySelector(s);
-  const make = (tag, props={}, styles={})=>{
-    const el = document.createElement(tag);
-    Object.assign(el, props);
-    Object.assign(el.style, styles);
-    return el;
+  
+  // ==================== CONFIGURATION ====================
+  const UI_CONFIG = {
+    inputBarHeight: 70, // px (адаптивная)
+    quickBarHeight: 50, // px
+    buttonSize: 52,     // px (адаптивная)
+    gridModalHeight: 65, // vh
+    historyTipDuration: 800, // ms
+    scrollSensitivity: 3, // строки
+    debounceDelay: 150, // ms для resize
+    zIndex: 2147483646
   };
-
-  // Prevent double-insert if script runs multiple times
-  if (document.getElementById('mobile_ui_overlay_v1')) {
-    console.log('[mobile.js] mobile UI already present');
-    return;
-  }
-
-  // -------- Inject minimal CSS --------
-  const css = `
-  #mobile_ui_overlay_v1{ position:fixed; left:8px; right:8px; bottom:env(safe-area-inset-bottom,8px); height:${INPUT_BAR_H}px; display:flex; gap:8px; align-items:center; padding:8px; box-sizing:border-box; border-radius:12px; background: rgba(0,0,0,0.56); z-index:${Z_TOP}; font-family: monospace; -webkit-tap-highlight-color: transparent; }
-  #mobile_ui_overlay_v1 input{ flex:1; height:100%; border-radius:10px; padding:10px 12px; background: rgba(0,0,0,0.66); color:#00FF41; border:1px solid rgba(255,255,255,0.04); outline:none; font-size:15px; }
-  .mobile_ui_btn{ min-width:48px; height: calc(100% - 6px); border-radius:8px; background: rgba(0,0,0,0.6); color:#00FF41; border:1px solid rgba(255,255,255,0.04); font-family: monospace; }
-  #mobile_ui_quick{ position:fixed; left:8px; bottom:calc(${INPUT_BAR_H + 18}px); display:flex; gap:8px; padding:6px; border-radius:10px; background: rgba(0,0,0,0.45); z-index:${Z_TOP - 1}; }
-  #mobile_ui_grid_modal{ position:fixed; left:0; right:0; top:0; bottom:0; background: rgba(0,0,0,0.55); display:none; align-items:center; justify-content:center; z-index:${Z_TOP - 2}; }
-  #mobile_ui_grid_panel{ width:94%; max-width:520px; height:${GRID_MODAL_VH}vh; border-radius:12px; background:#030807; overflow:hidden; display:flex; flex-direction:column; padding:8px; box-sizing:border-box; color:#00FF41; }
-  #mobile_ui_grid_map{ flex:1; position:relative; display:flex; align-items:center; justify-content:center; overflow:hidden; }
-  #mobile_ui_history_tip{ position:fixed; left:10px; top:10px; background: rgba(0,0,0,0.45); color:#00FF41; padding:6px; border-radius:8px; z-index:${Z_TOP}; display:none; font-size:12px; }
-  `;
-
-  const styleTag = document.createElement('style');
-  styleTag.innerText = css;
-  document.head.appendChild(styleTag);
-
-  // -------- Build UI --------
-  const overlay = make('div', { id: 'mobile_ui_overlay_v1', role:'region', 'aria-label':'mobile terminal controls' });
-  const input = make('input', { type:'text', placeholder: 'Команда (help)', id:'mobile_input_v1', autocapitalize:'none', spellcheck:false });
-  const sendBtn = make('button', { innerText: '→', title:'Send' }, { });
-  sendBtn.className = 'mobile_ui_btn';
-  const netBtn = make('button', { innerText: 'NET', title:'Open NET grid' }, {});
-  netBtn.className = 'mobile_ui_btn';
-  const liteBtn = make('button', { innerText: 'LITE', title:'Mobile Lite' }, {});
-  liteBtn.className = 'mobile_ui_btn';
-  const yBtn = make('button', { innerText: 'Y', title:'Yes' }, {}); yBtn.className='mobile_ui_btn';
-  const nBtn = make('button', { innerText: 'N', title:'No' }, {}); nBtn.className='mobile_ui_btn';
-  overlay.appendChild(input);
-  overlay.appendChild(sendBtn);
-  overlay.appendChild(netBtn);
-  overlay.appendChild(liteBtn);
-  overlay.appendChild(yBtn);
-  overlay.appendChild(nBtn);
-  overlay.id = 'mobile_ui_overlay_v1';
-
-  const quick = make('div', { id:'mobile_ui_quick' });
-  QUICK_LOOP: for (const q of QUICK_CMD_LIST) {
-    const b = make('button', { innerText: q, title:q }, {});
-    b.className = 'mobile_ui_btn';
-    b.addEventListener('click', ()=> submitCommand(q));
-    quick.appendChild(b);
-  }
-
-  const gridModal = make('div', { id:'mobile_ui_grid_modal' });
-  const gridPanel = make('div', { id:'mobile_ui_grid_panel' });
-  const gridHead = make('div', {}, { fontSize:'12px', marginBottom:'6px' }); gridHead.innerText = 'NET GRID';
-  const gridMap = make('div', { id:'mobile_ui_grid_map' });
-  const gridControls = make('div', {}, { display:'flex', justifyContent:'center', gap:'8px', marginTop:'6px' });
-  const gridClose = make('button', { innerText:'Close' }); gridClose.className='mobile_ui_btn';
-  gridControls.appendChild(gridClose);
-  gridPanel.appendChild(gridHead);
-  gridPanel.appendChild(gridMap);
-  gridPanel.appendChild(gridControls);
-  gridModal.appendChild(gridPanel);
-
-  const historyTip = make('div', { id:'mobile_ui_history_tip' }); historyTip.innerText = 'UP/DOWN — история команд';
-
-  document.body.appendChild(overlay);
-  document.body.appendChild(quick);
-  document.body.appendChild(gridModal);
-  document.body.appendChild(historyTip);
-
-  // ensure overlays are after terminal canvas, to sit visually above
-  const termCanvas = document.getElementById('terminalCanvas');
-  if (termCanvas && termCanvas.parentNode) {
-    // move overlays after canvas node so stacking is predictable
-    termCanvas.parentNode.appendChild(overlay);
-    termCanvas.parentNode.appendChild(quick);
-    termCanvas.parentNode.appendChild(gridModal);
-    termCanvas.parentNode.appendChild(historyTip);
-  }
-
-  // -------- State --------
-  let cmdHistory = [];
-  let histIndex = 0;
-  let mobileLite = true;
-  let attachedGridCanvas = null;
-  let attachedGridOrigParent = null;
-  let attachedGridOrigStyles = null;
-
-  const audioMgr = window.audioManager || window.AudioManager || null;
-  const NG = window.__netGrid || null;
-  const TC = window.__TerminalCanvas || window.__terminalCanvas || null; // patched terminal should expose __TerminalCanvas
-
-  // Utility: safe call onResize
-  function safeOnResize(w,h){
-    try {
-      if (window.__TerminalCanvas && typeof window.__TerminalCanvas.onResize === 'function') {
-        window.__TerminalCanvas.onResize(w,h);
-      } else {
-        // fallback: dispatch resize so terminal's own handler can pick it up if present
-        window.dispatchEvent(new Event('resize'));
-      }
-    } catch(e){
-      console.warn('[mobile.js] onResize failed', e);
-    }
-  }
-
-  // Use visualViewport if present to measure available height (better for keyboard)
-  function getViewportHeight(){
-    if (window.visualViewport && typeof window.visualViewport.height === 'number') {
-      return Math.floor(window.visualViewport.height);
-    }
-    return Math.floor(window.innerHeight);
-  }
-
-  function getAvailableHeightForTerminal(){
-    // reserve space for quick row and input bar visually: allow some margin
-    const vh = getViewportHeight();
-    const quickRect = quick.getBoundingClientRect ? quick.getBoundingClientRect() : { height: 0 };
-    const reserved = INPUT_BAR_H + (quickRect.height || 0) + 20;
-    return Math.max(120, vh - reserved);
-  }
-
-  // adjust main terminal when viewport changes
-  function adjustTerminal(){
-    const width = Math.max(320, Math.floor(window.innerWidth));
-    const height = getAvailableHeightForTerminal();
-    safeOnResize(width, height);
-    // ensure we can scroll to bottom if needed
-    setTimeout(()=> { try { window.scrollTo({ top: document.body.scrollHeight, behavior:'smooth' }); } catch(e){} }, 150);
-  }
-
-  // initial adjust
-  setTimeout(adjustTerminal, 120);
-
-  // react to viewport changes (keyboard appear/hide etc)
-  if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', ()=> {
-      // small delay to allow layout to settle
-      setTimeout(adjustTerminal, 80);
-    });
-    window.visualViewport.addEventListener('scroll', ()=> {
-      // if viewport scrolled, recalc terminal
-      setTimeout(adjustTerminal, 60);
-    });
-  } else {
-    window.addEventListener('resize', ()=> setTimeout(adjustTerminal, 80));
-    window.addEventListener('orientationchange', ()=> setTimeout(adjustTerminal, 120));
-  }
-
-  // safe attach listeners to input: on focus/blur call onResize with available area
-  input.addEventListener('focus', ()=>{
-    // after keyboard opens, visualViewport.innerHeight updates; wait a bit
-    setTimeout(()=> {
-      adjustTerminal();
-    }, 360);
-  });
-  input.addEventListener('blur', ()=> {
-    setTimeout(()=> adjustTerminal(), 200);
-  });
-
-  // Keyboard send
-  function submitCommand(text){
-    const cmd = String(text || '').trim();
-    if (!cmd) return;
-    // record history
-    if (!cmdHistory.length || cmdHistory[cmdHistory.length-1] !== cmd) cmdHistory.push(cmd);
-    histIndex = cmdHistory.length;
-    // play key sound (if available)
-    try { if (audioMgr && audioMgr.playSound) audioMgr.playSound('interface','interface_key_press_01.mp3', { volume: 0.5 }); } catch(e){}
-    // try terminal API
-    try {
-      if (window.__TerminalCanvas && typeof window.__TerminalCanvas.processCommand === 'function') {
-        window.__TerminalCanvas.processCommand(cmd);
-      } else {
-        // fallback: set currentLine + dispatch Enter
-        window.currentLine = cmd;
-        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-      }
-    } catch(e){
-      console.warn('[mobile.js] submitCommand failed', e);
-    }
-    input.value = '';
-    input.blur();
-    // after submit, scroll to bottom
-    setTimeout(()=> { try { window.scrollTo({ top: document.body.scrollHeight, behavior:'smooth' }); } catch(e){} }, 120);
-  }
-
-  sendBtn.addEventListener('click', ()=> submitCommand(input.value));
-  input.addEventListener('keydown', (e)=> {
-    if (e.key === 'Enter') { e.preventDefault(); submitCommand(input.value); return; }
-    if (e.key === 'ArrowUp') { e.preventDefault(); if (cmdHistory.length){ histIndex = Math.max(0, histIndex - 1); input.value = cmdHistory[histIndex] || ''; showHistoryTip(); } return; }
-    if (e.key === 'ArrowDown') { e.preventDefault(); if (cmdHistory.length){ histIndex = Math.min(cmdHistory.length, histIndex + 1); input.value = cmdHistory[histIndex] || ''; } return; }
-  });
-
-  function showHistoryTip(){ historyTip.style.display = 'block'; setTimeout(()=> historyTip.style.display = 'none', 900); }
-
-  // Y/N buttons (simulate keypress)
-  function dispatchKey(k){
-    try { document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true })); } catch(e){}
-  }
-  yBtn.addEventListener('click', ()=> { dispatchKey('y'); dispatchKey('Y'); });
-  nBtn.addEventListener('click', ()=> { dispatchKey('n'); dispatchKey('N'); });
-
-  // quick cmd buttons handled earlier; but allow programmatic call too
-  function submitQuick(cmd){ submitCommand(cmd); }
-
-  // LITE toggle: soft-cap degradation and mute background music if available
-  liteBtn.addEventListener('click', ()=>{
-    mobileToggleLite();
-  });
-  let _isLite = mobileLite;
-  function mobileToggleLite(){
-    _isLite = !_isLite;
-    liteBtn.innerText = _isLite ? 'LITE' : 'FULL';
-    try {
-      if (window.__TerminalCanvas && window.__TerminalCanvas.degradation) {
-        if (_isLite && window.__TerminalCanvas.degradation.level && window.__TerminalCanvas.degradation.level > 60) {
-          window.__TerminalCanvas.degradation.level = 60;
-          if (typeof window.__TerminalCanvas.degradation.updateIndicator === 'function')
-            window.__TerminalCanvas.degradation.updateIndicator();
+  
+  // ==================== MOBILE STATE MANAGER ====================
+  const MobileState = {
+    // Все состояния хранятся в терминале, здесь только кэши для UI
+    cmdHistory: [],
+    historyIndex: 0,
+    currentLine: '',
+    isReady: false,
+    isLiteMode: true,
+    lastCommandTime: 0,
+    
+    // Кэш для быстрого доступа
+    terminalAPI: null,
+    audioAPI: null,
+    netGridAPI: null,
+    
+    init() {
+      // Ждём полной загрузки терминала
+      const waitForTerminal = setInterval(() => {
+        if (window.__TerminalCanvas && window.audioManager && window.__netGrid) {
+          this.terminalAPI = window.__TerminalCanvas;
+          this.audioAPI = window.audioManager;
+          this.netGridAPI = window.__netGrid;
+          this.isReady = true;
+          clearInterval(waitForTerminal);
+          console.log('[mobile] State initialized');
         }
-      }
-      if (audioMgr && typeof audioMgr.setBackgroundMusicVolume === 'function') {
-        audioMgr.setBackgroundMusicVolume(_isLite ? 0 : 0.2);
-      }
-    } catch(e){ console.warn('[mobile.js] mobileLite toggle error', e); }
-  }
-
-  // -------- GRID handling (move grid canvas into modal and resize) --------
-  function findNetCanvas(){
-    const byId = document.getElementById('netCanvas') || document.querySelector('canvas.net-grid');
-    if (byId) return byId;
-    const canvases = Array.from(document.querySelectorAll('canvas'));
-    for (const c of canvases) {
-      if (c !== termCanvas) return c;
+      }, 50);
     }
-    return null;
-  }
-
-  function setCanvasBuffer(canvas, w, h){
-    if (!canvas) return;
-    const DPR = Math.max(1, Math.min(window.devicePixelRatio || 1, 3));
-    canvas.width = Math.floor(w * DPR);
-    canvas.height = Math.floor(h * DPR);
-    canvas.style.width = w + 'px';
-    canvas.style.height = h + 'px';
-  }
-
-  function openGrid(){
-    // hide degradation if exists
-    try { if (window.__TerminalCanvas && window.__TerminalCanvas.degradation && window.__TerminalCanvas.degradation.indicator) window.__TerminalCanvas.degradation.indicator.style.display = 'none'; } catch(e){}
-    gridModal.style.display = 'flex';
-    const c = findNetCanvas();
-    if (!c) return;
-    attachedGridCanvas = c;
-    attachedGridOrigParent = c.parentNode;
-    attachedGridOrigStyles = c.style.cssText || '';
-    // compute panel inner size
-    const W = Math.max(160, gridMap.clientWidth || Math.floor(window.innerWidth * 0.9));
-    const H = Math.max(120, gridMap.clientHeight || Math.floor(window.innerHeight * (GRID_MODAL_VH / 100)) - 80);
-    // attach and buffer-size
-    try {
-      c.style.position = 'relative';
-      c.style.width = '100%';
-      c.style.height = '100%';
-      c.style.pointerEvents = 'auto';
-      setCanvasBuffer(c, W, H);
-      gridMap.appendChild(c);
-      if (NG && typeof NG.resize === 'function') {
-        try { NG.resize(W, H); } catch(e){ console.warn('[mobile.js] NG.resize failed', e); }
-      }
-    } catch(err){ console.warn('[mobile.js] attach net canvas error', err); }
-    // shrink main terminal so it doesn't overlap (ask terminal to resize to smaller height)
-    setTimeout(()=> adjustTerminal(), 60);
-    // disable main terminal pointer to avoid conflict
-    if (termCanvas) termCanvas.style.pointerEvents = 'none';
-  }
-
-  function closeGrid(){
-    gridModal.style.display = 'none';
-    if (attachedGridCanvas && attachedGridOrigParent) {
-      try {
-        attachedGridCanvas.style.cssText = attachedGridOrigStyles || '';
-        attachedGridOrigParent.appendChild(attachedGridCanvas);
-      } catch(e){ console.warn('[mobile.js] restore net canvas failed', e); }
-    }
-    attachedGridCanvas = null; attachedGridOrigParent = null; attachedGridOrigStyles = null;
-    if (termCanvas) termCanvas.style.pointerEvents = 'auto';
-    try { if (window.__TerminalCanvas && window.__TerminalCanvas.degradation && window.__TerminalCanvas.degradation.indicator) window.__TerminalCanvas.degradation.indicator.style.display = ''; } catch(e){}
-    // restore terminal size
-    setTimeout(()=> adjustTerminal(), 80);
-  }
-
-  netBtn.addEventListener('click', ()=> {
-    if (gridModal.style.display === 'flex') closeGrid(); else openGrid();
-  });
-  gridClose.addEventListener('click', closeGrid);
-
-  // allow scrolling by dragging the canvas (touch pan)
-  let touchPan = null;
-  function onCanvasTouchStart(e){
-    if (!e.touches || e.touches.length !== 1) return;
-    touchPan = { y: e.touches[0].clientY, scroll: window.scrollY };
-  }
-  function onCanvasTouchMove(e){
-    if (!touchPan || !e.touches || e.touches.length !== 1) return;
-    const dy = e.touches[0].clientY - touchPan.y;
-    window.scrollTo({ top: Math.max(0, touchPan.scroll - dy) });
-  }
-  function onCanvasTouchEnd(){ touchPan = null; }
-  if (termCanvas) {
-    termCanvas.addEventListener('touchstart', onCanvasTouchStart, { passive:true });
-    termCanvas.addEventListener('touchmove', onCanvasTouchMove, { passive:false });
-    termCanvas.addEventListener('touchend', onCanvasTouchEnd, { passive:true });
-  }
-
-  // if CRT/Glass overlays exist, lower their pointer-events / z so overlay input works
-  (function normalizeVisuals(){
-    try {
-      const crt = document.getElementById('crtOverlayCanvas');
-      if (crt) { crt.style.zIndex = (Z_TOP - 100).toString(); crt.style.pointerEvents = 'none'; }
-      const glass = document.getElementById('glassFX') || document.querySelector('.screenGlass');
-      if (glass && glass.style) { glass.style.zIndex = (Z_TOP - 110).toString(); glass.style.pointerEvents = 'none'; }
-    } catch(e){ /* ignore */ }
-  })();
-
-  // expose API for dev / debugging
-  window.__MobileUI = {
-    submitCommand,
-    openGrid,
-    closeGrid,
-    adjustTerminal,
-    setLite: (v)=> { _isLite = !!v; mobileToggleLite(); }
   };
-
-  // auto-adjust on load (give terminal a little time to init)
-  setTimeout(()=> {
-    try { adjustTerminal(); } catch(e){ console.warn('[mobile.js] initial adjust failed', e); }
-  }, 220);
-
-  console.log('[mobile.js] mobile UI loaded');
-
+  
+  // ==================== DOM BUILDER (UI) ====================
+  const DOMBuilder = {
+    create(tag, props = {}, styles = {}) {
+      const el = document.createElement(tag);
+      Object.assign(el, props);
+      Object.assign(el.style, styles);
+      return el;
+    },
+    
+    buildUI() {
+      // 1. Виртуальная клавиатура
+      this._buildInputBar();
+      
+      // 2. Быстрые команды
+      this._buildQuickBar();
+      
+      // 3. Модальное окно сетки
+      this._buildGridModal();
+      
+      // 4. Подсказка истории
+      this._buildHistoryTip();
+      
+      console.log('[mobile] UI built');
+    },
+    
+    _buildInputBar() {
+      const bar = this.create('div', {
+        id: 'mobile_input_bar',
+        role: 'region',
+        'aria-label': 'Mobile terminal input'
+      }, {
+        position: 'fixed',
+        left: '0',
+        right: '0',
+        bottom: '0',
+        height: `${UI_CONFIG.inputBarHeight}px`,
+        background: 'rgba(0, 0, 0, 0.85)',
+        backdropFilter: 'blur(8px)',
+        borderTop: '2px solid #00FF41',
+        display: 'flex',
+        alignItems: 'center',
+        padding: '8px 12px',
+        gap: '8px',
+        zIndex: UI_CONFIG.zIndex,
+        transform: 'translateY(0)',
+        transition: 'transform 0.3s ease'
+      });
+      
+      // Поле ввода (только для мобильной клавиатуры)
+      const input = this.create('input', {
+        id: 'mobile_input_field',
+        type: 'text',
+        placeholder: 'Команда (help)',
+        autocapitalize: 'none',
+        spellcheck: false,
+        autocomplete: 'off'
+      }, {
+        flex: '1',
+        height: '100%',
+        background: 'rgba(0, 20, 10, 0.7)',
+        color: '#00FF41',
+        border: '1px solid rgba(0, 255, 65, 0.4)',
+        borderRadius: '8px',
+        padding: '10px 12px',
+        fontSize: '16px', // Предотвращает zoom на iOS
+        fontFamily: 'monospace'
+      });
+      
+      // Кнопка Enter
+      const enterBtn = this.create('button', {
+        innerText: '⏎',
+        title: 'Execute'
+      }, {
+        width: `${UI_CONFIG.buttonSize}px`,
+        height: `${UI_CONFIG.buttonSize}px`,
+        background: 'rgba(0, 255, 65, 0.15)',
+        color: '#00FF41',
+        border: '1px solid #00FF41',
+        borderRadius: '8px',
+        fontSize: '24px',
+        fontFamily: 'monospace'
+      });
+      
+      bar.append(input, enterBtn);
+      document.body.appendChild(bar);
+      
+      // Клик по Enter = отправка команды
+      enterBtn.onclick = () => InputManager.submitCommand();
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          InputManager.submitCommand();
+        }
+      });
+      
+      // Показ/скрытие при открытии клавиатуры
+      if (window.visualViewport) {
+        let lastHeight = window.visualViewport.height;
+        window.visualViewport.addEventListener('resize', () => {
+          const currentHeight = window.visualViewport.height;
+          if (currentHeight < lastHeight * 0.85) {
+            // Клавиатура открылась
+            bar.style.transform = `translateY(-${lastHeight - currentHeight}px)`;
+          } else {
+            // Клавиатура закрылась
+            bar.style.transform = 'translateY(0)';
+          }
+          lastHeight = currentHeight;
+          ViewportManager.adjustTerminal();
+        });
+      }
+    },
+    
+    _buildQuickBar() {
+      const quick = this.create('div', { id: 'mobile_quick_bar' }, {
+        position: 'fixed',
+        left: '8px',
+        right: '8px',
+        bottom: `${UI_CONFIG.inputBarHeight + 8}px`,
+        height: `${UI_CONFIG.quickBarHeight}px`,
+        display: 'flex',
+        gap: '6px',
+        padding: '6px',
+        background: 'rgba(0, 0, 0, 0.7)',
+        backdropFilter: 'blur(6px)',
+        borderRadius: '8px',
+        zIndex: UI_CONFIG.zIndex - 1,
+        overflowX: 'auto'
+      });
+      
+      const commands = ['help', 'syst', 'net_mode', 'clear', 'reset'];
+      commands.forEach(cmd => {
+        const btn = this.create('button', {
+          innerText: cmd,
+          title: `Quick: ${cmd}`
+        }, {
+          minWidth: '60px',
+          height: '100%',
+          background: 'rgba(0, 20, 10, 0.6)',
+          color: '#00FF41',
+          border: '1px solid rgba(0, 255, 65, 0.3)',
+          borderRadius: '6px',
+          fontSize: '12px',
+          fontFamily: 'monospace',
+          whiteSpace: 'nowrap',
+          padding: '0 8px'
+        });
+        
+        btn.onclick = () => {
+          InputManager.setCommand(cmd);
+          this.showHistoryTip();
+        };
+        quick.appendChild(btn);
+      });
+      
+      document.body.appendChild(quick);
+    },
+    
+    _buildGridModal() {
+      const modal = this.create('div', { id: 'mobile_grid_modal' }, {
+        position: 'fixed',
+        top: '0',
+        left: '0',
+        right: '0',
+        bottom: '0',
+        background: 'rgba(0, 0, 0, 0.9)',
+        display: 'none',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: UI_CONFIG.zIndex - 2
+      });
+      
+      const panel = this.create('div', { id: 'mobile_grid_panel' }, {
+        width: '95%',
+        maxWidth: '600px',
+        height: `${UI_CONFIG.gridModalHeight}vh`,
+        background: 'rgba(0, 10, 6, 0.95)',
+        border: '2px solid #00FF41',
+        borderRadius: '10px',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden'
+      });
+      
+      const header = this.create('div', { innerText: 'NET GRID CONTROL' }, {
+        padding: '12px',
+        fontSize: '14px',
+        textAlign: 'center',
+        borderBottom: '1px solid #00FF41',
+        background: 'rgba(0, 20, 10, 0.5)'
+      });
+      
+      const map = this.create('div', { id: 'mobile_grid_map' }, {
+        flex: '1',
+        position: 'relative',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden'
+      });
+      
+      const controls = this.create('div', {}, {
+        padding: '12px',
+        display: 'flex',
+        gap: '8px',
+        justifyContent: 'center',
+        borderTop: '1px solid #00FF41'
+      });
+      
+      const closeBtn = this.create('button', { innerText: 'CLOSE' }, {
+        padding: '10px 20px',
+        background: 'rgba(0, 20, 10, 0.7)',
+        color: '#00FF41',
+        border: '1px solid #00FF41',
+        borderRadius: '6px',
+        fontSize: '12px'
+      });
+      
+      closeBtn.onclick = () => GridManager.close();
+      controls.appendChild(closeBtn);
+      panel.append(header, map, controls);
+      modal.appendChild(panel);
+      document.body.appendChild(modal);
+    },
+    
+    _buildHistoryTip() {
+      const tip = this.create('div', { id: 'mobile_history_tip' }, {
+        position: 'fixed',
+        top: '8px',
+        left: '8px',
+        background: 'rgba(0, 0, 0, 0.7)',
+        color: '#00FF41',
+        padding: '6px 12px',
+        borderRadius: '6px',
+        fontSize: '12px',
+        zIndex: UI_CONFIG.zIndex,
+        display: 'none',
+        border: '1px solid #00FF41'
+      });
+      document.body.appendChild(tip);
+    },
+    
+    showHistoryTip() {
+      const tip = document.getElementById('mobile_history_tip');
+      tip.textContent = '↑↓ - История | ESC - Очистить';
+      tip.style.display = 'block';
+      setTimeout(() => tip.style.display = 'none', UI_CONFIG.historyTipDuration);
+    }
+  };
+  
+  // ==================== INPUT MANAGER ====================
+  const InputManager = {
+    submitCommand() {
+      if (!MobileState.isReady) return;
+      if (MobileState.terminalAPI.isBlocked?.()) return; // Проверка через API
+      
+      const input = document.getElementById('mobile_input_field');
+      const cmd = String(input.value || MobileState.currentLine).trim();
+      
+      if (!cmd) return;
+      
+      // Сохраняем в историю
+      MobileState.cmdHistory.push(cmd);
+      MobileState.historyIndex = MobileState.cmdHistory.length;
+      if (MobileState.cmdHistory.length > 50) {
+        MobileState.cmdHistory.shift();
+      }
+      localStorage.setItem('mobile_cmdHistory', JSON.stringify(MobileState.cmdHistory));
+      
+      // Воспроизводим звук
+      MobileState.audioAPI.playKeyPress('enter');
+      
+      // ОТПРАВЛЯЕМ В ТЕРМИНАЛ ЧЕРЕЗ API
+      MobileState.terminalAPI.processCommand(cmd);
+      
+      // Очищаем поле
+      input.value = '';
+      MobileState.currentLine = '';
+      DOMBuilder.showHistoryTip();
+    },
+    
+    setCommand(cmd) {
+      document.getElementById('mobile_input_field').value = cmd;
+      MobileState.currentLine = cmd;
+    },
+    
+    // Навигация по истории
+    navigateHistory(direction) {
+      if (!MobileState.cmdHistory.length) return;
+      
+      if (direction === 'up') {
+        MobileState.historyIndex = Math.max(0, MobileState.historyIndex - 1);
+      } else {
+        MobileState.historyIndex = Math.min(
+          MobileState.cmdHistory.length, 
+          MobileState.historyIndex + 1
+        );
+      }
+      
+      const cmd = MobileState.cmdHistory[MobileState.historyIndex] || '';
+      this.setCommand(cmd);
+    }
+  };
+  
+  // ==================== GRID MANAGER ====================
+  const GridManager = {
+    isOpen: false,
+    originalCanvas: null,
+    
+    open() {
+      if (!MobileState.netGridAPI) return;
+      
+      this.isOpen = true;
+      
+      // Прячем деградацию индикатор
+      try {
+        MobileState.terminalAPI.degradation?.indicator?.style?.display = 'none';
+      } catch(e) {}
+      
+      // Показываем модальное окно
+      const modal = document.getElementById('mobile_grid_modal');
+      modal.style.display = 'flex';
+      
+      // Находим canvas сетки
+      const canvas = document.getElementById('netCanvas') || 
+                    document.querySelector('canvas:not(#terminalCanvas)');
+      if (!canvas) {
+        console.warn('[mobile] Canvas сетки не найден');
+        return;
+      }
+      
+      this.originalCanvas = canvas;
+      
+      // Перемещаем canvas в модальное окно
+      const map = document.getElementById('mobile_grid_map');
+      map.innerHTML = '';
+      canvas.style.position = 'relative';
+      canvas.style.width = '100%';
+      canvas.style.height = '100%';
+      canvas.style.pointerEvents = 'auto';
+      map.appendChild(canvas);
+      
+      // Включаем режим сетки
+      MobileState.netGridAPI.setGridMode(true);
+      
+      // Адаптируем размеры
+      ViewportManager.adjustTerminal();
+    },
+    
+    close() {
+      if (!this.isOpen) return;
+      
+      this.isOpen = false;
+      
+      // Возвращаем canvas обратно
+      if (this.originalCanvas && this.originalCanvas.parentNode) {
+        this.originalCanvas.style.position = '';
+        this.originalCanvas.style.width = '';
+        this.originalCanvas.style.height = '';
+        document.body.appendChild(this.originalCanvas);
+      }
+      
+      // Прячем модальное окно
+      document.getElementById('mobile_grid_modal').style.display = 'none';
+      
+      // Выключаем режим сетки
+      MobileState.netGridAPI.setGridMode(false);
+      
+      // Восстанавливаем деградацию индикатор
+      try {
+        MobileState.terminalAPI.degradation?.indicator?.style?.display = '';
+      } catch(e) {}
+      
+      ViewportManager.adjustTerminal();
+    },
+    
+    toggle() {
+      this.isOpen ? this.close() : this.open();
+    }
+  };
+  
+  // ==================== VIEWPORT MANAGER ====================
+  const ViewportManager = {
+    resizeTimeout: null,
+    
+    init() {
+      this.adjustTerminal();
+      
+      // Debounced resize handler
+      const handler = () => this.scheduleAdjust();
+      window.visualViewport?.addEventListener('resize', handler);
+      window.addEventListener('orientationchange', () => {
+        setTimeout(() => this.adjustTerminal(), 300);
+      });
+    },
+    
+    scheduleAdjust() {
+      clearTimeout(this.resizeTimeout);
+      this.resizeTimeout = setTimeout(() => this.adjustTerminal(), UI_CONFIG.debounceDelay);
+    },
+    
+    adjustTerminal() {
+      if (!MobileState.isReady) return;
+      
+      const vh = window.visualViewport?.height || window.innerHeight;
+      const vw = window.innerWidth;
+      
+      // Резервируем место под UI
+      const reservedHeight = UI_CONFIG.inputBarHeight + UI_CONFIG.quickBarHeight + 20;
+      const availableHeight = Math.max(200, vh - reservedHeight);
+      
+      // Вызываем resize через API терминала
+      MobileState.terminalAPI.onResize?.(vw, availableHeight);
+      
+      // Скролл к низу
+      setTimeout(() => {
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+      }, 100);
+    }
+  };
+  
+  // ==================== MOBILE-SAFE AUDIO ====================
+  const AudioManager = {
+    unlocked: false,
+    
+    unlock() {
+      if (this.unlocked) return;
+      
+      const unlock = () => {
+        if (MobileState.audioAPI?.audioContext?.state === 'suspended') {
+          MobileState.audioAPI.audioContext.resume();
+        }
+        this.unlocked = true;
+        document.removeEventListener('touchstart', unlock, { once: true });
+        document.removeEventListener('click', unlock, { once: true });
+      };
+      
+      document.addEventListener('touchstart', unlock, { once: true });
+      document.addEventListener('click', unlock, { once: true });
+    }
+  };
+  
+  // ==================== EVENT BRIDGE ====================
+  const EventBridge = {
+    subscriptions: new Map(),
+    
+    subscribe(event, callback) {
+      if (!this.subscriptions.has(event)) {
+        this.subscriptions.set(event, []);
+      }
+      this.subscriptions.get(event).push(callback);
+    },
+    
+    emit(event, data) {
+      this.subscriptions.get(event)?.forEach(cb => cb(data));
+    },
+    
+    init() {
+      // Подписываемся на события терминала (если они есть)
+      // И эмитируем свои события
+      
+      // Пример: когда терминал печатает строку
+      const originalPushLine = MobileState.terminalAPI.addOutput || 
+                              MobileState.terminalAPI.pushLine;
+      if (originalPushLine) {
+        MobileState.terminalAPI.addOutput = (...args) => {
+          this.emit('lineAdded', args);
+          return originalPushLine.apply(MobileState.terminalAPI, args);
+        };
+      }
+    }
+  };
+  
+  // ==================== GLOBAL KEYBOARD EMULATION ====================
+  // Это критически важно! Мы превращаем мобильный ввод в keyboard events
+  const KeyboardEmulator = {
+    dispatchKey(key, type = 'keydown') {
+      const event = new KeyboardEvent(type, {
+        key: key,
+        code: `Key${key.toUpperCase()}`,
+        bubbles: true,
+        cancelable: true,
+        composed: true
+      });
+      document.dispatchEvent(event);
+    },
+    
+    dispatchEnter() {
+      this.dispatchKey('Enter');
+    },
+    
+    dispatchBackspace() {
+      this.dispatchKey('Backspace');
+    }
+  };
+  
+  // ==================== INITIALIZATION ====================
+  function init() {
+    // 1. Инициализируем состояние
+    MobileState.init();
+    
+    // 2. Строим UI
+    DOMBuilder.buildUI();
+    
+    // 3. Ждём готовности терминала
+    const waitForReady = setInterval(() => {
+      if (MobileState.isReady) {
+        clearInterval(waitForReady);
+        
+        // 4. Инициализируем модули
+        ViewportManager.init();
+        AudioManager.unlock();
+        EventBridge.init();
+        
+        // 5. Перехватываем ввод
+        overrideTerminalInput();
+        
+        // 6. Скрываем оригинальную строку ввода (терминал её рисует сам)
+        // Но мы её перерисуем через API
+        MobileState.terminalAPI.addOutput?.('', 'output');
+        
+        console.log('[mobile] Fully initialized');
+      }
+    }, 50);
+  }
+  
+  // ==================== OVERRIDE TERMINAL INPUT ====================
+  function overrideTerminalInput() {
+    // Это самое важное: мы НЕ даём терминалу создавать свою строку ввода
+    // Вместо этого создаём свою и отправляем команды через API
+    
+    // Удаляем существующую строку ввода (если есть)
+    const lines = MobileState.terminalAPI.lines || [];
+    if (lines.length && lines[lines.length - 1]?._isInputLine) {
+      lines.pop();
+    }
+    
+    // Создаём нашу строку ввода
+    MobileState.terminalAPI.addOutput?.('adam@secure:~$ ', 'input');
+  }
+  
+  // ==================== PUBLIC API ====================
+  window.__MobileUI = {
+    submitCommand: (cmd) => InputManager.submitCommand(cmd),
+    toggleGrid: () => GridManager.toggle(),
+    setLiteMode: (enabled) => {
+      UI_CONFIG.isLiteMode = enabled;
+      // Применяем к терминалу через API
+      if (enabled && MobileState.terminalAPI.degradation?.level > 60) {
+        MobileState.terminalAPI.degradation.setDegradationLevel(60);
+      }
+    }
+  };
+  
+  // ==================== AUTO-START ====================
+  // Запускаемся сразу
+  init();
+  
 })();
