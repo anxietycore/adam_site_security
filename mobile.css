@@ -142,3 +142,10 @@ body {
     0%, 50% { opacity: 1; }
     51%, 100% { opacity: 0; }
 }
+.menu-title { text-align: center; margin-bottom: 10px; font-size: 11px; color: #FFFF00; }
+.menu-buttons { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
+.digit-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin: 10px 0; }
+.digit-btn { background: rgba(0, 20, 10, 0.8); border: 1px solid #00FF41; color: #00FF41; font-family: 'Press Start 2P'; font-size: 16px; padding: 15px; border-radius: 6px; cursor: pointer; }
+.digit-btn:active { background: rgba(0, 255, 65, 0.3); }
+.code-display { text-align: center; font-size: 20px; letter-spacing: 5px; margin: 10px 0; color: #00FF41; }
+.back-btn { background: rgba(100, 0, 0, 0.5) !important; border-color: #FF4444 !important; color: #FF4444 !important; }
