@@ -1,32 +1,36 @@
-/* mobile.css v2.0 — ЧИСТАЯ АДАПТИВНОСТЬ */
+/* mobile.css v2.0 — ПОЛНАЯ ВЕРСИЯ С ПРОКРУТКОЙ */
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body {
-  height: 100%;
+  height: auto; /* ← РАЗРЕШАЕМ РАСТЯЖЕНИЕ */
+  min-height: 100%;
   background: #000;
   color: #00FF41;
   font-family: 'Press Start 2P', monospace;
   font-size: 12px;
   line-height: 1.4;
   -webkit-text-size-adjust: none;
-  touch-action: manipulation; /* Убираем задержку тапа */
-  overflow: hidden; /* Блокируем скролл страницы */
+  touch-action: manipulation;
+  overflow-y: auto; /* ← ВКЛЮЧАЕМ ВЕРТИКАЛЬНУЮ ПРОКРУТКУ */
+  overflow-x: hidden;
 }
 
 /* Терминал занимает весь экран */
 #terminal {
-  position: fixed;
-  inset: 0;
+  position: relative; /* ← УБИРАЕМ ФИКСАЦИЮ */
+  min-height: 100vh;
+  width: 100%;
   z-index: 1;
   pointer-events: auto;
+  padding-bottom: 180px; /* ← ОТСТУП СНИЗУ ПОД ПЛАШКУ */
 }
 
 /* Боковая панель */
 #sidePanel {
   position: fixed;
   right: 8px;
-  top: 60px; /* Ниже статус-бара */
+  top: 60px;
   bottom: 8px;
   width: 90px;
   z-index: 99991;
@@ -74,7 +78,7 @@ html, body {
 /* Кнопки команд */
 .cmd {
   width: 100%;
-  min-height: 44px; /* Apple/Google стандарт */
+  min-height: 44px;
   padding: 10px 4px;
   background: rgba(0, 0, 0, 0.45);
   color: #00FF41;
@@ -313,4 +317,31 @@ html, body {
 /* Скрытие canvas сетки по умолчанию */
 canvas:not(#terminalCanvas) {
   display: none !important;
+}
+
+/* =========================================
+   TOUCH-SCROLL FIX: ПЛАШКА ДЕГРАДАЦИИ И КАНВАС
+   ========================================= */
+
+/* Плашка деградации внизу */
+#degradationDisplay {
+  position: fixed !important;
+  bottom: 20px !important;
+  top: auto !important;
+  right: 20px !important;
+}
+
+/* Убираем защитный слой */
+#mobileDegradationOverlay {
+  display: none !important;
+}
+
+/* Canvas растягивается под контент */
+#terminalCanvas {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 100vh;
 }
