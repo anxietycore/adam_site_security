@@ -764,14 +764,29 @@ class DegradationSystem {
     this.falseResetCount = 0;
     this.intentionPredictionCount = 0;
     this.phantomDossierCount = 0;
-    
-    // Создаем индикатор
-    this.indicator = document.createElement('div');
-    this.indicator.style.cssText = `position:fixed; top:20px; right:20px; opacity:0; pointer-events:none; font-family:${FONT_FAMILY};`;
-    document.body.appendChild(this.indicator);
-    this.updateIndicator();
-    this.startTimer();
-    this.updateEffects();
+  // Флаги для голосов
+  this.voiceAdam03Played = localStorage.getItem('voiceAdam03Played') === 'true';
+  this.voiceWhisper03Played = localStorage.getItem('voiceWhisper03Played') === 'true';
+  
+  // Генерируем рандомные пороги в БЕЗОПАСНЫХ зонах
+  this.voiceAdam03Threshold = parseInt(localStorage.getItem('voiceAdam03Threshold')) || 
+                               (61 + Math.floor(Math.random() * 9)); // 60-69
+  this.voiceWhisper03Threshold = parseInt(localStorage.getItem('voiceWhisper03Threshold')) || 
+                                 (81 + Math.floor(Math.random() * 9)); // 80-89
+  
+  // Сохраняем пороги
+  localStorage.setItem('voiceAdam03Threshold', this.voiceAdam03Threshold.toString());
+  localStorage.setItem('voiceWhisper03Threshold', this.voiceWhisper03Threshold.toString());
+
+
+
+  // Создаем индикатор
+  this.indicator = document.createElement('div');
+  this.indicator.style.cssText = `position:fixed; top:20px; right:20px; opacity:0; pointer-events:none; font-family:${FONT_FAMILY};`;
+  document.body.appendChild(this.indicator);
+  this.updateIndicator();
+  this.startTimer();
+  this.updateEffects();
   }
   stopWorld() {
     if (worldStopped) return;
@@ -848,23 +863,33 @@ restoreWorld() {
     
 
     
-    // Аудио-предупреждения о сбросе
-    if (this.level >= 55 && this.level < 70 && Math.floor(this.level / 5) !== Math.floor(this.lastSoundLevel / 5)) {
-      audioManager.playSystemSound('reset_com');
-    }
-    // Обратное звучание
-    else if (this.level >= 70 && this.level < 80 && Math.floor(this.level / 5) !== Math.floor(this.lastSoundLevel / 5)) {
-      audioManager.playSystemSound('reset_com_reverse');
-    }
-    // Обратное звучание (продолжение)
-    else if (this.level >= 80 && this.level < 95 && Math.floor(this.level / 5) !== Math.floor(this.lastSoundLevel / 5)) {
-audioManager.playSystemSound('reset_com_reverse', { 
-    playbackRate: 0.8 + (95 - this.level) / 15 * 0.4
-});
-    }
+if (!this.isVoicePlaying) {
+  if (this.level >= 55 && this.level < 70 && Math.floor(this.level / 10) !== Math.floor(this.lastSoundLevel / 10)) {
+    audioManager.playSystemSound('reset_com');
+  }
+  // Обратное звучание
+  else if (this.level >= 70 && this.level < 80 && Math.floor(this.level / 10) !== Math.floor(this.lastSoundLevel / 10)) {
+    audioManager.playSystemSound('reset_com_reverse');
+  }
+  // Обратное звучание (продолжение)
+  else if (this.level >= 80 && this.level < 95 && Math.floor(this.level / 10) !== Math.floor(this.lastSoundLevel / 10)) {
+    audioManager.playSystemSound('reset_com_reverse', { 
+      playbackRate: 0.8 + (95 - this.level) / 15 * 0.4
+    });
+  }
+}
     
     this.lastSoundLevel = this.level;
-    
+// Проверка и воспроизведение голосов (в безопасных зонах)
+if (!this.voiceAdam03Played && this.level >= this.voiceAdam03Threshold) {
+  audioManager.playVoiceSound('adam_03');
+  this.voiceAdam03Played = true;
+  localStorage.setItem('voiceAdam03Played', 'true');
+} else if (!this.voiceWhisper03Played && this.level >= this.voiceWhisper03Threshold) {
+  audioManager.playVoiceSound('whisper_03');
+  this.voiceWhisper03Played = true;
+  localStorage.setItem('voiceWhisper03Played', 'true');
+}
     // Автоматический сброс при 98%
 if (this.level >= AUTO_RESET_LEVEL && !isFrozen) {
   isFrozen = true; // БЛОКИРУЕМ ВВОД
@@ -1054,6 +1079,18 @@ showResetProgress() {
 // ========== МЕТОД: ВЫПОЛНЕНИЕ АВТОМАТИЧЕСКОГО СБРОСА ==========
 performAutoReset() {
   console.log('[AUTO RESET] Starting...');
+// Сброс флагов голосов и перегенерация порогов
+localStorage.setItem('voiceAdam03Played', 'false');
+localStorage.setItem('voiceWhisper03Played', 'false');
+localStorage.setItem('voiceAdam03Threshold', (60 + Math.floor(Math.random() * 9)).toString());
+localStorage.setItem('voiceWhisper03Threshold', (80 + Math.floor(Math.random() * 9)).toString());
+
+if (degradation) {
+  degradation.voiceAdam03Played = false;
+  degradation.voiceWhisper03Played = false;
+  degradation.voiceAdam03Threshold = parseInt(localStorage.getItem('voiceAdam03Threshold'));
+  degradation.voiceWhisper03Threshold = parseInt(localStorage.getItem('voiceWhisper03Threshold'));
+}
   vigilCodeParts = { alpha: null, beta: null, gamma: null };
   localStorage.removeItem('vigilCodeParts');
   gridCheckAlreadyRewarded = false;
@@ -1175,6 +1212,16 @@ performAutoReset() {
   }
   // ========== МЕТОД: ПОЛНЫЙ СБРОС ВСЕХ СОСТОЯНИЙ ==========
 fullSystemReset(){
+ // Сброс голосов и порогов
+this.voiceAdam03Played = false;
+this.voiceWhisper03Played = false;
+this.voiceAdam03Threshold = 63 + Math.floor(Math.random() * 9);
+this.voiceWhisper03Threshold = 83 + Math.floor(Math.random() * 9);
+
+localStorage.setItem('voiceAdam03Played', 'false');
+localStorage.setItem('voiceWhisper03Played', 'false');
+localStorage.setItem('voiceAdam03Threshold', this.voiceAdam03Threshold.toString());
+localStorage.setItem('voiceWhisper03Threshold', this.voiceWhisper03Threshold.toString());
   // Сброс всех глобальных переменных состояния
   isFrozen = false;
   isTyping = false;
@@ -1324,6 +1371,16 @@ fullSystemReset(){
   }
   
 reset(){
+// Сброс флагов голосов и перегенерация порогов
+this.voiceAdam03Played = false;
+this.voiceWhisper03Played = false;
+this.voiceAdam03Threshold = 63 + Math.floor(Math.random() * 9); // 60-69
+this.voiceWhisper03Threshold = 83 + Math.floor(Math.random() * 9); // 80-89
+
+localStorage.setItem('voiceAdam03Played', 'false');
+localStorage.setItem('voiceWhisper03Played', 'false');
+localStorage.setItem('voiceAdam03Threshold', this.voiceAdam03Threshold.toString());
+localStorage.setItem('voiceWhisper03Threshold', this.voiceWhisper03Threshold.toString());
   // Сброс всех счетчиков и флагов
   this.level = 0;
   this.lastSoundLevel = 0;
@@ -3490,7 +3547,7 @@ const commandWeights = {
     if (commandWeights[command]) degradation.addDegradation(commandWeights[command]);
     
     // Рандомная блокировка команд
-    if (degradation.level >= COMMAND_BLOCK_START_LEVEL && degradation.commandBlockActive && Math.random() < 0.35) {
+    if (degradation.level >= COMMAND_BLOCK_START_LEVEL && degradation.commandBlockActive && Math.random() < 0.20) {
       addColoredText('> ДОСТУП ЗАПРЕЩЁН: УЗЕЛ НАБЛЮДЕНИЯ ЗАНЯТ', '#FF4444');
 	  audioManager.playCommandSound('error');
       setTimeout(addInputLine, 2500);
