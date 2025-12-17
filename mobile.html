@@ -1,28 +1,40 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <meta name="theme-color" content="#000000" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>TERMINAL :: MOBILE</title>
-
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
-
-  <link rel="stylesheet" href="mobile.css" />
 </head>
 <body>
-
-  <!-- Canvas терминала -->
   <canvas id="terminalCanvas"></canvas>
-
-  <!-- Тут подключаем библиотеки в правильном порядке -->
-  <script src="module_audio.js"></script>
-  <script src="netGrid_v3.js"></script>
-  <script src="terminal_canvas.js"></script>
-
-  <!-- И НОВЫЙ мобильный скрипт (заменяет terminal_mobile.js) -->
-  <script src="mobile.js"></script>
+  
+  <script>
+    // Загрузчик с проверкой зависимостей
+    const scripts = [
+      'module_audio.js',
+      'netGrid_v3.js',
+      'terminal_canvas.js',
+      'mobile.js' // mobile.js ВСЕГДА последний
+    ];
+    
+    function loadNext(index) {
+      if (index >= scripts.length) return;
+      
+      const script = document.createElement('script');
+      script.src = scripts[index];
+      script.onload = () => {
+        console.log(`[loader] ${scripts[index]} loaded`);
+        loadNext(index + 1);
+      };
+      script.onerror = () => {
+        console.error(`[loader] FAILED to load ${scripts[index]}`);
+        document.body.innerHTML = `<div style="color: red; padding: 20px;">Ошибка загрузки ${scripts[index]}</div>`;
+      };
+      document.body.appendChild(script);
+    }
+    
+    loadNext(0);
+  </script>
 </body>
 </html>
