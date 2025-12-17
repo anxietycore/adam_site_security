@@ -86,60 +86,50 @@
             this.addInputLine();
         },
 
-        setupEventListeners() {
-            // КЛИК НА ТЕРМИНАЛ - ФОКУС ВВОДА (НЕ ПРОКРУЧИВАЕТ ВВЕРХ)
-            DOM.terminal.addEventListener('click', (e) => {
-                if (!State.isFrozen) {
-                    e.preventDefault();
-                    DOM.hiddenInput.focus();
-                }
-            });
-
-            // ОБРАБОТКА ВВОДА (ТОЛЬКО ОДИН ОБРАБОТЧИК, ЧТОБЫ НЕ БЫЛО ИНВЕРСИИ)
-            let inputBuffer = '';
-            
-            DOM.hiddenInput.addEventListener('input', (e) => {
-                if (State.isFrozen) return;
-                
-                // Принимаем значение как есть, без манипуляций
-                State.currentLine = e.target.value;
-                this.updateInputLine();
-                
-                // Прокручиваем вниз, а не вверх
+setupEventListeners() {
+    // ОТКЛЮЧАЕМ АВТОПРОКРУТКУ БРАУЗЕРА
+    document.body.addEventListener('focusin', (e) => {
+        if (e.target === DOM.hiddenInput) {
+            setTimeout(() => {
+                window.scrollTo(0, 0);
                 DOM.terminal.scrollTop = DOM.terminal.scrollHeight;
-            });
+            }, 100);
+        }
+    });
 
-            // ОБРАБОТКА КЛАВИАТУРЫ
-            DOM.hiddenInput.addEventListener('keydown', (e) => {
-                if (State.isConfirming) {
-                    e.preventDefault();
-                    return;
-                }
+    // ОБРАБОТКА ВВОДА БЕЗ ИНВЕРСИИ
+    let lastValue = '';
+    DOM.hiddenInput.addEventListener('input', (e) => {
+        if (State.isFrozen) return;
+        
+        // Берем значение КАК ЕСТЬ, без всяких манипуляций
+        State.currentLine = e.target.value;
+        this.updateInputLine();
+        
+        // ПРИНУДИТЕЛЬНО ДЕРЖИМ ВНИЗУ
+        DOM.terminal.scrollTop = DOM.terminal.scrollHeight;
+    });
 
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    this.submitCommand();
-                } else if (e.key === 'Escape') {
-                    e.preventDefault();
-                    State.currentLine = '';
-                    DOM.hiddenInput.value = '';
-                    this.updateInputLine();
-                }
-                // НЕ ОБРАБАТЫВАЕМ ДРУГИЕ КЛАВИШИ - ОНИ ОБРАБАТЫВАЮТСЯ ЧЕРЕЗ 'input' СОБЫТИЕ
-            });
+    // ОТПРАВКА КОМАНДЫ
+    DOM.hiddenInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            this.submitCommand();
+        }
+    });
 
-            // БЫСТРЫЕ КНОПКИ (РАБОТАЮТ ЧЕРЕЗ setCommand)
-            DOM.quickCmds.addEventListener('click', (e) => {
-                if (e.target.dataset.cmd && !State.isFrozen) {
-                    this.setCommand(e.target.dataset.cmd);
-                    this.submitCommand();
-                }
-            });
+    // БЫСТРЫЕ КНОПКИ
+    DOM.quickCmds.addEventListener('click', (e) => {
+        if (e.target.dataset.cmd && !State.isFrozen) {
+            this.setCommand(e.target.dataset.cmd);
+            this.submitCommand();
+        }
+    });
 
-            // МОДАЛЬНОЕ ОКНО
-            DOM.confirmY.addEventListener('click', () => this.handleConfirm(true));
-            DOM.confirmN.addEventListener('click', () => this.handleConfirm(false));
-        },
+    // МОДАЛЬНОЕ ОКНО
+    DOM.confirmY.addEventListener('click', () => this.handleConfirm(true));
+    DOM.confirmN.addEventListener('click', () => this.handleConfirm(false));
+}
 
         // ==================== ОТОБРАЖЕНИЕ ====================
         addLine(text, color = CONFIG.COLORS.normal, isInput = false) {
