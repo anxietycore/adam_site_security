@@ -594,20 +594,27 @@ const glitchEngine = new GlitchTextEngine();
     }
   }
   
-  function resize() {
-    vw = Math.max(320, window.innerWidth);
-    vh = Math.max(240, window.innerHeight);
-    canvas.width = Math.floor(vw * DPR);
-    canvas.height = Math.floor(vh * DPR);
-    canvas.style.width = vw + 'px';
-    canvas.style.height = vh + 'px';
-    ctx.setTransform(1,0,0,1,0,0);
-    ctx.scale(DPR, DPR);
-    requestFullRedraw();
-  }
-  
-  window.addEventListener('resize', resize);
-  resize();
+function onResize(w,h){
+  // External resize helper: if width/height passed, use them; otherwise fallback to window size
+  vw = Math.max(320, w || window.innerWidth);
+  vh = Math.max(240, h || window.innerHeight);
+  canvas.width = Math.floor(vw * DPR);
+  canvas.height = Math.floor(vh * DPR);
+  canvas.style.width = vw + 'px';
+  canvas.style.height = vh + 'px';
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.scale(DPR, DPR);
+  requestFullRedraw();
+}
+
+// legacy compatibility: keep resize() wrapper
+function resize(){
+  return onResize();
+}
+
+window.addEventListener('resize', resize);
+// call initial sizing
+onResize();
   
   // ---------- terminal state ----------
   const lines = [];
@@ -4657,6 +4664,7 @@ async function startHellTransition() {
         // 5. Звуковая дорожка
 audioManager.playVigilSound('transition');
 
+
         
         // 6. ЭФФЕКТ ПРОВАЛИВАНИЯ (КРАСНЫЕ ПОЛОСЫ, КОТОРЫЕ СТАНОВЯТСЯ ЧЁРНЫМИ)
         const stripCount = 30;
@@ -4762,7 +4770,7 @@ audioManager.playVigilSound('transition');
                 flashLayer.style.background = '#FFFFFF';
                 flashLayer.style.opacity = '0.95';
                 
-                audioManager.playSystemSound('glitch_error', { volume: 0.4 });
+                audioManager.playSystemSound('glitch_error');
 
                 
                 // НЕ УДАЛЯЕМ hellLayer! Оставляем его на месте
