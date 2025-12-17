@@ -38,6 +38,7 @@ const GLITCH_CONFIG = {
 };
 
 GLITCH_CONFIG.ALL = [...GLITCH_CONFIG.BLOCKS, ...GLITCH_CONFIG.GLYPHS, ...GLITCH_CONFIG.CUTS];
+
 // ---------- Audio Manager ----------
 const audioManager = new AudioManager();
 audioManager.preloadCriticalSounds();
@@ -4527,7 +4528,42 @@ function getMaxScroll() {
   const visibleLines = Math.max(1, Math.floor(contentH / LINE_HEIGHT));
   return Math.max(0, lines.length - visibleLines);
 }
+// ========== TOUCH SCROLL FOR MOBILE ==========
+let touchStartY = 0;
+let touchStartScroll = 0;
+let isTouchScrolling = false;
 
+canvas.addEventListener('touchstart', (e) => {
+  if (decryptActive || traceActive || audioPlaybackActive) return;
+  
+  touchStartY = e.touches[0].clientY;
+  touchStartScroll = scrollOffset;
+  isTouchScrolling = true;
+  e.preventDefault();
+}, { passive: false });
+
+canvas.addEventListener('touchmove', (e) => {
+  if (!isTouchScrolling || decryptActive || traceActive || audioPlaybackActive) return;
+  
+  const touchY = e.touches[0].clientY;
+  const deltaY = touchStartY - touchY; // Инвертируем для естественного скролла
+  const maxScroll = getMaxScroll();
+  
+  // Чувствительность скролла (можно настроить)
+  const scrollDelta = Math.floor(deltaY / LINE_HEIGHT * 2);
+  
+  scrollOffset = Math.max(0, Math.min(maxScroll, touchStartScroll + scrollDelta));
+  requestFullRedraw();
+  e.preventDefault();
+}, { passive: false });
+
+canvas.addEventListener('touchend', (e) => {
+  isTouchScrolling = false;
+  e.preventDefault();
+}, { passive: false });
+
+// Удаляем колёсико мыши для мобильных (оно не нужно)
+// Или оставь его, но сделай менее чувствительным
 canvas.addEventListener('wheel', (e) => {
   e.preventDefault();
   if (isFrozen || decryptActive || traceActive || audioPlaybackActive) return;
@@ -4590,9 +4626,19 @@ function backgroundTick(ts) {
 requestAnimationFrame(backgroundTick);
 
 // expose debug API
+
+// expose debug API + useful data for mobile
 window.__TerminalCanvas = {
-  addOutput, addColoredText, typeText, processCommand, degradation, lines
+  addOutput,
+  addColoredText,
+  typeText,
+  processCommand,
+  degradation,
+  lines,
+  dossiers: (typeof dossiers !== 'undefined') ? dossiers : null,
+  commandsList: (typeof realCommands !== 'undefined') ? realCommands : null
 };
+
 
 // initial draw
 requestFullRedraw();
