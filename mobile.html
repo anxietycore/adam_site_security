@@ -1,142 +1,34 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>A.D.A.M. // МОБИЛЬНЫЙ ДОСТУП</title>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap">
-    <link rel="stylesheet" href="mobile.css">
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+  />
+  <title>TERMINAL :: MOBILE</title>
+
+  <!-- Шрифт (опционально, можно убрать) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap"
+    rel="stylesheet"
+  >
+
+  <link rel="stylesheet" href="mobile.css" />
 </head>
+
 <body>
-    <canvas id="mobileShader" aria-hidden="true"></canvas>
-    <div class="scanline"></div>
-    
-    <div id="mobileTerminal">
-        <div class="header">
-            <div class="logo">A.D.A.M. // ТЕРМИНАЛ VIGIL-9</div>
-            <div class="degradation-indicator">
-                <div class="degradation-label">СИСТЕМНЫЙ СТАТУС:</div>
-                <div class="degradation-bar-container">
-                    <div class="degradation-bar">
-                        <div class="degradation-fill" id="degradationFill"></div>
-                    </div>
-                </div>
-                <div class="degradation-percent">ПОЛНАЯ СТАБИЛЬНОСТЬ</div>
-            </div>
-        </div>
-        
-        <div class="content">
-            <div class="message-block">
-                <p class="message">> СИСТЕМА ОБНАРУЖИЛА МОБИЛЬНОЕ УСТРОЙСТВО</p>
-                <p class="message">> ПОЛНЫЙ ДОСТУП НЕДОСТУПЕН</p>
-                <p class="message sub">Причина: отсутствие физической клавиатуры и точного управления</p>
-            </div>
-            
-            <div class="preview-section">
-                <div class="preview-title">ДЕМОНСТРАЦИЯ ПОЛНОГО ИНТЕРФЕЙСА:</div>
-                <div class="preview-container" id="demoVideoContainer">
-                    <video id="demoVideo" muted loop playsinline>
-                        <source src="preview/demo_terminal.mp4" type="video/mp4">
-                    </video>
-                    <button id="playButton" class="play-button">▶</button>
-                </div>
-                <div class="preview-caption">Терминал требует полного контроля для правильного функционирования</div>
-            </div>
-            
-            <div class="options-section">
-                <div class="option-title">ДОСТУПНЫЕ ДЕЙСТВИЯ:</div>
-                <div class="options-grid">
-                    <button class="option-button" id="watchDemo">
-                        <div class="option-icon">🎬</div>
-                        <div class="option-text">ПОСМОТРЕТЬ ДЕМО</div>
-                    </button>
-                    <button class="option-button" id="accessFull">
-                        <div class="option-icon">⚠️</div>
-                        <div class="option-text">ПОЛНЫЙ ДОСТУП (РИСКОВАННО)</div>
-                    </button>
-                    <button class="option-button" id="simplifiedTerminal">
-                        <div class="option-icon">📟</div>
-                        <div class="option-text">УПРОЩЁННЫЙ ТЕРМИНАЛ</div>
-                    </button>
-                    <button class="option-button" id="systemInfo">
-                        <div class="option-icon">ℹ️</div>
-                        <div class="option-text">ИНФОРМАЦИЯ</div>
-                    </button>
-                </div>
-            </div>
-            
-            <div class="requirements-section">
-                <div class="requirements-title">ТРЕБОВАНИЯ ДЛЯ ПОЛНОГО ДОСТУПА:</div>
-                <ul class="requirements-list">
-                    <li>🖥️ ПК или ноутбук с физической клавиатурой</li>
-                    <li>⌨️ Минимум 1024×768 пикселей разрешения</li>
-                    <li>🔊 Работающий динамик для аудиоэффектов</li>
-                    <li>🖱️ Мышь или точное устройство ввода</li>
-                </ul>
-            </div>
-        </div>
-        
-        <div class="footer">
-            <div class="system-message">
-                > Для оптимального опыта рекомендуется использовать десктопную версию
-            </div>
-            <div class="copyright">
-                A.D.A.M. TERMINAL // VIGIL-9 // © 2025
-            </div>
-        </div>
-    </div>
-    
-    <div id="simplifiedTerminalContainer" class="hidden">
-        <div class="terminal-header">
-            <div class="terminal-title">УПРОЩЁННЫЙ ТЕРМИНАЛ // ДОСТУПНЫЕ КОМАНДЫ</div>
-            <button id="closeSimplified" class="close-button">×</button>
-        </div>
-        <div id="simplifiedOutput" class="terminal-output">
-            <div class="system-message">> СИСТЕМА: ЗАГРУЗКА УПРОЩЁННОГО ИНТЕРФЕЙСА...</div>
-            <div class="system-message">> ДОСТУПНЫЕ КОМАНДЫ: HELP, ABOUT, STATUS, EXIT</div>
-        </div>
-        <div class="terminal-input">
-            <span class="prompt">adam@mobile:~$ </span>
-            <input type="text" id="commandInput" class="command-input" maxlength="30">
-        </div>
-    </div>
-    
-    <div id="systemInfoContainer" class="hidden">
-        <div class="info-header">
-            <div class="info-title">СИСТЕМНАЯ ИНФОРМАЦИЯ</div>
-            <button id="closeInfo" class="close-button">×</button>
-        </div>
-        <div class="info-content">
-            <div class="info-section">
-                <h3>О ПРОЕКТЕ</h3>
-                <p>A.D.A.M. TERMINAL // VIGIL-9 — это иммерсивный интерактивный опыт в жанре научной фантастики. Проект сочетает в себе элементы киберпанка, психологического хоррора и интерактивного повествования.</p>
-            </div>
-            <div class="info-section">
-                <h3>ОСОБЕННОСТИ ПОЛНОЙ ВЕРСИИ</h3>
-                <ul>
-                    <li>Интерактивный терминал с сотнями команд</li>
-                    <li>Система деградации интерфейса в реальном времени</li>
-                    <li>3D-сетка узлов для навигации и взаимодействия</li>
-                    <li>Динамические звуковые эффекты и атмосферная музыка</li>
-                    <li>Скрытый сюжет и множество финалов</li>
-                    <li>Эффекты CRT-монитора, шума и искажений</li>
-                </ul>
-            </div>
-            <div class="info-section">
-                <h3>ПОЧЕМУ НЕТ МОБИЛЬНОЙ ВЕРСИИ</h3>
-                <p>Полноценный опыт требует точного ввода с физической клавиатуры, большого экрана для визуальных эффектов и высокой производительности устройства. Все ключевые механики были созданы специально для десктопных устройств.</p>
-            </div>
-        </div>
-    </div>
-    
-    <audio id="ambientSound" loop>
-        <source src="sounds/ambient_terminal.mp3" type="audio/mpeg">
-    </audio>
-    
-    <audio id="commandSound">
-        <source src="sounds/confirm.mp3" type="audio/mpeg">
-    </audio>
-    
-    <script src="mobile.js"></script>
+
+  <!-- CANVAS ТЕРМИНАЛ -->
+  <canvas id="terminalCanvas"></canvas>
+
+  <!-- СКРИПТЫ (ВАЖЕН ПОРЯДОК) -->
+  <script src="module_audio.js"></script>
+  <script src="netGrid_v3.js"></script>
+  <script src="terminal_canvas.js"></script>
+  <script src="terminal_mobile.js"></script>
+
 </body>
 </html>
