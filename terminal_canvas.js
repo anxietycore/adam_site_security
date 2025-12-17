@@ -994,11 +994,22 @@ if (this.level >= AUTO_RESET_LEVEL && !isFrozen) {
     if (this.level >= GRID_DEGRADATION_START_LEVEL && window.__netGrid) {
       window.__netGrid.setSystemDegradation(this.level);
     }
-    if (this.level >= 70 && !this.glitchAmbientActive) {
-  audioManager.startBackgroundMusic(true);
+// Ambient glitch слой (70%+ деградация)
+if (this.level >= 70 && !this.glitchAmbientActive) {
+  // ⬇⬇⬇ ВОТ ЭТО ДОБАВЬ ⬇⬇⬇
+  this.glitchAudio = new Audio('sounds/ambient/ambient_glitch.mp3');
+  this.glitchAudio.volume = 0.3;
+  this.glitchAudio.loop = true;
+  this.glitchAudio.play().catch(e => console.warn('Glitch audio play failed:', e));
+  // ⬆⬆⬆ ВОТ ЭТО ДОБАВЬ ⬆⬆⬆
   this.glitchAmbientActive = true;
 } else if (this.level < 70 && this.glitchAmbientActive) {
-  audioManager.stopBackgroundMusic('ambient_glitch.mp3');
+  // ⬇⬇⬇ ВОТ ЭТО ДОБАВЬ ⬇⬇⬇
+  if (this.glitchAudio) {
+    this.glitchAudio.pause();
+    this.glitchAudio = null;
+  }
+  // ⬆⬆⬆ ВОТ ЭТО ДОБАВЬ ⬆⬆⬆
   this.glitchAmbientActive = false;
 }
     // Цветовые классы для CSS
