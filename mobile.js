@@ -1,384 +1,299 @@
-/* mobile.js — Полная мобильная версия для терминала
+/* mobile_fixed.js — исправленная мобильная обёртка
+   Основные цели:
+   - корректный ресайз canvas под viewport (без CSS transform)
+   - canvas занимает видимую область (viewport minus UI), можно скроллить
+   - сетка NET в модалке 64% высоты с ресайзом её canvas (DPR-aware)
+   - поддержка прокрутки/панорамирования тачем по canvas (если нужно)
+   - удобная панель ввода, Y/N, быстрые команды; не перекрывает терминал вывод
    Подключать ПОСЛЕ: module_audio.js, netGrid_v3.js, terminal_canvas.js
-   Что делает:
-    - Надёжный input overlay + кнопки Y/N + быстрые команды
-    - История команд (up/down)
-    - NET grid в модальном окне с корректным ресайзом canvas
-    - Масштабирование терминала (zoom)
-    - mobileLite режим (ограничивает деградацию/звук)
-   Примечание: файл НЕ трогает исходные файлы терминала — использует их публичное API (processCommand, degradation, и т.д.) когда доступно.
 */
 
 (function(){
   'use strict';
 
-  // ========== Настройки ==========
-  const MOBILE_BAR_HEIGHT = 64; // высота панели ввода (px)
-  const GRID_MODAL_HEIGHT_PERC = 64; // % высоты экрана для модалки сетки
-  const DEFAULT_MOBILE_LITE = true;
-  const INITIAL_SCALE = 1.0;
-  const SCALE_STEP = 0.08;
-  const MAX_SCALE = 1.6;
-  const MIN_SCALE = 0.6;
+  const BAR_H = 64; // px input bar height
+  const GRID_H_PCT = 64; // grid modal height in vh
+  const QUICK = ['help','syslog','net_mode','clear','reset'];
+  const IS_MOBILE = /Mobi|Android|iPhone|iPad|iPod|Phone/i.test(navigator.userAgent) || !!window.FORCE_MOBILE_TERMINAL;
+  // Allow devs to test on desktop by forcing:
+  // window.FORCE_MOBILE_TERMINAL = true;
 
-  // быстрые команды — можно расширить
-  const QUICK_COMMANDS = [
-    {label: 'help', cmd: 'help'},
-    {label: 'syslog', cmd: 'syslog'},
-    {label: 'net_mode', cmd: 'net_mode'},
-    {label: 'clear', cmd: 'clear'},
-    {label: 'reset', cmd: 'reset'}
-  ];
+  // Minimal CSS injected
+  const _css = `
+    html,body{height:100%;margin:0;background:#000;color:#00FF41;overflow:auto;touch-action:none;}
+    #terminalCanvas{display:block; width:100%; height:100%; background:#000; touch-action:auto; -webkit-user-select:none; user-select:none; }
+    .mf-input-bar{position:fixed;left:8px;right:8px;bottom:env(safe-area-inset-bottom,8px);height:${BAR_H}px;z-index:2147483647;display:flex;gap:8px;align-items:center;padding:8px;border-radius:12px;background:rgba(0,0,0,0.55);box-sizing:border-box;}
+    .mf-input{flex:1;height:100%;border-radius:10px;padding:10px 12px;background:rgba(0,0,0,0.66);color:#00FF41;border:1px solid rgba(255,255,255,0.04);outline:none;font-family:monospace;font-size:15px}
+    .mf-btn{min-width:48px;height:calc(100% - 6px);border-radius:8px;background:rgba(0,0,0,0.6);color:#00FF41;border:1px solid rgba(255,255,255,0.04);font-family:monospace}
+    .mf-quick{position:fixed;left:8px;bottom:calc(${BAR_H + 18}px);z-index:2147483646;display:flex;gap:8px;padding:6px;border-radius:10px;background:rgba(0,0,0,0.45);backdrop-filter: blur(2px);}
+    .mf-grid-modal{position:fixed;left:0;right:0;top:0;bottom:0;background:rgba(0,0,0,0.55);display:none;align-items:center;justify-content:center;z-index:2147483645}
+    .mf-grid-panel{width:94%;max-width:520px;height:${GRID_H_PCT}vh;border-radius:12px;background:#030807;overflow:hidden;display:flex;flex-direction:column;padding:8px;box-sizing:border-box;color:#00FF41}
+    .mf-grid-map{flex:1;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden}
+    .mf-scale{position:fixed;right:10px;bottom:calc(${BAR_H + 18}px);display:flex;gap:6px;z-index:2147483646}
+    .mf-history-tip{position:fixed;left:10px;top:10px;background:rgba(0,0,0,0.45);color:#00FF41;padding:6px;border-radius:8px;z-index:2147483648;display:none;font-size:12px}
+  `;
+  const style = document.createElement('style');
+  style.innerText = _css;
+  document.head.appendChild(style);
 
-  // проверка мобильного устройства (для развития/тестирования можно поставить window.FORCE_MOBILE = true)
-  const isMobile = /Mobi|Android|iPhone|iPad|iPod|Phone/i.test(navigator.userAgent) || !!window.FORCE_MOBILE;
-
-  if (!isMobile && !window.FORCE_MOBILE) {
-    console.log('[mobile.js] not mobile (use FORCE_MOBILE=true to force)');
-    // всё равно можно подключить — dev может тестировать
-  }
-
-  // ========== Утилиты ==========
-  function $(sel, ctx=document) { return ctx.querySelector(sel); }
-  function $all(sel, ctx=document) { return Array.from(ctx.querySelectorAll(sel)); }
-  function make(tag, attrs={}, styles={}) {
-    const el = document.createElement(tag);
-    Object.assign(el, attrs);
-    Object.assign(el.style, styles);
-    return el;
-  }
-
-  // Ожидаем, что terminal API появится. Но не блокируем навсегда.
-  function whenTerminalReady(cb, timeout=3000){
+  // wait briefly for terminal to exist (but continue even if not found)
+  function whenReady(cb, delay=40, max=3000){
     const start = Date.now();
     (function poll(){
       if (window.__TerminalCanvas) return cb(window.__TerminalCanvas);
-      if (Date.now() - start > timeout) return cb(null);
-      setTimeout(poll, 60);
+      if (Date.now() - start > max) return cb(window.__TerminalCanvas || null);
+      setTimeout(poll, delay);
     })();
   }
 
-  whenTerminalReady((TC) => {
-
+  whenReady((TC) => {
     const NG = window.__netGrid || null;
     const audioMgr = window.audioManager || window.AudioManager || null;
     const degradation = TC && TC.degradation ? TC.degradation : null;
 
-    // ========== Добавляем стили (изолированно) ==========
-    const style = make('style');
-    style.textContent = `
-      .mob-term-overlay{ position: fixed; left: 8px; right: 8px; bottom: env(safe-area-inset-bottom,8px); height: ${MOBILE_BAR_HEIGHT}px; z-index:2147483647; display:flex; gap:8px; align-items:center; padding:8px; box-sizing:border-box; border-radius:12px; background: rgba(0,0,0,0.55); backdrop-filter: blur(4px); font-family: monospace; }
-      .mob-term-input{ flex:1; height:100%; border-radius:10px; padding:10px 12px; font-size:15px; background: rgba(0,0,0,0.65); color:#00FF41; border:1px solid rgba(255,255,255,0.04); outline:none; -webkit-appearance:none; }
-      .mob-btn{ min-width:44px; height: calc(100% - 6px); border-radius:8px; font-family:monospace; font-size:13px; color:#00FF41; background: rgba(0,0,0,0.65); border:1px solid rgba(255,255,255,0.04); }
-      .mob-quick-row{ position: fixed; left:8px; bottom: calc(${MOBILE_BAR_HEIGHT + 18}px); z-index:2147483646; display:flex; gap:8px; padding:6px; border-radius:10px; background: rgba(0,0,0,0.45); }
-      .mob-yn{ display:flex; gap:6px; align-items:center; }
-      .mob-yn .mob-yn-btn{ min-width:40px; height:36px; border-radius:8px; }
-      .mob-grid-modal{ position:fixed; left:0; right:0; top:0; bottom:0; background: rgba(0,0,0,0.55); display:none; align-items:center; justify-content:center; z-index:2147483645; }
-      .mob-grid-panel{ width:94%; max-width:520px; height: ${GRID_MODAL_HEIGHT_PERC}vh; border-radius:12px; background:#030807; overflow:hidden; display:flex; flex-direction:column; padding:8px; box-sizing:border-box; color:#00FF41; }
-      .mob-grid-map{ flex:1; position:relative; display:flex; align-items:center; justify-content:center; overflow:hidden; }
-      .mob-scale-controls{ position:fixed; right:10px; bottom: calc(${MOBILE_BAR_HEIGHT + 18}px); display:flex; gap:6px; z-index:2147483646; }
-      .mob-history-tip{ position: fixed; left: 10px; top: 10px; background: rgba(0,0,0,0.5); color: #00FF41; font-size: 12px; padding: 6px; border-radius: 8px; z-index: 2147483648; display:none; }
-    `;
-    document.head.appendChild(style);
+    // create UI elements
+    const overlay = document.createElement('div'); overlay.className = 'mf-input-bar';
+    const input = document.createElement('input'); input.type='text'; input.className='mf-input'; input.placeholder='Команда (help)'; input.autocapitalize='none'; input.spellcheck=false;
+    const send = document.createElement('button'); send.className='mf-btn'; send.innerText='→';
+    const netBtn = document.createElement('button'); netBtn.className='mf-btn'; netBtn.innerText='NET';
+    const lite = document.createElement('button'); lite.className='mf-btn'; lite.innerText='LITE';
 
-    // ========== Создаём элементы UI ==========
-    const overlay = make('div', { className: 'mob-term-overlay' });
-    const input = make('input', { className: 'mob-term-input', type:'text', placeholder: 'Команда (help)', autocomplete:'off', autocorrect:'off', spellcheck:false });
-    overlay.appendChild(input);
+    const ynWrapper = document.createElement('div'); ynWrapper.style.display='flex'; ynWrapper.style.gap='6px';
+    const yBtn = document.createElement('button'); yBtn.className='mf-btn'; yBtn.style.minWidth='40px'; yBtn.innerText='Y';
+    const nBtn = document.createElement('button'); nBtn.className='mf-btn'; nBtn.style.minWidth='40px'; nBtn.innerText='N';
+    ynWrapper.appendChild(yBtn); ynWrapper.appendChild(nBtn);
 
-    const sendBtn = make('button', { className:'mob-btn', innerText:'→', title:'Send' });
-    overlay.appendChild(sendBtn);
+    overlay.appendChild(input); overlay.appendChild(send); overlay.appendChild(netBtn); overlay.appendChild(lite); overlay.appendChild(ynWrapper);
+    document.body.appendChild(overlay);
 
-    // quick commands row (above overlay)
-    const quickRow = make('div', { className:'mob-quick-row' });
-    QUICK_COMMANDS.forEach(q => {
-      const b = make('button', { className:'mob-btn', innerText: q.label, title: q.cmd });
-      b.addEventListener('click', ()=> submitCommand(q.cmd));
-      quickRow.appendChild(b);
-    });
-    document.body.appendChild(quickRow);
+    // quick command row
+    const quick = document.createElement('div'); quick.className='mf-quick';
+    QUICK.forEach(k => { const b = document.createElement('button'); b.className='mf-btn'; b.innerText=k; b.onclick=()=> submit(k); quick.appendChild(b); });
+    document.body.appendChild(quick);
 
-    // Y/N small buttons (to the right of input)
-    const ynWrap = make('div', { className:'mob-yn' });
-    const yBtn = make('button', { className:'mob-btn mob-yn-btn', innerText:'Y' });
-    const nBtn = make('button', { className:'mob-btn mob-yn-btn', innerText:'N' });
-    ynWrap.appendChild(yBtn); ynWrap.appendChild(nBtn);
-    overlay.appendChild(ynWrap);
-
-    // scale controls
-    const scaleControls = make('div', { className:'mob-scale-controls' });
-    const zoomIn = make('button', { className:'mob-btn', innerText:'+' });
-    const zoomOut = make('button', { className:'mob-btn', innerText:'-' });
-    const resetZoom = make('button', { className:'mob-btn', innerText:'1x' });
-    scaleControls.appendChild(zoomIn); scaleControls.appendChild(resetZoom); scaleControls.appendChild(zoomOut);
-    document.body.appendChild(scaleControls);
-
-    // grid modal
-    const gridModal = make('div', { className:'mob-grid-modal' });
-    const gridPanel = make('div', { className:'mob-grid-panel' });
-    gridModal.appendChild(gridPanel);
-    const gridHeader = make('div', {}, { fontSize:'12px', marginBottom:'6px' }); gridHeader.innerText = 'NET GRID';
-    gridPanel.appendChild(gridHeader);
-    const gridMap = make('div', { className:'mob-grid-map' });
-    gridPanel.appendChild(gridMap);
-    const gridControls = make('div', {}, { display:'flex', gap:'8px', marginTop:'6px', justifyContent:'center' });
-    const closeGridBtn = make('button', { className:'mob-btn', innerText:'Close' });
-    gridControls.appendChild(closeGridBtn);
-    gridPanel.appendChild(gridControls);
-    document.body.appendChild(gridModal);
+    // scale helpers (kept minimal and visible)
+    const scaleBox = document.createElement('div'); scaleBox.className='mf-scale';
+    const zin = document.createElement('button'); zin.className='mf-btn'; zin.innerText='+'; const zout = document.createElement('button'); zout.className='mf-btn'; zout.innerText='-';
+    scaleBox.appendChild(zin); scaleBox.appendChild(zout); document.body.appendChild(scaleBox);
 
     // history tip
-    const historyTip = make('div', { className:'mob-history-tip' }); historyTip.innerText = 'UP/DOWN — история команд';
-    document.body.appendChild(historyTip);
+    const hTip = document.createElement('div'); hTip.className='mf-history-tip'; hTip.innerText='UP/DOWN — история'; document.body.appendChild(hTip);
 
-    // добавим overlay в DOM (после canvas чтобы быть наверху)
+    // grid modal
+    const gModal = document.createElement('div'); gModal.className='mf-grid-modal';
+    const gPanel = document.createElement('div'); gPanel.className='mf-grid-panel';
+    const gHeader = document.createElement('div'); gHeader.innerText='NET GRID';
+    const gMap = document.createElement('div'); gMap.className='mf-grid-map';
+    const gControls = document.createElement('div'); gControls.style.display='flex'; gControls.style.justifyContent='center'; gControls.style.gap='8px'; gControls.style.marginTop='6px';
+    const gClose = document.createElement('button'); gClose.className='mf-btn'; gClose.innerText='Close';
+    gControls.appendChild(gClose);
+    gPanel.appendChild(gHeader); gPanel.appendChild(gMap); gPanel.appendChild(gControls); gModal.appendChild(gPanel);
+    document.body.appendChild(gModal);
+
+    // ensure terminalCanvas exists and is last in DOM order before overlays
     const termCanvas = document.getElementById('terminalCanvas');
-    document.body.appendChild(overlay); // просто в body, стиль позиционирует
-
-    // ========== State ==========
-    let mobileLite = DEFAULT_MOBILE_LITE;
-    let commandHistory = [];
-    let historyIndex = -1;
-    let currentScale = INITIAL_SCALE;
-    let attachedGridCanvas = null;
-    let originalGridParent = null;
-    let originalGridStyles = null;
-    let degradationElement = null;
-
-    // ========== Полезные функции ==========
-    function dispatchKey(key){
-      const ev = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
-      document.dispatchEvent(ev);
+    if (!termCanvas) {
+      console.warn('[mobile_fixed] terminalCanvas not found in DOM (expected id="terminalCanvas")');
+    } else {
+      // move overlays after canvas to ensure they appear above
+      termCanvas.parentNode.appendChild(overlay);
+      termCanvas.parentNode.appendChild(quick);
+      termCanvas.parentNode.appendChild(scaleBox);
+      termCanvas.parentNode.appendChild(hTip);
+      termCanvas.parentNode.appendChild(gModal);
     }
 
-    function submitCommand(text){
-      const cmd = String(text || '').trim();
-      if (!cmd) return;
-      // Save history
-      if (!commandHistory.length || commandHistory[commandHistory.length-1] !== cmd) {
-        commandHistory.push(cmd);
-        if (commandHistory.length > 200) commandHistory.shift();
-      }
-      historyIndex = commandHistory.length;
-      // Play key sound if available
-      try { if (audioMgr && audioMgr.playSound) audioMgr.playSound('interface','interface_key_press_01.mp3', { volume: 0.5 }); } catch(e){}
-      // Use terminal API if exists
-      if (TC && typeof TC.processCommand === 'function') {
-        try { TC.processCommand(cmd); } catch(e){ console.warn('[mobile.js] TC.processCommand failed', e); }
-      } else {
-        // fallback: set currentLine and dispatch Enter
-        try { window.currentLine = cmd; } catch(e){}
-        dispatchKey('Enter');
-      }
-      input.value = '';
-      input.blur();
-      hideHistoryTipSoon();
+    // state
+    let history = [], hIndex = 0;
+    let currentDPR = window.devicePixelRatio || 1;
+    let gridAttached = null, gridOrigParent = null, gridOrigStyles = null;
+    let mobileLite = true;
+
+    // helper: set canvas buffer to size (DPR-aware)
+    function setCanvasSize(canvas, w, h){
+      if (!canvas) return;
+      const DPR = window.devicePixelRatio || 1;
+      // set drawing buffer
+      canvas.width = Math.max(1, Math.floor(w * DPR));
+      canvas.height = Math.max(1, Math.floor(h * DPR));
+      // set CSS size
+      canvas.style.width = w + 'px';
+      canvas.style.height = h + 'px';
+      // if terminal has resize API, call it (best-effort)
+      try { if (NG && typeof NG.resize === 'function') NG.resize(Math.floor(w), Math.floor(h)); } catch(e){}
+      try { if (TC && typeof TC.onResize === 'function') TC.onResize(Math.floor(w), Math.floor(h)); } catch(e){}
     }
 
-    function showHistoryTip(){
-      historyTip.style.display = 'block';
-      setTimeout(()=> historyTip.style.opacity = '1', 20);
+    // compute available height for terminal canvas: viewport height minus input bar and quickRow margins
+    function availableTerminalHeight(){
+      const vh = window.innerHeight;
+      // reserve space for quick row at bottom (it sits above input)
+      const quickH = quick ? quick.getBoundingClientRect().height + 8 : 0;
+      const bottomReserved = BAR_H + quickH + 28; // extra margin
+      return Math.max(80, vh - bottomReserved);
     }
-    function hideHistoryTipSoon(){ historyTip.style.opacity = '0'; setTimeout(()=> historyTip.style.display='none', 300); }
 
-    // ========== Input behavior ==========
-    sendBtn.addEventListener('click', ()=> submitCommand(input.value));
-    input.addEventListener('keydown', (e)=>{
-      if (e.key === 'Enter'){ e.preventDefault(); submitCommand(input.value); return; }
-      if (e.key === 'ArrowUp'){ e.preventDefault(); if (commandHistory.length){ historyIndex = Math.max(0, historyIndex - 1); input.value = commandHistory[historyIndex] || ''; showHistoryTip(); } return; }
-      if (e.key === 'ArrowDown'){ e.preventDefault(); if (commandHistory.length){ historyIndex = Math.min(commandHistory.length, historyIndex + 1); input.value = commandHistory[historyIndex] || ''; showHistoryTip(); } return; }
-    });
-
-    // focus helpers: when focusing input, ensure terminal canvas won't steal touches
-    input.addEventListener('focus', ()=>{
-      if (termCanvas) {
-        termCanvas.dataset._origPointer = termCanvas.style.pointerEvents || '';
-        termCanvas.style.pointerEvents = 'none';
-      }
-      document.documentElement.style.scrollPaddingBottom = (MOBILE_BAR_HEIGHT + 12) + 'px';
-    });
-    input.addEventListener('blur', ()=>{
-      if (termCanvas) try { termCanvas.style.pointerEvents = termCanvas.dataset._origPointer || ''; } catch(e){}
-      document.documentElement.style.scrollPaddingBottom = '';
-    });
-
-    // Y/N buttons — посылаем keydown как ответ пользователю
-    yBtn.addEventListener('click', ()=> { dispatchKey('y'); dispatchKey('Y'); });
-    nBtn.addEventListener('click', ()=> { dispatchKey('n'); dispatchKey('N'); });
-
-    // ========== Zoom controls ==========
-    function applyScale(scale){
-      currentScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, scale));
-      if (termCanvas) {
-        termCanvas.style.transformOrigin = 'left top';
-        termCanvas.style.transform = `scale(${currentScale})`;
-        // Ensure canvas still covers viewport after scaling (may leave space) — center if needed
-        // If desired, can also adjust canvas width/height attributes but we avoid touching draw buffer.
-      }
+    // resize terminal canvas to available space
+    function resizeTerminalCanvas(){
+      if (!termCanvas) return;
+      const availH = availableTerminalHeight();
+      const width = Math.max(320, Math.min(window.innerWidth, document.documentElement.clientWidth));
+      setCanvasSize(termCanvas, width, availH);
+      // ensure body height is at least viewport -> allow scrolling for small keyboards
+      document.documentElement.style.height = '100%';
+      document.body.style.minHeight = '100vh';
     }
-    zoomIn.addEventListener('click', ()=> applyScale(currentScale + SCALE_STEP));
-    zoomOut.addEventListener('click', ()=> applyScale(currentScale - SCALE_STEP));
-    resetZoom.addEventListener('click', ()=> applyScale(1));
 
-    applyScale(INITIAL_SCALE);
-
-    // ========== GRID modal handling (attach/detach net canvas safely) ==========
+    // attach/detach grid canvas into modal and resize it
     function findNetCanvas(){
-      // try common ids/classes first
+      // try known ids/classes
       let c = document.getElementById('netCanvas') || document.querySelector('canvas.net-grid');
       if (c) return c;
-      // fallback: pick canvas that is not terminalCanvas (first one)
-      const canvases = $all('canvas');
-      for (const v of canvases) {
-        if (v !== termCanvas) return v;
-      }
-      return null;
-    }
-
-    function findDegradationElement(){
-      try { if (degradation && degradation.indicator) return degradation.indicator; } catch(e){}
-      const candidates = ['#degradationIndicator', '.degradation', '.degradation-indicator', '.deg-ind'];
-      for (const s of candidates) {
-        const el = document.querySelector(s);
-        if (el) return el;
-      }
-      // quick fuzzy search
-      const all = Array.from(document.querySelectorAll('div,span'));
-      for (const el of all) {
-        try { if (el.innerText && /degra|degen|deg\\b/i.test(el.innerText)) return el; } catch(e){}
+      // otherwise choose first canvas that isn't terminalCanvas
+      const canvases = Array.from(document.querySelectorAll('canvas'));
+      for (const cv of canvases){
+        if (cv !== termCanvas) return cv;
       }
       return null;
     }
 
     function openGrid(){
-      // hide degradation
-      degradationElement = findDegradationElement();
-      if (degradationElement) { degradationElement.dataset._origDisplay = degradationElement.style.display || ''; degradationElement.style.display = 'none'; }
-
-      gridModal.style.display = 'flex';
-
+      // hide any degradation element (best-effort)
+      try {
+        if (degradation && degradation.indicator) degradation.indicator.style.display = 'none';
+      } catch(e){}
+      gModal.style.display = 'flex';
       const c = findNetCanvas();
       if (!c) return;
-      attachedGridCanvas = c;
-      originalGridParent = c.parentNode;
-      originalGridStyles = {
-        cssText: c.style.cssText || '',
-        width: c.style.width || '',
-        height: c.style.height || '',
-        left: c.style.left || '',
-        top: c.style.top || '',
-        position: c.style.position || '',
-        pointerEvents: c.style.pointerEvents || ''
-      };
-
-      // append canvas to gridMap and resize buffer by DPR
+      gridAttached = c; gridOrigParent = c.parentNode; gridOrigStyles = c.style.cssText || '';
+      // compute panel inner size
+      const rect = gMap.getBoundingClientRect ? gMap.getBoundingClientRect() : gMap.getClientRects()[0] || { width: gMap.clientWidth, height: gMap.clientHeight };
+      // attach and set buffer
       try {
-        const DPR = window.devicePixelRatio || 1;
-        const W = Math.max(16, Math.floor(gridMap.clientWidth));
-        const H = Math.max(16, Math.floor(gridMap.clientHeight));
+        // set to panel inner size (use clientWidth/clientHeight)
+        const W = gMap.clientWidth || rect.width || Math.floor(window.innerWidth * 0.9);
+        const H = gMap.clientHeight || Math.floor(window.innerHeight * (GRID_H_PCT/100)) - 80;
         c.style.position = 'relative';
         c.style.width = '100%';
         c.style.height = '100%';
-        c.style.pointerEvents = 'auto';
         c.style.maxWidth = '100%';
         c.style.maxHeight = '100%';
-        c.width = Math.floor(W * DPR);
-        c.height = Math.floor(H * DPR);
-        gridMap.appendChild(c);
-        // try to signal netGrid to resize if it gives API
-        if (NG && typeof NG.resize === 'function') {
-          try { NG.resize(W, H); } catch(e){ console.warn('[mobile.js] NG.resize failed', e); }
-        } else if (NG && typeof NG.setSize === 'function') {
-          try { NG.setSize(W, H); } catch(e){} 
-        }
-      } catch(e){ console.warn('[mobile.js] attach grid canvas error', e); }
-
-      // disable terminal canvas pointer events so underlying canvas doesn't intercept gestures
-      if (termCanvas) { termCanvas.dataset._origPointer = termCanvas.style.pointerEvents || ''; termCanvas.style.pointerEvents = 'none'; }
+        c.style.pointerEvents = 'auto';
+        setCanvasSize(c, W, H);
+        gMap.appendChild(c);
+      } catch(err){ console.warn('[mobile_fixed] attach grid canvas error', err); }
+      // prevent terminal canvas from intercepting touches while grid open
+      if (termCanvas) { termCanvas.style.pointerEvents = 'none'; }
     }
 
     function closeGrid(){
-      gridModal.style.display = 'none';
-      if (attachedGridCanvas && originalGridParent) {
+      gModal.style.display = 'none';
+      if (gridAttached && gridOrigParent){
         try {
-          attachedGridCanvas.style.cssText = originalGridStyles.cssText || '';
-          attachedGridCanvas.width = attachedGridCanvas.width; // no-op to keep buffer? (keeps it safe)
-          originalGridParent.appendChild(attachedGridCanvas);
-        } catch(e){ console.warn('[mobile.js] restore grid canvas failed', e); }
+          gridAttached.style.cssText = gridOrigStyles || '';
+          gridOrigParent.appendChild(gridAttached);
+        } catch(e){ console.warn('[mobile_fixed] restore grid failed', e); }
       }
-      attachedGridCanvas = null;
-      originalGridParent = null;
-      originalGridStyles = null;
-
-      if (degradationElement) { degradationElement.style.display = degradationElement.dataset._origDisplay || ''; degradationElement = null; }
-      if (termCanvas) try { termCanvas.style.pointerEvents = termCanvas.dataset._origPointer || ''; } catch(e){}
+      gridAttached = null; gridOrigParent = null; gridOrigStyles = null;
+      if (termCanvas) { termCanvas.style.pointerEvents = 'auto'; }
+      // restore degradation indicator if any
+      try { if (degradation && degradation.indicator) degradation.indicator.style.display = ''; } catch(e){}
     }
 
-    // open/close handlers
-    closeGridBtn.addEventListener('click', closeGrid);
+    // touch-pan implementation for canvas: drag vertically to scroll page
+    let panStart = null;
+    function canvasTouchStart(e){
+      if (!e.touches || e.touches.length !== 1) return;
+      panStart = { y: e.touches[0].clientY, tScroll: window.scrollY };
+    }
+    function canvasTouchMove(e){
+      if (!panStart || !e.touches || e.touches.length !== 1) return;
+      const dy = e.touches[0].clientY - panStart.y;
+      // invert dy so finger drag up scrolls down
+      window.scrollTo({ top: Math.max(0, panStart.tScroll - dy) });
+    }
+    function canvasTouchEnd(){ panStart = null; }
 
-    // bind a quick toggle (we add a button to quickRow)
-    const netToggleBtn = make('button', { className:'mob-btn', innerText:'NET' });
-    netToggleBtn.addEventListener('click', ()=> {
-      if (gridModal.style.display === 'flex') closeGrid(); else openGrid();
+    if (termCanvas){
+      termCanvas.addEventListener('touchstart', canvasTouchStart, { passive:true });
+      termCanvas.addEventListener('touchmove', canvasTouchMove, { passive:false }); // preventDefault not used, but allow custom scrolling
+      termCanvas.addEventListener('touchend', canvasTouchEnd, { passive:true });
+    }
+
+    // input behaviors
+    function submit(cmd){
+      if (!cmd) return;
+      // push history
+      if (!history.length || history[history.length-1] !== cmd) history.push(cmd);
+      hIndex = history.length;
+      // attempt to use API
+      try { if (TC && typeof TC.processCommand === 'function') { TC.processCommand(cmd); } else { window.currentLine = cmd; dispatchKey('Enter'); } } catch(e){ console.warn('[mobile_fixed] submit error', e); }
+      input.value = '';
+      input.blur();
+      // after submitting scroll a bit to show latest output
+      setTimeout(()=> window.scrollTo({ top: document.body.scrollHeight }), 150);
+    }
+
+    send.addEventListener('click', ()=> submit(input.value));
+    input.addEventListener('keydown', (e)=>{
+      if (e.key === 'Enter'){ e.preventDefault(); submit(input.value); return; }
+      if (e.key === 'ArrowUp'){ e.preventDefault(); if (history.length){ hIndex = Math.max(0, hIndex - 1); input.value = history[hIndex] || ''; hTip.style.display='block'; setTimeout(()=>hTip.style.display='none', 900); } }
+      if (e.key === 'ArrowDown'){ e.preventDefault(); if (history.length){ hIndex = Math.min(history.length, hIndex + 1); input.value = history[hIndex] || ''; } }
     });
-    quickRow.appendChild(netToggleBtn);
 
-    // touch gestures inside gridMap to move nodes -> dispatch arrow keys
-    let touchStart = null;
-    gridMap.addEventListener('touchstart', (e)=> { if (!attachedGridCanvas) return; const t=e.touches[0]; touchStart={x:t.clientX,y:t.clientY}; }, { passive:true });
-    gridMap.addEventListener('touchmove', (e)=> {
-      if (!attachedGridCanvas || !touchStart) return;
-      const t=e.touches[0]; const dx=t.clientX-touchStart.x; const dy=t.clientY-touchStart.y;
-      const absX=Math.abs(dx), absY=Math.abs(dy);
-      if (Math.max(absX,absY) < 28) return;
-      const key = absX>absY ? (dx>0 ? 'ArrowRight' : 'ArrowLeft') : (dy>0 ? 'ArrowDown' : 'ArrowUp');
-      dispatchKey(key);
-      touchStart={x:t.clientX,y:t.clientY};
-    }, { passive:true });
-    gridMap.addEventListener('touchend', ()=> touchStart=null, { passive:true });
+    // Y/N buttons: dispatch key events (compatible with many terminal confirmations)
+    function dispatchKey(k){ const ev = new KeyboardEvent('keydown', { key:k, bubbles:true }); document.dispatchEvent(ev); }
+    yBtn.addEventListener('click', ()=> { dispatchKey('y'); dispatchKey('Y'); });
+    nBtn.addEventListener('click', ()=> { dispatchKey('n'); dispatchKey('N'); });
 
-    // ========== MobileLite behavior ==========
-    function applyMobileLite(enabled){
-      mobileLite = !!enabled;
+    // NET open/close
+    netBtn.addEventListener('click', ()=> { if (gModal.style.display === 'flex') closeGrid(); else openGrid(); });
+    gClose.addEventListener('click', closeGrid);
+
+    // lite toggle: soft cap degradation + mute bg
+    lite.addEventListener('click', ()=> {
+      mobileLiteToggle();
+      lite.innerText = mobileLite? 'LITE' : 'FULL';
+    });
+    function mobileLiteToggle(){
+      mobileLite = !mobileLite;
       if (!degradation) return;
-      if (mobileLite) {
-        // cap degradation level
-        try { if (degradation.level && degradation.level > 60) { degradation.level = 60; if (degradation.updateIndicator) degradation.updateIndicator(); } } catch(e){}
-        // mute background music softly
-        try { if (audioMgr && audioMgr.setBackgroundMusicVolume) audioMgr.setBackgroundMusicVolume(0); } catch(e){}
-      } else {
-        try { if (audioMgr && audioMgr.setBackgroundMusicVolume) audioMgr.setBackgroundMusicVolume(0.2); } catch(e){}
+      try { if (mobileLite) { if (degradation.level && degradation.level > 60) degradation.level = 60; if (audioMgr && audioMgr.setBackgroundMusicVolume) audioMgr.setBackgroundMusicVolume(0); } else { if (audioMgr && audioMgr.setBackgroundMusicVolume) audioMgr.setBackgroundMusicVolume(0.2); } } catch(e){}
+    }
+    let mobileLite = true;
+
+    // scale controls: instead of CSS transform we do not scale; zoom buttons try to reduce font via terminal API if exists
+    zin.addEventListener('click', ()=> { try { if (TC && typeof TC.setFontScale === 'function') TC.setFontScale( (TC.fontScale || 1) + 0.1 ); else alert('Zoom in unavailable'); } catch(e){ console.warn(e); } });
+    zout.addEventListener('click', ()=> { try { if (TC && typeof TC.setFontScale === 'function') TC.setFontScale( (TC.fontScale || 1) - 0.1 ); else alert('Zoom out unavailable'); } catch(e){ console.warn(e); } });
+
+    // window resize / orientation change handling
+    function handleResize(){
+      resizeTerminalCanvas();
+      // if grid open, resize attached grid canvas to modal size
+      if (gridAttached && gMap) {
+        try {
+          const W = gMap.clientWidth, H = gMap.clientHeight;
+          setCanvasSize(gridAttached, W, H);
+        } catch(e){}
       }
     }
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', ()=> setTimeout(handleResize, 120));
 
-    applyMobileLite(DEFAULT_MOBILE_LITE);
+    // initial layout
+    // small safety: ensure body scroll enabled so user can scroll terminal if needed
+    document.documentElement.style.overflowY = 'auto';
+    document.body.style.overflowY = 'auto';
 
-    // add mobileLite toggle to quickRow
-    const liteBtn = make('button', { className:'mob-btn', innerText: mobileLite ? 'LITE' : 'FULL' });
-    liteBtn.addEventListener('click', ()=> { applyMobileLite(!mobileLite); liteBtn.innerText = mobileLite ? 'FULL' : 'LITE'; });
-    quickRow.appendChild(liteBtn);
+    // run initial sizing a bit delayed to allow fonts/canvas init
+    setTimeout(()=> {
+      handleResize();
+      // scroll to bottom so prompt visible
+      window.scrollTo({ top: document.body.scrollHeight });
+      console.log('[mobile_fixed] initialized');
+      try { if (TC && typeof TC.addColoredText === 'function') TC.addColoredText('Mobile interface ready', '#00FF41'); } catch(e){}
+    }, 160);
 
-    // ========== Accessibility: quick Y/N hotkeys via long press Enter (optional) ==========
-    // Long press send => toggle history tip / helpful actions
-    let sendPressTimer = null;
-    sendBtn.addEventListener('touchstart', ()=> {
-      sendPressTimer = setTimeout(()=> { showHistoryTip(); }, 600);
-    }, { passive:true });
-    sendBtn.addEventListener('touchend', ()=> { clearTimeout(sendPressTimer); }, { passive:true });
-
-    // ========== Expose API for debug/test ==========
-    window.__MobileTerminal = {
-      submit: submitCommand,
-      openGrid,
-      closeGrid,
-      applyMobileLite,
-      setScale: applyScale => applyScale(currentScale) // placeholder
-    };
-
-    // Log ready
-    try { if (TC && typeof TC.addColoredText === 'function') TC.addColoredText('> Mobile UI loaded', '#00FF41'); } catch(e){}
-    console.log('[mobile.js] Mobile UI loaded');
   });
 
 })();
