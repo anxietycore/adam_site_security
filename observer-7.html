@@ -2,189 +2,275 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>OBSERVER-7</title>
-    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Observer-7</title>
     <style>
-        body {
-            background: #000;
+        * {
             margin: 0;
-            overflow: hidden;
-            font-family: 'Press Start 2P', monospace;
+            padding: 0;
+            box-sizing: border-box;
         }
-
-        /* Минимальные VHS-шум и scanlines */
-        .vhs-overlay {
+        
+        body {
+            overflow: hidden;
+            background: #000;
+            font-family: 'Courier New', monospace;
+        }
+        
+        #video-container {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background: linear-gradient(
-                rgba(0, 0, 0, 0.7) 50%,
-                transparent 50%
-            );
-            background-size: 100% 4px;
-            opacity: 0.3;
-            pointer-events: none;
             z-index: 1;
         }
-
-        /* Текст по центру с анимацией появления */
-        .message-container {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
+        
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        /* Эпилептическое предупреждение */
+        #warning-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.98);
+            backdrop-filter: blur(15px);
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: #ff0000;
             text-align: center;
-            z-index: 2;
         }
-
-        .message {
-            color: #00FF41;
-            font-size: 18px;
-            line-height: 2;
-            margin-bottom: 20px;
-            opacity: 0;
-            transform: translateY(20px);
-            animation: fadeInUp 0.5s forwards;
-            text-shadow: 0 0 5px currentColor;
-        }
-
-        @keyframes fadeInUp {
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        /* Финальное сообщение */
-        .final-message {
+        
+        .warning-text {
             font-size: 36px;
-            color: #00FF41;
-            text-shadow: 
-                0 0 10px #00FF41,
-                0 0 20px #00FF41;
-            animation: 
-                pulse 3s infinite,
-                rgbShift 10s infinite;
-            margin-top: 40px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 5px;
+            margin-bottom: 20px;
+            text-shadow: 0 0 15px #ff0000, 0 0 30px #ff0000;
+            animation: pulse 2s infinite;
         }
-
+        
         @keyframes pulse {
             0%, 100% { opacity: 0.9; }
             50% { opacity: 1; }
         }
-
-        @keyframes rgbShift {
-            0% { color: #00FF41; }
-            33% { color: #FF00FF; }
-            66% { color: #4444FF; }
-            100% { color: #00FF41; }
+        
+        .warning-subtext {
+            font-size: 16px;
+            color: #aaa;
+            max-width: 600px;
+            line-height: 1.8;
+            margin-bottom: 50px;
+            letter-spacing: 1px;
         }
-
-        /* Минимальный бинарный дождь на заднике */
-        .binary {
-            position: fixed;
+        
+        .button-container {
+            display: flex;
+            gap: 40px;
+        }
+        
+        .warning-btn {
+            padding: 18px 50px;
+            font-size: 18px;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            background: transparent;
+            border: 3px solid;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .btn-continue {
+            color: #ff0000;
+            border-color: #ff0000;
+            box-shadow: 0 0 15px rgba(255, 0, 0, 0.4);
+        }
+        
+        .btn-continue:hover {
+            background: #ff0000;
+            color: #000;
+            box-shadow: 0 0 25px #ff0000;
+            transform: scale(1.1);
+        }
+        
+        .btn-skip {
+            color: #666;
+            border-color: #666;
+        }
+        
+        .btn-skip:hover {
+            background: #666;
+            color: #000;
+            transform: scale(1.1);
+        }
+        
+        .warning-btn::before {
+            content: '';
+            position: absolute;
             top: 0;
-            left: 0;
+            left: -100%;
             width: 100%;
             height: 100%;
-            opacity: 0.1;
-            pointer-events: none;
-            z-index: 0;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+            transition: left 0.5s;
         }
-
-        .binary span {
-            position: absolute;
-            color: #00FF41;
-            font-size: 10px;
-            animation: fall linear infinite;
-        }
-
-        @keyframes fall {
-            to { transform: translateY(100vh); }
-        }
-
-        /* Скрытый Easter egg */
-        .secret {
-            position: fixed;
-            bottom: 10px;
-            right: 10px;
-            color: #000;
-            font-size: 8px;
-            cursor: default;
-            user-select: none;
-            transition: color 1s;
-        }
-
-        .secret:hover {
-            color: #444;
+        
+        .warning-btn:hover::before {
+            left: 100%;
         }
     </style>
 </head>
 <body>
-
-    <div class="vhs-overlay"></div>
-
-    <div class="binary" id="binary"></div>
-
-    <div class="message-container">
-        <div class="message" style="animation-delay: 1s;">
-            > ПРОТОКОЛ OBSERVER-7 АКТИВИРОВАН
+    <div id="video-container">
+        <video id="main-video" playsinline></video>
+    </div>
+    
+    <div id="warning-overlay">
+        <div class="warning-text">⚠ Эпилептическое предупреждение</div>
+        <div class="warning-subtext">
+            Следующее видео содержит интенсивное мерцание, быстрые смены цветов и яркие вспышки.<br>
+            При наличии фоточувствительной эпилепсии или схожих состояний нажмите "Пропустить".
         </div>
-        <div class="message" style="animation-delay: 2.5s; color: #FFFF00;">
-            > ВСЕ СИСТЕМЫ ПЕРЕВЕДЕНЫ В РЕЖИМ НАБЛЮДЕНИЯ
-        </div>
-        <div class="message" style="animation-delay: 4s; color: #FF4444;">
-            > A.D.A.M. ТЕПЕРЬ ВИДИТ
-        </div>
-        
-        <div class="final-message" style="animation-delay: 6s;">
-            ADAM IS COMING
+        <div class="button-container">
+            <button class="warning-btn btn-continue">Продолжить</button>
+            <button class="warning-btn btn-skip">Пропустить</button>
         </div>
     </div>
 
-    <div class="secret" onclick="this.style.color='#00FF41'">.</div>
-
     <script>
-        // Минимальный бинарный дождь
-        function createBinary() {
-            const binary = document.getElementById('binary');
-            const chars = ['0', '1'];
+        const video = document.getElementById('main-video');
+        const overlay = document.getElementById('warning-overlay');
+        const btnContinue = document.querySelector('.btn-continue');
+        const btnSkip = document.querySelector('.btn-skip');
+        
+        let firstVideoPlayed = false;
+        let audioInitialized = false;
+        let audioContext, glitchBuffer, terminalBuffer, glitchSource, terminalSource, gainNode;
+        
+        const firstVideo = 'videos/OBSERVER-7.mp4';
+        const secondVideo = 'videos/OBSERVER-7-R.mp4';
+        
+        // Инициализация Web Audio API
+        async function initAudio() {
+            if (audioInitialized) return;
             
-            for (let i = 0; i < 40; i++) {
-                const span = document.createElement('span');
-                span.textContent = chars[Math.floor(Math.random() * chars.length)];
-                span.style.left = `${Math.random() * 100}%`;
-                span.style.animationDuration = `${10 + Math.random() * 15}s`;
-                span.style.animationDelay = `${Math.random() * 5}s`;
-                span.style.opacity = Math.random() * 0.3;
-                binary.appendChild(span);
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            gainNode = audioContext.createGain();
+            gainNode.gain.value = 0.7; // Громкость 70%
+            gainNode.connect(audioContext.destination);
+            
+            try {
+                const [glitchData, terminalData] = await Promise.all([
+                    fetch('sounds/ambient/ambient_glitch.mp3').then(r => r.arrayBuffer()),
+                    fetch('sounds/ambient/ambient_terminal.mp3').then(r => r.arrayBuffer())
+                ]);
+                
+                glitchBuffer = await audioContext.decodeAudioData(glitchData);
+                terminalBuffer = await audioContext.decodeAudioData(terminalData);
+                audioInitialized = true;
+            } catch (e) {
+                console.warn('Audio loading failed:', e);
             }
         }
-
-        // Звук
-        function playSound() {
-            try {
-                const audio = new Audio('sounds/adam_wakeup.mp3');
-                audio.volume = 0.6;
-                audio.play();
-            } catch(e) {}
-        }
-
-        // Консольное сообщение
-        console.log('[OBSERVER-7] Monitoring active.');
-        console.log('[OBSERVER-7] All channels secured.');
-        console.log('[OBSERVER-7] Subject observation initiated.');
-
-        // Инициализация
-        window.addEventListener('DOMContentLoaded', () => {
-            createBinary();
-            playSound();
+        
+        // Запуск бесшовного аудио цикла
+        function startAudioLoop() {
+            if (!audioInitialized || !audioContext) return;
             
-            // Авто-возврат через 30 секунд (опционально)
-            // setTimeout(() => window.location.href = 'index.html', 30000);
-        });
+            if (audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+            
+            // Останавливаем предыдущие источники
+            if (glitchSource) {
+                try {
+                    glitchSource.stop();
+                    terminalSource.stop();
+                } catch(e) {}
+            }
+            
+            // Создаём новые источники
+            glitchSource = audioContext.createBufferSource();
+            terminalSource = audioContext.createBufferSource();
+            
+            glitchSource.buffer = glitchBuffer;
+            terminalSource.buffer = terminalBuffer;
+            
+            // Бесшовный цикл
+            glitchSource.loop = true;
+            terminalSource.loop = true;
+            
+            // Подключаем
+            glitchSource.connect(gainNode);
+            terminalSource.connect(gainNode);
+            
+            // Синхронный старт
+            glitchSource.start(0);
+            terminalSource.start(0);
+        }
+        
+        // Остановка аудио
+        function stopAudio() {
+            if (glitchSource) {
+                try {
+                    glitchSource.stop();
+                    terminalSource.stop();
+                } catch(e) {}
+                glitchSource = null;
+                terminalSource = null;
+            }
+        }
+        
+        // Запуск видео последовательности
+        async function startVideoSequence(skipFirst = false) {
+            // Скрываем предупреждение
+            overlay.style.display = 'none';
+            
+            // Инициализируем аудио (первый раз после взаимодействия)
+            if (!audioInitialized) {
+                await initAudio();
+            }
+            
+            if (skipFirst) {
+                // Пропускаем первое видео, запускаем цикл + аудио
+                video.src = secondVideo;
+                video.loop = true;
+                await video.play();
+                startAudioLoop();
+            } else {
+                // Запускаем полную последовательность
+                video.src = firstVideo;
+                await video.play();
+                
+                video.addEventListener('ended', async function onEnded() {
+                    if (!firstVideoPlayed) {
+                        firstVideoPlayed = true;
+                        video.src = secondVideo;
+                        video.loop = true;
+                        await video.play();
+                        startAudioLoop();
+                        video.removeEventListener('ended', onEnded);
+                    }
+                });
+            }
+        }
+        
+        btnContinue.addEventListener('click', () => startVideoSequence(false));
+        btnSkip.addEventListener('click', () => startVideoSequence(true));
     </script>
 </body>
 </html>
