@@ -1,37 +1,107 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>A.D.A.M. MOBILE</title>
-    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="mobile.css">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <title>A.D.A.M. — Mobile</title>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="mobile.css">
 </head>
 <body>
-    <div id="terminal"></div>
-    
-    <div id="statusBar">
-        <div id="degradationDisplay">ДЕГРАДАЦИЯ: 0%</div>
+  <!-- IMPORTANT: terminal container must exist for terminal_canvas.js to mount its canvas -->
+  <div id="terminal" aria-hidden="false"></div>
+
+  <!-- status -->
+  <div id="statusBar" role="status" aria-live="polite">
+    <div id="degradationDisplay">ДЕГРАДАЦИЯ: —</div>
+  </div>
+
+  <!-- side panel -->
+  <nav id="sidePanel" aria-label="Команды">
+    <div class="panel-handle" id="panelHandle">≫</div>
+    <div class="panel-content">
+      <button class="cmd" data-cmd="help">help</button>
+      <button class="cmd" data-cmd="syslog">syslog</button>
+      <button class="cmd" data-cmd="syst">syst</button>
+      <button class="cmd" data-cmd="subj" id="btnSubj">subj</button>
+      <button class="cmd" data-cmd="dscr" data-has-sub="true" id="btnDscr">dscr ▸</button>
+      <button class="cmd" data-cmd="netmode" id="btnNetMode">NET MODE</button>
+      <button class="cmd" data-cmd="net_check">NET CHECK</button>
+      <button class="cmd danger" data-cmd="reset">reset</button>
+      <button class="cmd" data-cmd="clear">clear</button>
+      <div class="spacer"></div>
+      <button class="small-btn" id="openGridPanel">Grid</button>
     </div>
-    
-    <div id="quickCommands">
-        <button class="quick-btn" data-cmd="help">help</button>
-        <button class="quick-btn" data-cmd="syst">syst</button>
-        <button class="quick-btn" data-cmd="subj">subj</button>
-        <button class="quick-btn" data-cmd="clear">clear</button>
-        <button class="quick-btn" data-cmd="reset">reset</button>
+  </nav>
+
+  <!-- dscr submenu (hidden by default) -->
+  <div id="subMenu" class="modal hidden" aria-hidden="true">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div id="subMenuTitle">Выбор</div>
+        <button class="close-x" id="subMenuClose">✕</button>
+      </div>
+      <div id="subMenuItems" class="grid" role="menu"></div>
     </div>
-    
-    <input type="text" id="hiddenInput" autocapitalize="off" autocorrect="off" autocomplete="off">
-    
-    <div id="confirmModal">
-        <div class="modal-text" id="confirmText"></div>
-        <div class="modal-buttons">
-            <button class="modal-btn" id="confirmY">Y</button>
-            <button class="modal-btn" id="confirmN">N</button>
+  </div>
+
+  <!-- grid modal (hidden by default) -->
+  <div id="gridModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-card grid-card" role="dialog" aria-modal="true">
+      <div class="modal-header">
+        <div id="gridTitle">NET GRID — управление</div>
+        <button class="close-x" id="gridClose">✕</button>
+      </div>
+      <div class="grid-body">
+        <div id="mapContainer" class="map-area">
+          <div id="mapPlaceholder">Сеть не найдена</div>
         </div>
+        <div class="controls" aria-hidden="false">
+          <div class="control-row">
+            <button class="ctrl" data-key="Tab">Next</button>
+            <button class="ctrl" data-key="Shift+Tab">Prev</button>
+            <button class="ctrl" data-key="Escape">Exit</button>
+          </div>
+          <div class="control-row pad">
+            <button class="ctrl arrow" data-key="ArrowUp">↑</button>
+          </div>
+          <div class="control-row">
+            <button class="ctrl arrow" data-key="ArrowLeft">←</button>
+            <button class="ctrl lock" data-key=" ">Lock</button>
+            <button class="ctrl arrow" data-key="ArrowRight">→</button>
+          </div>
+          <div class="control-row pad">
+            <button class="ctrl" data-key="ArrowDown">↓</button>
+          </div>
+          <div class="control-row smalls">
+            <button class="ctrl" id="gridCheck" data-cmd="net_check">Check</button>
+            <button class="ctrl danger" id="gridForceReset">Force Reset</button>
+          </div>
+        </div>
+      </div>
     </div>
-    
-    <script src="mobile.js"></script>
+  </div>
+
+  <!-- confirmation modal -->
+  <div id="confirmBox" class="modal hidden" aria-hidden="true">
+    <div class="modal-card small">
+      <div class="modal-header">
+        <div id="confirmTitle">Подтвердите</div>
+        <button class="close-x" id="confirmClose">✕</button>
+      </div>
+      <div class="modal-text" id="confirmText">Подтвердить операцию?</div>
+      <div class="confirm-actions">
+        <button class="confirm-yes" id="confirmY">Y</button>
+        <button class="confirm-no" id="confirmN">N</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCRIPT ORDER IS IMPORTANT: terminal first, audio (if separate), netGrid, then mobile UI -->
+
+  <script src="module_audio.js" defer></script>
+  <script src="netGrid_v3.js" defer></script>
+    <script src="terminal_canvas.js" defer></script>
+  <script src="mobile.js" defer></script>
 </body>
 </html>
