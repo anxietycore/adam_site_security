@@ -36,14 +36,7 @@ const GLITCH_CONFIG = {
   CUTS: ['│', '╫', '┼', '▌', '▐'],
   ALL: null
 };
-window.__adamTerminalState = {
-  get isFrozen() { return isFrozen; },
-  get decryptActive() { return decryptActive; },
-  get traceActive() { return traceActive; },
-  get audioPlaybackActive() { return audioPlaybackActive; },
-  get degradation() { return degradation; },
-  get lines() { return lines; }
-};
+
 GLITCH_CONFIG.ALL = [...GLITCH_CONFIG.BLOCKS, ...GLITCH_CONFIG.GLYPHS, ...GLITCH_CONFIG.CUTS];
 // ---------- Audio Manager ----------
 const audioManager = new AudioManager();
@@ -4600,24 +4593,6 @@ requestAnimationFrame(backgroundTick);
 window.__TerminalCanvas = {
   addOutput, addColoredText, typeText, processCommand, degradation, lines
 };
-// Добавьте эти методы в window.__TerminalCanvas:
-
-// Для мобильного UI нужен доступ к состоянию
-window.__TerminalCanvas.lines = lines;
-window.__TerminalCanvas.isBlocked = () => {
-  return isFrozen || decryptActive || traceActive || audioPlaybackActive || 
-         operationManager?.isBlocked() || false;
-};
-
-// Добавьте метод для безопасного добавления строки ввода
-window.__TerminalCanvas.addInputLine = () => {
-  if (!isFrozen && !decryptActive && !traceActive && !audioPlaybackActive) {
-    addInputLine();
-  }
-};
-
-// Событие готовности (важно!)
-window.__TerminalCanvas.isInitialized = true;
 
 // initial draw
 requestFullRedraw();
