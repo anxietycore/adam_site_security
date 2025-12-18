@@ -9,23 +9,26 @@
 </head>
 <body>
   
-<!-- ✅ МОДАЛЬНОЕ ОКНО ПРЕДУПРЕЖДЕНИЯ -->
-<div id="mobileWarning" class="mobile-warning hidden">
-  <div class="warning-card">
-    <div class="warning-header">⚠️ ВНИМАНИЕ: МОБИЛЬНАЯ ВЕРСИЯ</div>
-    <div class="warning-content">
-      <p>Вы используете мобильную версию, которая имеет упрощенный и урезанный функционал.</p>
-      <p>Вам недоступны некоторые функции, самостоятельный ввод команд, секретные и финальная команда.</p>
-      <p>Настоятельно рекомендуется посещать страницу с ПК или ноутбука.</p>
-      <br>
-      <p>Предупреждение 2: на мобильной версии терминала теряется большая часть геймплея и иммерсивности.</p>
-      <p>Если вы собираетесь продолжить - обязательно нажмите на три точки настройки страницы "⋮" и выберите "Версия для ПК".</p>
-    </div>
-    <div class="warning-buttons">
-      <button id="okContinueBtn" class="warning-btn ok-btn">ПОНЯЛ, ПРОДОЛЖИТЬ</button>
+  <!-- ✅ МОДАЛЬНОЕ ОКНО ПРЕДУПРЕЖДЕНИЯ -->
+  <div id="mobileWarning" class="mobile-warning hidden">
+    <div class="warning-card">
+      <div class="warning-header">⚠️ ВАЖНО!</div>
+      <div class="warning-content">
+        <p>Обнаружено мобильное устройство</p>
+        <p>в режиме "Версия для ПК"</p>
+        <p style="color: #FFFF00; margin-top: 12px;">
+          <strong>ВКЛЮЧИТЕ ВЕРСИЮ ДЛЯ ПК</strong>
+        </p>
+        <p style="font-size: 9px; color: #888;">
+          (в настройках браузера)
+        </p>
+      </div>
+      <div class="warning-buttons">
+        <button id="okContinueBtn" class="warning-btn ok-btn">ПРОДОЛЖИТЬ</button>
+        <button id="desktopVersionBtn" class="warning-btn desktop-btn">ПЕРЕЙТИ НА index.html</button>
+      </div>
     </div>
   </div>
-</div>
 
   <!-- ЕДИНСТВЕННЫЙ контейнер для terminal_canvas -->
   <div id="terminal"></div>
@@ -68,6 +71,26 @@
           </div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Виртуальная клавиатура -->
+  <div id="virtualKeyboard" class="keyboard hidden">
+    <div class="keyboard-row">
+      <button data-key="1">1</button><button data-key="2">2</button><button data-key="3">3</button>
+      <button data-key="4">4</button><button data-key="5">5</button><button data-key="6">6</button>
+      <button data-key="7">7</button><button data-key="8">8</button><button data-key="9">9</button>
+      <button data-key="0">0</button>
+    </div>
+    <div class="keyboard-row">
+      <button data-key="x">X</button><button data-key="a">A</button><button data-key="b">B</button>
+      <button data-key="c">C</button><button data-key="d">D</button><button data-key="e">E</button>
+      <button data-key="f">F</button>
+    </div>
+    <div class="keyboard-row">
+      <button data-key="Backspace" class="wide">⌫</button>
+      <button data-key="Enter" class="wide">ENTER</button>
+      <button data-key="Escape" class="wide">ESC</button>
     </div>
   </div>
 
