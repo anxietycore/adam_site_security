@@ -1,20 +1,18 @@
-/* mobile.css v2.0 — ЧИСТАЯ АДАПТИВНОСТЬ */
+/* mobile.css v3.3 — ПОЛНАЯ АДАПТИВНОСТЬ */
 
-* { box-sizing: border-box; margin: 0; padding: 0; }
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Press Start 2P', monospace; }
 
 html, body {
   height: 100%;
   background: #000;
   color: #00FF41;
-  font-family: 'Press Start 2P', monospace;
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.4;
   -webkit-text-size-adjust: none;
-  touch-action: manipulation; /* Убираем задержку тапа */
-  overflow: hidden; /* Блокируем скролл страницы */
+  touch-action: manipulation;
+  overflow: hidden;
 }
 
-/* Терминал занимает весь экран */
 #terminal {
   position: fixed;
   inset: 0;
@@ -22,13 +20,13 @@ html, body {
   pointer-events: auto;
 }
 
-/* Боковая панель */
+/* БОКОВАЯ ПАНЕЛЬ УВЕЛИЧЕНА ШИРЕ И ОПУЩЕНА */
 #sidePanel {
   position: fixed;
   right: 8px;
-  top: 60px; /* Ниже статус-бара */
+  top: 85px;
   bottom: 8px;
-  width: 90px;
+  width: 160px;
   z-index: 99991;
   display: flex;
   flex-direction: column;
@@ -47,10 +45,10 @@ html, body {
 
 .panel-handle {
   position: absolute;
-  left: -20px;
+  left: -24px;
   top: 12px;
-  width: 20px;
-  height: 44px;
+  width: 24px;
+  height: 48px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -60,7 +58,7 @@ html, body {
   color: #00FF41;
   font-weight: bold;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 16px;
 }
 
 .panel-content {
@@ -71,10 +69,9 @@ html, body {
   flex: 1;
 }
 
-/* Кнопки команд */
 .cmd {
   width: 100%;
-  min-height: 44px; /* Apple/Google стандарт */
+  min-height: 56px;
   padding: 10px 4px;
   background: rgba(0, 0, 0, 0.45);
   color: #00FF41;
@@ -84,6 +81,7 @@ html, body {
   cursor: pointer;
   transition: all 0.1s;
   text-align: center;
+  font-family: 'Press Start 2P', monospace;
 }
 
 .cmd:active {
@@ -100,7 +98,7 @@ html, body {
   flex: 1;
 }
 
-/* Подменю DSCR */
+/* ПОДМЕНЮ С 2 РЯДАМИ */
 .submenu {
   position: absolute;
   right: 100%;
@@ -109,17 +107,17 @@ html, body {
   border: 2px solid rgba(0, 255, 65, 0.15);
   border-radius: 12px;
   padding: 8px;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
-  max-width: 280px;
+  max-width: 640px;
   max-height: 60vh;
   overflow-y: auto;
   z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .submenu-item {
-  min-height: 38px;
+  min-height: 44px;
   padding: 8px 4px;
   background: rgba(0, 0, 0, 0.45);
   color: #00FF41;
@@ -128,9 +126,15 @@ html, body {
   font-size: 9px;
   cursor: pointer;
   text-align: center;
+  font-family: 'Press Start 2P', monospace;
 }
 
-/* Модальное окно сетки */
+/* Кнопка Отмена - центр */
+.submenu-cancel {
+  justify-self: center;
+  max-width: 50%;
+}
+
 .modal {
   position: fixed;
   inset: 0;
@@ -185,7 +189,6 @@ html, body {
   justify-content: center;
 }
 
-/* Тело сетки */
 .grid-body {
   display: flex;
   flex-direction: column;
@@ -203,7 +206,6 @@ html, body {
   justify-content: center;
 }
 
-/* Контролы сетки */
 .grid-controls {
   display: flex;
   flex-direction: column;
@@ -218,8 +220,8 @@ html, body {
 }
 
 .ctrl {
-  min-width: 52px;
-  min-height: 44px;
+  min-width: 60px;
+  min-height: 52px;
   padding: 10px;
   background: rgba(0, 0, 0, 0.5);
   color: #00FF41;
@@ -227,7 +229,7 @@ html, body {
   border-radius: 8px;
   font-size: 11px;
   cursor: pointer;
-  font-family: 'Press Start 2P';
+  font-family: 'Press Start 2P', monospace;
 }
 
 .ctrl:active {
@@ -239,7 +241,10 @@ html, body {
   color: #FF8888;
 }
 
-/* Виртуальная клавиатура */
+.numeric-keypad button {
+  font-family: 'Press Start 2P', monospace;
+}
+
 .keyboard {
   position: fixed;
   bottom: 0;
@@ -266,15 +271,15 @@ html, body {
 }
 
 .keyboard button {
-  min-height: 48px;
-  min-width: 48px;
+  min-height: 56px;
+  min-width: 56px;
   background: rgba(0, 0, 0, 0.6);
   color: #00FF41;
   border: 1px solid rgba(0, 255, 65, 0.15);
   border-radius: 8px;
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
-  font-family: 'Press Start 2P';
+  font-family: 'Press Start 2P', monospace;
 }
 
 .keyboard button.wide {
@@ -286,17 +291,16 @@ html, body {
   background: rgba(0, 255, 65, 0.25);
 }
 
-/* Адаптивность */
 @media (max-width: 420px) {
   #sidePanel {
-    width: 76px;
+    width: 120px;
     right: 6px;
-    top: 50px;
+    top: 55px;
   }
   
   .cmd {
     font-size: 9px;
-    min-height: 40px;
+    min-height: 52px;
   }
   
   .modal-card {
@@ -304,13 +308,22 @@ html, body {
   }
   
   .keyboard button {
-    min-width: 42px;
-    min-height: 44px;
-    font-size: 10px;
+    min-width: 50px;
+    min-height: 52px;
+    font-size: 11px;
   }
 }
 
-/* Скрытие canvas сетки по умолчанию */
 canvas:not(#terminalCanvas) {
   display: none !important;
+}
+
+.selection-panel button,
+.confirmation-panel button,
+.numeric-keypad button,
+.cmd,
+.submenu-item,
+.ctrl,
+.keyboard button {
+  font-family: 'Press Start 2P', monospace !important;
 }
