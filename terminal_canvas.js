@@ -36,7 +36,7 @@ const GLITCH_CONFIG = {
   CUTS: ['│', '╫', '┼', '▌', '▐'],
   ALL: null
 };
-const IS_MOBILE = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
+
 GLITCH_CONFIG.ALL = [...GLITCH_CONFIG.BLOCKS, ...GLITCH_CONFIG.GLYPHS, ...GLITCH_CONFIG.CUTS];
 
 // ---------- Audio Manager ----------
