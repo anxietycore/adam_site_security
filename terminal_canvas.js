@@ -972,7 +972,14 @@ if (this.level >= AUTO_RESET_LEVEL && !isFrozen) {
       this.stopInputInversion();
     }
     
-    
+    // Ambient glitch слой (70%+ деградация)
+if (this.level >= 70 && !this.glitchAmbientActive) {
+  this.glitchAudio = audioManager.playAmbientSeamless('ambient_glitch.mp3', 0.4);
+  this.glitchAmbientActive = true;
+} else if (this.level < 70 && this.glitchAmbientActive) {
+  this.glitchAudio && this.glitchAudio.stop && this.glitchAudio.stop();
+  this.glitchAudio = null; this.glitchAmbientActive = false;
+}
     // Призраки ввода
     if (this.level >= GHOST_INPUT_START_LEVEL && this.level < 95 && !this.ghostActive) {
       this.startGhostInput();
@@ -996,23 +1003,7 @@ if (this.level >= AUTO_RESET_LEVEL && !isFrozen) {
       window.__netGrid.setSystemDegradation(this.level);
     }
 // Ambient glitch слой (70%+ деградация)
-if (this.level >= 70 && !this.glitchAmbientActive) {
-  // ⬇⬇⬇ ВОТ ЭТО ДОБАВЬ ⬇⬇⬇
-  this.glitchAudio = new Audio('sounds/ambient/ambient_glitch.mp3');
-  this.glitchAudio.volume = 0.4;
-  this.glitchAudio.loop = true;
-  this.glitchAudio.play().catch(e => console.warn('Glitch audio play failed:', e));
-  // ⬆⬆⬆ ВОТ ЭТО ДОБАВЬ ⬆⬆⬆
-  this.glitchAmbientActive = true;
-} else if (this.level < 70 && this.glitchAmbientActive) {
-  // ⬇⬇⬇ ВОТ ЭТО ДОБАВЬ ⬇⬇⬇
-  if (this.glitchAudio) {
-    this.glitchAudio.pause();
-    this.glitchAudio = null;
-  }
-  // ⬆⬆⬆ ВОТ ЭТО ДОБАВЬ ⬆⬆⬆
-  this.glitchAmbientActive = false;
-}
+
     // Цветовые классы для CSS
     document.body.classList.remove('degradation-2','degradation-3','degradation-4','degradation-5','degradation-6','degradation-glitch');
     if (this.level >= 30 && this.level < 60) document.body.classList.add('degradation-2');
@@ -1299,15 +1290,13 @@ localStorage.setItem('voiceWhisper03Threshold', this.voiceWhisper03Threshold.toS
   this.stopAutoCommands();
   this.stopPhantomCommands();
   this.stopTextShaking();
-  this.stopFlashText();
   this.stopTextFlashes();
   this.stopAnomalousInserts();
-  this.stopMirrorText();
   this.stopCommandBlocking();
   this.stopPsychologicalBlocking();
   this.stopPhantomDossiers();
   this.stopInputInversion();
-  this.stopIntentionPrediction();
+
   
   this.ghostActive = false;
   this.autoActive = false;
@@ -1394,6 +1383,7 @@ localStorage.setItem('voiceWhisper03Threshold', this.voiceWhisper03Threshold.toS
   }
   
 reset(){
+	
 // Сброс флагов голосов и перегенерация порогов
 this.voiceAdam03Played = false;
 this.glitchAmbientActive = false;
@@ -1419,15 +1409,15 @@ localStorage.setItem('voiceWhisper03Threshold', this.voiceWhisper03Threshold.toS
   this.stopAutoCommands();
   this.stopPhantomCommands();
   this.stopTextShaking();
-  this.stopFlashText();
   this.stopTextFlashes();
   this.stopAnomalousInserts();
-  this.stopMirrorText();
   this.stopCommandBlocking();
   this.stopPsychologicalBlocking();
   this.stopPhantomDossiers();
   this.stopInputInversion();
-  this.stopIntentionPrediction();
+// Гарантированная остановка glitch ambient
+this.glitchAudio && this.glitchAudio.stop && this.glitchAudio.stop();
+this.glitchAudio = null; this.glitchAmbientActive = false;
   
   this.ghostActive = false;
   this.autoActive = false;
@@ -3570,7 +3560,7 @@ const commandWeights = {
     if (commandWeights[command]) degradation.addDegradation(commandWeights[command]);
     
     // Рандомная блокировка команд
-    if (degradation.level >= COMMAND_BLOCK_START_LEVEL && degradation.commandBlockActive && Math.random() < 0.20) {
+    if (degradation.level >= COMMAND_BLOCK_START_LEVEL && degradation.commandBlockActive && Math.random() < 0.15) {
       addColoredText('> ДОСТУП ЗАПРЕЩЁН: УЗЕЛ НАБЛЮДЕНИЯ ЗАНЯТ', '#FF4444');
 	  audioManager.playCommandSound('error');
       setTimeout(addInputLine, 2500);
@@ -3656,7 +3646,7 @@ const commandWeights = {
         await typeText('  RESET          — сброс интерфейса', 'output', 6);
         await typeText('  EXIT           — завершить сессию', 'output', 6);
         await typeText('  CLEAR          — очистить терминал', 'output', 6);
-        await typeText('  NET_MODE        — войти в режим управления сеткой', 'output', 6);
+        await typeText('  NET_MODE       — войти в режим управления сеткой', 'output', 6);
         await typeText('  NET_CHECK      — проверить конфигурацию узлов', 'output', 6);
         await typeText('  DEG            — установить уровень деградации (разработка)', 'output', 6);
         await typeText('------------------------------------', 'output', 6);
@@ -4600,7 +4590,11 @@ window.__TerminalCanvas = {
   degradation,
   lines,
   dossiers: (typeof dossiers !== 'undefined') ? dossiers : null,
-  commandsList: (typeof realCommands !== 'undefined') ? realCommands : null
+  commandsList: (typeof realCommands !== 'undefined') ? realCommands : null,
+  // ✅ ДОБАВЬ ЭТО:
+  isDecryptActive: () => {
+    return typeof decryptActive !== 'undefined' ? decryptActive : false;
+  }
 };
 
 
