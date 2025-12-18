@@ -9,23 +9,25 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     
-    <!-- ✅ ПРОВЕРКА ТЕЛЕФОНА (только user agent) -->
+    <!-- ✅ ПРОВЕРКА ТЕЛЕФОНА (физические признаки) -->
     <script>
-        // Ждём полной загрузки страницы
         document.addEventListener('DOMContentLoaded', function() {
-            // Проверяем user agent
-            if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) {
-                console.log('[A.D.A.M.] Обнаружен телефон, перенаправление...');
+            // Проверяем физические признаки (НЕ user agent)
+            const isMobile = (
+                ('ontouchstart' in window) || 
+                navigator.maxTouchPoints > 0 ||
+                window.innerWidth <= 768
+            );
+            
+            // Если это телефон и НЕТ флага — перенаправляем
+            if (isMobile && localStorage.getItem('adam_force_desktop') !== 'true') {
                 window.location.href = 'mobile.html';
             }
         });
     </script>
 </head>
 <body>
-    <!-- Canvas-рендерер -->
     <script src="index_canvas.js"></script>
-    
-    <!-- WebGL-изгиб -->
     <script src="crt_overlay_index_only.js"></script>
 </body>
 </html>
