@@ -404,3 +404,30 @@ canvas:not(#terminalCanvas) {
   color: #FF8888;
   order: 2;
 }
+
+/* Обновленные стили для предупреждения */
+.warning-content p {
+  color: #00FF41;
+  font-size: 9px;
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+.warning-btn {
+  width: 100%;
+  min-height: 56px;
+  padding: 12px 8px;
+  border: 2px solid rgba(0, 255, 65, 0.3);
+  border-radius: 10px;
+  font-size: 9px;
+  cursor: pointer;
+  font-family: 'Press Start 2P', monospace;
+  transition: all 0.15s;
+  background: rgba(0, 255, 65, 0.1);
+  color: #00FF41;
+}
+
+.warning-btn:active {
+  transform: translateY(2px);
+  background: rgba(0, 255, 65, 0.2);
+}
