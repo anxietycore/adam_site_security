@@ -9,36 +9,23 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     
-    <!-- ✅ ДЕТЕКЦИЯ ФИЗИЧЕСКОГО УСТРОЙСТВА -->
+    <!-- ✅ ПРОВЕРКА ТЕЛЕФОНА (только user agent) -->
     <script>
-        (function() {
-            // Если пользователь выбрал "Версия для ПК" — не перенаправляем
-            if (localStorage.getItem('adam_force_desktop') === 'true') {
-                console.log('[A.D.A.M.] Пользователь выбрал принудительный десктоп режим');
-                return;
-            }
-
-            // Проверка физических признаков мобильного устройства
-            const isMobile = (
-                // 1. Поддержка сенсорного ввода
-                ('ontouchstart' in window) ||
-                navigator.maxTouchPoints > 0 ||
-                // 2. Маленький экран (планшеты тоже считаются)
-                window.innerWidth <= 1024 ||
-                // 3. Ориентация экрана (только у мобильников)
-                (typeof window.orientation !== 'undefined')
-            );
-
-            // Если это телефон — принудительно на mobile.html
-            if (isMobile) {
-                console.log('[A.D.A.M.] Обнаружено мобильное устройство, перенаправление...');
+        // Ждём полной загрузки страницы
+        document.addEventListener('DOMContentLoaded', function() {
+            // Проверяем user agent
+            if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) {
+                console.log('[A.D.A.M.] Обнаружен телефон, перенаправление...');
                 window.location.href = 'mobile.html';
             }
-        })();
+        });
     </script>
 </head>
 <body>
+    <!-- Canvas-рендерер -->
     <script src="index_canvas.js"></script>
+    
+    <!-- WebGL-изгиб -->
     <script src="crt_overlay_index_only.js"></script>
 </body>
 </html>
