@@ -244,57 +244,76 @@
       this.element = null;
     }
 
-    show() {
-      if (this.isOpen) this.hide();
-      
-      this.isOpen = true;
-      
-      this.element = document.createElement('div');
-      this.element.id = 'numericKeypad';
-      this.element.className = 'numeric-keypad';
-      
-      this.element.style.cssText = `
-        position: fixed;
-        bottom: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: rgba(0, 0, 0, 0.95);
-        border: 2px solid rgba(0, 255, 65, 0.2);
-        border-radius: 14px;
-        padding: 12px;
-        z-index: 99998;
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 8px;
-        min-width: 280px;
-        max-width: 90vw;
-      `;
+show() {
+  if (this.isOpen) this.hide();
+  
+  this.isOpen = true;
+  
+  this.element = document.createElement('div');
+  this.element.id = 'numericKeypad';
+  this.element.className = 'numeric-keypad';
+  
+  this.element.style.cssText = `
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.95);
+    border: 2px solid rgba(0, 255, 65, 0.2);
+    border-radius: 14px;
+    padding: 12px;
+    z-index: 99998;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    min-width: 280px;
+    max-width: 90vw;
+  `;
 
-      const mobile = this.mobile;
+  const mobile = this.mobile;
 
-      for (let i = 1; i <= 9; i++) {
-        const btn = this.createButton(i.toString(), () => this.sendKey(i.toString()));
-        this.element.appendChild(btn);
-      }
+  // Ряд 1-3: 1 2 3 4 5 6 7 8 9
+  for (let i = 1; i <= 9; i++) {
+    const btn = this.createButton(i.toString(), () => this.sendKey(i.toString()));
+    this.element.appendChild(btn);
+  }
 
-      const escBtn = this.createButton('ESC', () => {
-  this.hide(); // ✅ СНАЧАЛА закрываем окно
-  setTimeout(() => this.sendKey('Escape'), 100); // ✅ ПОТОМ отправляем событие
-});
-      escBtn.style.color = '#FF4444';
-      escBtn.style.borderColor = 'rgba(255, 80, 80, 0.25)';
-      this.element.appendChild(escBtn);
+  // Ряд 4: 0 ⌫ ⏎
+  const zeroBtn = this.createButton('0', () => this.sendKey('0'));
+  this.element.appendChild(zeroBtn);
 
-      const zeroBtn = this.createButton('0', () => this.sendKey('0'));
-      this.element.appendChild(zeroBtn);
+  const backBtn = this.createButton('⌫', () => this.sendKey('Backspace'));
+  backBtn.style.color = '#FFFF00';
+  backBtn.style.borderColor = 'rgba(255, 255, 0, 0.25)';
+  this.element.appendChild(backBtn);
 
-      const enterBtn = this.createButton('ENTER', () => this.sendKey('Enter'));
-      enterBtn.style.color = '#00FF41';
-      enterBtn.style.borderColor = 'rgba(0, 255, 65, 0.25)';
-      this.element.appendChild(enterBtn);
+  const enterBtn = this.createButton('⏎', () => this.sendKey('Enter'));
+  enterBtn.style.color = '#00FF41';
+  enterBtn.style.borderColor = 'rgba(0, 255, 65, 0.25)';
+  this.element.appendChild(enterBtn);
 
-      document.body.appendChild(this.element);
-    }
+  // Пустой элемент для выравнивания (5-й ряд, первая колонка)
+  const dummy = document.createElement('div');
+  dummy.style.visibility = 'hidden';
+  this.element.appendChild(dummy);
+
+  // Пустой элемент (5-й ряд, вторая колонка)
+  const dummy2 = document.createElement('div');
+  dummy2.style.visibility = 'hidden';
+  this.element.appendChild(dummy2);
+
+  // Ряд 5: ESC на всю ширину
+  const escBtn = this.createButton('ESC', () => {
+    this.hide();
+    setTimeout(() => this.sendKey('Escape'), 50);
+  });
+  escBtn.style.color = '#FF4444';
+  escBtn.style.borderColor = 'rgba(255, 80, 80, 0.25)';
+  escBtn.style.gridColumn = '1 / -1'; // На всю ширину
+  this.element.appendChild(escBtn);
+
+  document.body.appendChild(this.element);
+}
 
     createButton(label, onClick) {
       const btn = document.createElement('button');
@@ -616,31 +635,17 @@ baseCommands.forEach(btn => {
       );
     }
 
-    setupDecryptListener() {
-      setInterval(() => {
-        if (!this.api.terminal || !this.api.terminal.lines) return;
-        
-        const lines = this.api.terminal.lines;
-        const lastLine = lines[lines.length - 1];
-        
-        if (lastLine && lastLine.text && lastLine.text.startsWith('> ВВЕДИТЕ КОД:')) {
-          if (!this.numericKeypad.isOpen) {
-            this.numericKeypad.show();
-          }
-        } else if (this.numericKeypad.isOpen) {
-          let decryptActive = false;
-          for (let i = lines.length - 1; i >= 0; i--) {
-            if (lines[i].text && lines[i].text.includes('[СИСТЕМА: ЗАПУЩЕН ПРОТОКОЛ РАСШИФРОВКИ]')) {
-              decryptActive = true;
-              break;
-            }
-          }
-          if (!decryptActive) {
-            this.numericKeypad.hide();
-          }
-        }
-      }, 200);
+setupDecryptListener() {
+  setInterval(() => {
+    if (window.__TerminalCanvas?.isDecryptActive?.()) {
+      if (!this.numericKeypad.isOpen) {
+        this.numericKeypad.show();
+      }
+    } else if (this.numericKeypad.isOpen) {
+      this.numericKeypad.hide();
     }
+  }, 200);
+}
 
     executeCommand(cmd) {
       if (!this.api.terminal?.processCommand) return;
