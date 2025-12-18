@@ -716,11 +716,11 @@ function showDesktopModeWarning() {
   const okBtn = document.getElementById('okContinueBtn');
   const desktopBtn = document.getElementById('desktopVersionBtn');
   
-  // Проверка: включена ли "Версия для ПК" в браузере
+  // Проверка user agent: если НЕ содержит "Mobile" -> значит включена "Версия для ПК"
   const isDesktopMode = !/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
   
-  // Показываем окно, если на телефоне и desktop mode ВЫКЛЮЧЕН
-  if (!isDesktopMode) {
+  // Показываем окно только если на телефоне и desktop mode ВКЛЮЧЕН
+  if (isDesktopMode) {
     warningEl.classList.remove('hidden');
     
     // Кнопка ПРОДОЛЖИТЬ — закрывает окно
@@ -728,22 +728,20 @@ function showDesktopModeWarning() {
       warningEl.classList.add('hidden');
     };
     
-    // Кнопка ВЕРСИЯ ДЛЯ ПК — перенаправляет (без флагов!)
-    // Это значит: если юзер нажал эту кнопку, он пойдёт на index.html
-    // index.html опять его перенаправит на mobile.html, потому что проверка по user agent
+    // Кнопка ВЕРСИЯ ДЛЯ ПК — устанавливает флаг и переходит
     desktopBtn.onclick = () => {
+      localStorage.setItem('adam_force_desktop', 'true');
       window.location.href = 'index.html';
     };
   } else {
-    // Desktop mode включен — окно не показываем
+    // desktop mode выключен — окно не показываем
     warningEl.classList.add('hidden');
   }
 }
 
-// ЗАМЕНИТЕ весь блок document.addEventListener в конце mobile.js на:
+// ЗАМЕНИТЕ document.addEventListener в конце mobile.js:
 document.addEventListener('DOMContentLoaded', () => {
   const mobile = new MobileTerminal();
-  mobile.start();
   window.__MobileTerminal = mobile;
   
   // Показываем предупреждение после загрузки
