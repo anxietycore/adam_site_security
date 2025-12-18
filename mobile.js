@@ -710,41 +710,47 @@ setupDecryptListener() {
     mobile.start();
     window.__MobileTerminal = mobile;
   });
-// ✅ ПОКАЗ МОДАЛЬНОГО ОКНА ПРЕДУПРЕЖДЕНИЯ
-function showDesktopModeWarning() {
-  const warningEl = document.getElementById('mobileWarning');
-  const okBtn = document.getElementById('okContinueBtn');
-  const desktopBtn = document.getElementById('desktopVersionBtn');
-  
-  // Проверка user agent: если НЕ содержит "Mobile" -> значит включена "Версия для ПК"
-  const isDesktopMode = !/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-  
-  // Показываем окно только если на телефоне и desktop mode ВКЛЮЧЕН
-  if (isDesktopMode) {
-    warningEl.classList.remove('hidden');
-    
-    // Кнопка ПРОДОЛЖИТЬ — закрывает окно
-    okBtn.onclick = () => {
-      warningEl.classList.add('hidden');
-    };
-    
-    // Кнопка ВЕРСИЯ ДЛЯ ПК — устанавливает флаг и переходит
-    desktopBtn.onclick = () => {
-      localStorage.setItem('adam_force_desktop', 'true');
-      window.location.href = 'index.html';
-    };
-  } else {
-    // desktop mode выключен — окно не показываем
-    warningEl.classList.add('hidden');
+// ✅ ЛОГИКА ДВУХ ОКОН ПРЕДУПРЕЖДЕНИЙ
+function showMobileWarnings() {
+  // Проверяем, показывали ли уже в этой сессии
+  if (sessionStorage.getItem('adam_warnings_shown') === 'true') {
+    return; // Не показывать повторно
   }
+
+  const warning1 = document.getElementById('mobileWarning1');
+  const warning2 = document.getElementById('mobileWarning2');
+  const okBtn1 = document.getElementById('okBtn1');
+  const okBtn2 = document.getElementById('okBtn2');
+
+  // Показываем первое окно
+  warning1.classList.remove('hidden');
+
+  okBtn1.onclick = () => {
+    warning1.classList.add('hidden');
+    
+    // Показываем второе окно
+    setTimeout(() => {
+      warning2.classList.remove('hidden');
+    }, 100);
+  };
+
+  okBtn2.onclick = () => {
+    warning2.classList.add('hidden');
+    
+    // Запоминаем, что показали в этой сессии
+    sessionStorage.setItem('adam_warnings_shown', 'true');
+    
+    // Запускаем терминал
+    window.__MobileTerminal.start();
+  };
 }
 
-// ЗАМЕНИТЕ document.addEventListener в конце mobile.js:
+// ЗАМЕНЯЕМ конец mobile.js на:
 document.addEventListener('DOMContentLoaded', () => {
   const mobile = new MobileTerminal();
   window.__MobileTerminal = mobile;
   
-  // Показываем предупреждение после загрузки
-  setTimeout(showDesktopModeWarning, 500);
+  // Показываем предупреждения
+  setTimeout(showMobileWarnings, 300);
 });
 })();
