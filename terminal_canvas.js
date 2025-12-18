@@ -3755,33 +3755,19 @@ const commandWeights = {
     operationManager.end('note');
   }
   break;
-case 'subj':
-  audioManager.playCommandSound('info');
-  await typeText('[СПИСОК СУБЪЕКТОВ — ПРОЕКТ A.D.A.M.]', 'output', 12);
-  addColoredText('------------------------------------', '#00FF41');
-  
-  for (const k of Object.keys(dossiers)) {
-    const d = dossiers[k];
-    const color = d.status && d.status.includes('МЁРТВ') ? '#FF4444' : 
-                  d.status === 'АНОМАЛИЯ' ? '#FF00FF' : 
-                  d.status === 'АКТИВЕН' ? '#00FF41' : '#FFFF00';
-    
-    // Первая строка: ID и имя
-    const line1 = `${k.toLowerCase()} | ${d.name}`;
-    addColoredText(line1, color);
-    
-    // Вторая строка: отступ + статус и миссии
-    const missions = d.missions || 'НЕТ МИССИЙ';
-    const line2 = `       СТАТУС: ${d.status} | МИССИИ: ${missions}`;
-    addColoredText(line2, color);
-    
-    // Пустая строка для разделения (опционально)
-    addColoredText('', color);
-  }
-  
-  addColoredText('------------------------------------', '#00FF41');
-  await typeText('Для просмотра досье — DSCR <ID>', 'output', 18);
-  break;
+      case 'subj':
+	  audioManager.playCommandSound('info');
+        await typeText('[СПИСОК СУБЪЕКТОВ — ПРОЕКТ A.D.A.M. / ПРОТОКОЛ VIGIL-9]', 'output', 12);
+        addColoredText('--------------------------------------------------------', '#00FF41');
+        for (const k of Object.keys(dossiers)) {
+          const d = dossiers[k];
+          const color = d.status && d.status.includes('МЁРТВ') ? '#FF4444' : d.status === 'АНОМАЛИЯ' ? '#FF00FF' : d.status === 'АКТИВЕН' ? '#00FF41' : '#FFFF00';
+          const line = `${k.toLowerCase()} | ${d.name.padEnd(20)} | СТАТУС: ${d.status.padEnd(20)} | МИССИЯ: ${d.missions || ''}`;
+          addColoredText(line, color);
+        }
+        addColoredText('--------------------------------------------------------', '#00FF41');
+        await typeText('ИНСТРУКЦИЯ: Для просмотра досье — DSCR <ID>', 'output', 18);
+        break;
       case 'dscr':
         if (args.length === 0) {
 			audioManager.playCommandSound('error');
