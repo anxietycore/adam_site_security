@@ -705,52 +705,47 @@ setupDecryptListener() {
     }
   }
 
-  document.addEventListener('DOMContentLoaded', () => {
-    const mobile = new MobileTerminal();
-    mobile.start();
-    window.__MobileTerminal = mobile;
-  });
-// ✅ ЛОГИКА ДВУХ ОКОН ПРЕДУПРЕЖДЕНИЙ
+  // ✅ ЛОГИКА ДВУХ ОКОН ПРЕДУПРЕЖДЕНИЙ (всегда показываются)
 function showMobileWarnings() {
-  // Проверяем, показывали ли уже в этой сессии
-  if (sessionStorage.getItem('adam_warnings_shown') === 'true') {
-    return; // Не показывать повторно
-  }
-
   const warning1 = document.getElementById('mobileWarning1');
   const warning2 = document.getElementById('mobileWarning2');
   const okBtn1 = document.getElementById('okBtn1');
   const okBtn2 = document.getElementById('okBtn2');
+  
+  const terminal = document.getElementById('terminal');
+  const sidePanel = document.getElementById('sidePanel');
 
   // Показываем первое окно
   warning1.classList.remove('hidden');
 
+  // Кнопка "ДАЛЕЕ"
   okBtn1.onclick = () => {
     warning1.classList.add('hidden');
-    
-    // Показываем второе окно
+    // Показываем второе окно через 100мс для плавности
     setTimeout(() => {
       warning2.classList.remove('hidden');
     }, 100);
   };
 
+  // Кнопка "ПРИНЯТЬ И ПРОДОЛЖИТЬ"
   okBtn2.onclick = () => {
     warning2.classList.add('hidden');
     
-    // Запоминаем, что показали в этой сессии
-    sessionStorage.setItem('adam_warnings_shown', 'true');
+    // Делаем терминал и панель видимыми
+    terminal.style.opacity = '1';
+    sidePanel.style.opacity = '1';
     
     // Запускаем терминал
     window.__MobileTerminal.start();
   };
 }
 
-// ЗАМЕНЯЕМ конец mobile.js на:
+// ГЛАВНАЯ ЗАГРУЗКА
 document.addEventListener('DOMContentLoaded', () => {
   const mobile = new MobileTerminal();
   window.__MobileTerminal = mobile;
   
-  // Показываем предупреждения
-  setTimeout(showMobileWarnings, 300);
+  // Запускаем предупреждения через 200мс
+  setTimeout(showMobileWarnings, 200);
 });
 })();
