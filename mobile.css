@@ -327,7 +327,7 @@ canvas:not(#terminalCanvas) {
 .keyboard button {
   font-family: 'Press Start 2P', monospace !important;
 }
-/* МОДАЛЬНОЕ ОКНО ПРЕДУПРЕЖДЕНИЯ */
+/* ✅ МОДАЛЬНОЕ ОКНО ПРЕДУПРЕЖДЕНИЯ */
 .mobile-warning {
   position: fixed;
   inset: 0;
