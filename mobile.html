@@ -9,7 +9,7 @@
 </head>
 <body>
   
-  <!-- ✅ ПЕРВОЕ ПРЕДУПРЕЖДЕНИЕ -->
+  <!-- ✅ ПЕРВОЕ ПРЕДУПРЕЖДЕНИЕ (всегда показывается) -->
   <div id="mobileWarning1" class="mobile-warning">
     <div class="warning-card">
       <div class="warning-header">⚠️ ВНИМАНИЕ!</div>
@@ -30,7 +30,7 @@
     </div>
   </div>
 
-  <!-- ✅ ВТОРОЕ ПРЕДУПРЕЖДЕНИЕ -->
+  <!-- ✅ ВТОРОЕ ПРЕДУПРЕЖДЕНИЕ (скрыто изначально) -->
   <div id="mobileWarning2" class="mobile-warning hidden">
     <div class="warning-card">
       <div class="warning-header">⚠️ ПРЕДУПРЕЖДЕНИЕ!</div>
@@ -51,16 +51,14 @@
     </div>
   </div>
 
-  <!-- ✅ ТЕРМИНАЛ (скрыт, пока не нажмут ОК) -->
+  <!-- ✅ ТЕРМИНАЛ (скрытый пока) -->
   <div id="terminal" style="opacity: 0;"></div>
-
-  <!-- Боковая панель команд -->
   <nav id="sidePanel" aria-label="Команды" style="opacity: 0;">
     <div class="panel-handle" id="panelHandle">≫</div>
     <div class="panel-content" id="panelContent"></div>
   </nav>
 
-  <!-- Модальное окно сетки -->
+  <!-- Остальное содержимое... -->
   <div id="gridModal" class="modal hidden">
     <div class="modal-card grid-card">
       <div class="modal-header">
@@ -95,10 +93,9 @@
     </div>
   </div>
 
-  <!-- Виртуальная клавиатура -->
   <div id="virtualKeyboard" class="keyboard hidden">
     <div class="keyboard-row">
-      <button data-key="1">1</button><button data-key="2">2</button><button data-key="3">button>
+      <button data-key="1">1</button><button data-key="2">2</button><button data-key="3">3</button>
       <button data-key="4">4</button><button data-key="5">5</button><button data-key="6">6</button>
       <button data-key="7">7</button><button data-key="8">8</button><button data-key="9">9</button>
       <button data-key="0">0</button>
@@ -115,7 +112,6 @@
     </div>
   </div>
 
-  <!-- Скрипты (загрузятся, но терминал будет скрыт) -->
   <script src="module_audio.js" defer></script>
   <script src="netGrid_v3.js" defer></script>
   <script src="terminal_canvas.js" defer></script>
