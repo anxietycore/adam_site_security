@@ -1,22 +1,37 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>A.D.A.M. — Mobile</title>
-  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="mobile.css">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+    <title>A.D.A.M. — Mobile</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="mobile.css">
 </head>
 <body>
+  
+  <!-- ✅ МОДАЛЬНОЕ ОКНО ПРЕДУПРЕЖДЕНИЯ -->
+  <div id="mobileWarning" class="mobile-warning hidden">
+    <div class="warning-card">
+      <div class="warning-header">⚠️ ВЕРСИЯ ДЛЯ ПК НЕ АКТИВНА</div>
+      <div class="warning-content">
+        <p>Для корректного отображения</p>
+        <p><strong>обязательно включите</strong></p>
+        <p>"Версию для ПК" в браузере</p>
+      </div>
+      <div class="warning-buttons">
+        <button id="okContinueBtn" class="warning-btn ok-btn">ПРОДОЛЖИТЬ</button>
+        <button id="desktopVersionBtn" class="warning-btn desktop-btn">ВЕРСИЯ ДЛЯ ПК</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ЕДИНСТВЕННЫЙ контейнер для terminal_canvas -->
   <div id="terminal"></div>
 
   <!-- Боковая панель команд -->
   <nav id="sidePanel" aria-label="Команды">
     <div class="panel-handle" id="panelHandle">≫</div>
-    <div class="panel-content" id="panelContent">
-      <!-- Кнопки генерируются автоматически -->
-    </div>
+    <div class="panel-content" id="panelContent"></div>
   </nav>
 
   <!-- Модальное окно сетки -->
@@ -74,7 +89,7 @@
     </div>
   </div>
 
-  <!-- Скрипты: сначала terminal, потом mobile -->
+  <!-- Скрипты -->
   <script src="module_audio.js" defer></script>
   <script src="netGrid_v3.js" defer></script>
   <script src="terminal_canvas.js" defer></script>
