@@ -9,46 +9,23 @@
 </head>
 <body>
   
-  <!-- ✅ ПЕРВОЕ ПРЕДУПРЕЖДЕНИЕ -->
-  <div id="mobileWarningStep1" class="mobile-warning hidden">
-    <div class="warning-card">
-      <div class="warning-header">⚠️ ВНИМАНИЕ: МОБИЛЬНАЯ ВЕРСИЯ</div>
-      <div class="warning-content">
-        <p>ВЫ ИСПОЛЬЗУЕТЕ МОБИЛЬНУЮ ВЕРСИЮ,</p>
-        <p>КОТОРАЯ ИМЕЕТ УПРОЩЕННЫЙ И УРЕЗАННЫЙ</p>
-        <p>ФУНКЦИОНАЛ.</p>
-        <p style="margin-top: 15px; color: #FFFF00;">ВАМ НЕДОСТУПНЫ:</p>
-        <p>- САМОСТОЯТЕЛЬНЫЙ ВВОД КОМАНД</p>
-        <p>- СЕКРЕТНЫЕ КОМАНДЫ</p>
-        <p>- ФИНАЛЬНАЯ КОМАНДА</p>
-        <p style="margin-top: 15px; color: #00FF41;">НАСТОЯТЕЛЬНО РЕКОМЕНДУЕТСЯ</p>
-        <p>ПОСЕЩАТЬ СТРАНИЦУ С ПК ИЛИ НОУТБУКА.</p>
-      </div>
-      <div class="warning-buttons">
-        <button id="continueToStep2Btn" class="warning-btn ok-btn">ПРОДОЛЖИТЬ</button>
-      </div>
+<!-- ✅ МОДАЛЬНОЕ ОКНО ПРЕДУПРЕЖДЕНИЯ -->
+<div id="mobileWarning" class="mobile-warning hidden">
+  <div class="warning-card">
+    <div class="warning-header">⚠️ ВНИМАНИЕ: МОБИЛЬНАЯ ВЕРСИЯ</div>
+    <div class="warning-content">
+      <p>Вы используете мобильную версию, которая имеет упрощенный и урезанный функционал.</p>
+      <p>Вам недоступны некоторые функции, самостоятельный ввод команд, секретные и финальная команда.</p>
+      <p>Настоятельно рекомендуется посещать страницу с ПК или ноутбука.</p>
+      <br>
+      <p>Предупреждение 2: на мобильной версии терминала теряется большая часть геймплея и иммерсивности.</p>
+      <p>Если вы собираетесь продолжить - обязательно нажмите на три точки настройки страницы "⋮" и выберите "Версия для ПК".</p>
+    </div>
+    <div class="warning-buttons">
+      <button id="okContinueBtn" class="warning-btn ok-btn">ПОНЯЛ, ПРОДОЛЖИТЬ</button>
     </div>
   </div>
-
-  <!-- ✅ ВТОРОЕ ПРЕДУПРЕЖДЕНИЕ -->
-  <div id="mobileWarningStep2" class="mobile-warning hidden">
-    <div class="warning-card">
-      <div class="warning-header">⚠️ ПРЕДУПРЕЖДЕНИЕ 2</div>
-      <div class="warning-content">
-        <p>НА МОБИЛЬНОЙ ВЕРСИИ ТЕРМИНАЛА</p>
-        <p>ТЕРЯЕТСЯ БОЛЬШАЯ ЧАСТЬ</p>
-        <p>ГЕЙМПЛЕЯ И ИММЕРСИВНОСТИ.</p>
-        <p style="margin-top: 15px; color: #FFFF00;">ЕСЛИ ВЫ СОБИРАЕТЕСЬ ПРОДОЛЖИТЬ:</p>
-        <p>1. НАЖМИТЕ НА ТРИ ТОЧКИ В БРАУЗЕРЕ "⋮"</p>
-        <p>2. ВЫБЕРИТЕ "НАСТРОЙКИ СТРАНИЦЫ"</p>
-        <p>3. ВКЛЮЧИТЕ "ВЕРСИЯ ДЛЯ ПК"</p>
-      </div>
-      <div class="warning-buttons">
-        <button id="okContinueBtn" class="warning-btn ok-btn">ОК</button>
-        <button id="desktopVersionBtn" class="warning-btn desktop-btn">ПЕРЕКЛЮЧИТЬ В ВЕРСИЮ ДЛЯ ПК</button>
-      </div>
-    </div>
-  </div>
+</div>
 
   <!-- ЕДИНСТВЕННЫЙ контейнер для terminal_canvas -->
   <div id="terminal"></div>
