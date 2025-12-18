@@ -2,17 +2,28 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>A.D.A.M. // ТЕРМИНАЛ</title>
     <link rel="stylesheet" href="style.css">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
-<meta http-equiv="Expires" content="0">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    
+    <!-- ✅ ПРИНУДИТЕЛЬНЫЙ РЕДИРЕКТ ТЕЛЕФОНОВ -->
+    <script>
+        (function() {
+            // Если это телефон — всегда на mobile.html
+            if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) {
+                window.location.href = 'mobile.html';
+            }
+        })();
+    </script>
 </head>
 <body>
-    <!-- Canvas-рендерер (рисует UI + шум + всё остальное) -->
+    <!-- Canvas-рендерер -->
     <script src="index_canvas.js"></script>
     
-    <!-- WebGL-изгиб поверх canvas -->
+    <!-- WebGL-изгиб -->
     <script src="crt_overlay_index_only.js"></script>
 </body>
 </html>
