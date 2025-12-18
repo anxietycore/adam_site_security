@@ -327,7 +327,7 @@ canvas:not(#terminalCanvas) {
 .keyboard button {
   font-family: 'Press Start 2P', monospace !important;
 }
-/* ✅ МОДАЛЬНОЕ ОКНО ПРЕДУПРЕЖДЕНИЯ */
+/* ✅ МОДАЛЬНЫЕ ОКНА */
 .mobile-warning {
   position: fixed;
   inset: 0;
@@ -370,9 +370,6 @@ canvas:not(#terminalCanvas) {
 
 .warning-buttons {
   margin-top: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
 }
 
 .warning-btn {
@@ -395,12 +392,4 @@ canvas:not(#terminalCanvas) {
   background: rgba(0, 255, 65, 0.15);
   border-color: rgba(0, 255, 65, 0.3);
   color: #00FF41;
-  order: 1;
-}
-
-.desktop-btn {
-  background: rgba(255, 80, 80, 0.1);
-  border-color: rgba(255, 80, 80, 0.25);
-  color: #FF8888;
-  order: 2;
 }
