@@ -972,14 +972,7 @@ if (this.level >= AUTO_RESET_LEVEL && !isFrozen) {
       this.stopInputInversion();
     }
     
-    // Ambient glitch слой (70%+ деградация)
-if (this.level >= 70 && !this.glitchAmbientActive) {
-  this.glitchAudio = audioManager.playAmbientSeamless('ambient_glitch.mp3', 0.4);
-  this.glitchAmbientActive = true;
-} else if (this.level < 70 && this.glitchAmbientActive) {
-  this.glitchAudio && this.glitchAudio.stop && this.glitchAudio.stop();
-  this.glitchAudio = null; this.glitchAmbientActive = false;
-}
+    
     // Призраки ввода
     if (this.level >= GHOST_INPUT_START_LEVEL && this.level < 95 && !this.ghostActive) {
       this.startGhostInput();
@@ -1003,7 +996,23 @@ if (this.level >= 70 && !this.glitchAmbientActive) {
       window.__netGrid.setSystemDegradation(this.level);
     }
 // Ambient glitch слой (70%+ деградация)
-
+if (this.level >= 70 && !this.glitchAmbientActive) {
+  // ⬇⬇⬇ ВОТ ЭТО ДОБАВЬ ⬇⬇⬇
+  this.glitchAudio = new Audio('sounds/ambient/ambient_glitch.mp3');
+  this.glitchAudio.volume = 0.4;
+  this.glitchAudio.loop = true;
+  this.glitchAudio.play().catch(e => console.warn('Glitch audio play failed:', e));
+  // ⬆⬆⬆ ВОТ ЭТО ДОБАВЬ ⬆⬆⬆
+  this.glitchAmbientActive = true;
+} else if (this.level < 70 && this.glitchAmbientActive) {
+  // ⬇⬇⬇ ВОТ ЭТО ДОБАВЬ ⬇⬇⬇
+  if (this.glitchAudio) {
+    this.glitchAudio.pause();
+    this.glitchAudio = null;
+  }
+  // ⬆⬆⬆ ВОТ ЭТО ДОБАВЬ ⬆⬆⬆
+  this.glitchAmbientActive = false;
+}
     // Цветовые классы для CSS
     document.body.classList.remove('degradation-2','degradation-3','degradation-4','degradation-5','degradation-6','degradation-glitch');
     if (this.level >= 30 && this.level < 60) document.body.classList.add('degradation-2');
@@ -1415,9 +1424,7 @@ localStorage.setItem('voiceWhisper03Threshold', this.voiceWhisper03Threshold.toS
   this.stopPsychologicalBlocking();
   this.stopPhantomDossiers();
   this.stopInputInversion();
-// Гарантированная остановка glitch ambient
-this.glitchAudio && this.glitchAudio.stop && this.glitchAudio.stop();
-this.glitchAudio = null; this.glitchAmbientActive = false;
+
   
   this.ghostActive = false;
   this.autoActive = false;
