@@ -714,37 +714,21 @@ setupDecryptListener() {
 function showDesktopModeWarning() {
   const warningEl = document.getElementById('mobileWarning');
   const okBtn = document.getElementById('okContinueBtn');
-  const desktopBtn = document.getElementById('desktopVersionBtn');
   
-  // Проверка user agent: если НЕ содержит "Mobile" -> значит включена "Версия для ПК"
-  const isDesktopMode = !/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+  // Проверяем, является ли устройство мобильным
+  const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
   
-  // Показываем окно только если на телефоне и desktop mode ВКЛЮЧЕН
-  if (isDesktopMode) {
+  // Показываем окно ВСЕГДА для телефонов (даже с desktop mode)
+  if (isMobile) {
     warningEl.classList.remove('hidden');
     
     // Кнопка ПРОДОЛЖИТЬ — закрывает окно
     okBtn.onclick = () => {
       warningEl.classList.add('hidden');
     };
-    
-    // Кнопка ВЕРСИЯ ДЛЯ ПК — устанавливает флаг и переходит
-    desktopBtn.onclick = () => {
-      localStorage.setItem('adam_force_desktop', 'true');
-      window.location.href = 'index.html';
-    };
   } else {
-    // desktop mode выключен — окно не показываем
+    // Не мобильное устройство — окно не показываем
     warningEl.classList.add('hidden');
   }
 }
-
-// ЗАМЕНИТЕ document.addEventListener в конце mobile.js:
-document.addEventListener('DOMContentLoaded', () => {
-  const mobile = new MobileTerminal();
-  window.__MobileTerminal = mobile;
-  
-  // Показываем предупреждение после загрузки
-  setTimeout(showDesktopModeWarning, 500);
-});
 })();
