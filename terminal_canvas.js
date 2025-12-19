@@ -3886,7 +3886,7 @@ case 'net_mode':
         }
         break;
       // ════════════════════════════════════════════════════════════════════
-case 'deg':
+case 'deg_test_command_count':
   if (args.length === 0) {
     addColoredText(`Текущий уровень деградации: ${degradation.level}%`, '#00FF41');
     await typeText('Использование: deg <уровень 0-100>', 'output', 12);
