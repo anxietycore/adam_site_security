@@ -1,358 +1,50 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang=ru>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>Observer-7</title>
-    <!-- Google tag (gtag.js) -->
+<meta charset=UTF-8>
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self' 'unsafe-inline' 'unsafe-eval';
+  style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+  font-src 'self' https://fonts.gstatic.com;
+  img-src 'self' data:;
+  media-src 'self';
+  object-src 'none';
+  base-uri 'self';
+  form-action 'none';
+  frame-ancestors 'none';
+">
+<meta name=viewport content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+<meta name=apple-mobile-web-app-capable content=yes>
+<meta name=apple-mobile-web-app-status-bar-style content=black-translucent>
+<title>Observer-7</title>
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-M30NK9KWVH"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-  gtag('config', 'G-M30NK9KWVH');
-</script>
-    <link rel="icon" href="favicon.ico" type="image/x-icon">
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            -webkit-tap-highlight-color: transparent;
-        }
-        
-        body {
-            overflow: hidden;
-            background: #000;
-            font-family: 'Courier New', monospace;
-            overscroll-behavior: none;
-            touch-action: none;
-        }
-        
-        #video-container {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            z-index: 1;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            background: #000;
-        }
-        
-        video {
-            /* На телефонах — contain, сохраняет пропорции, не обрезает */
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-            object-position: center center;
-        }
-        
-        /* Эпилептическое предупреждение */
-        #warning-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background: rgba(0, 0, 0, 0.98);
-            backdrop-filter: blur(15px);
-            -webkit-backdrop-filter: blur(15px);
-            z-index: 100;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            color: #ff0000;
-            text-align: center;
-            padding: 20px;
-        }
-        
-        .warning-text {
-            font-size: 36px;
-            font-weight: bold;
-            text-transform: uppercase;
-            letter-spacing: 5px;
-            margin-bottom: 20px;
-            text-shadow: 0 0 15px #ff0000, 0 0 30px #ff0000;
-            animation: pulse 2s infinite;
-        }
-        
-        @keyframes pulse {
-            0%, 100% { opacity: 0.9; }
-            50% { opacity: 1; }
-        }
-        
-        .warning-subtext {
-            font-size: 16px;
-            color: #aaa;
-            max-width: 600px;
-            line-height: 1.8;
-            margin-bottom: 50px;
-            letter-spacing: 1px;
-        }
-        
-        .button-container {
-            display: flex;
-            gap: 40px;
-        }
-        
-        .warning-btn {
-            padding: 18px 50px;
-            font-size: 18px;
-            font-family: 'Courier New', monospace;
-            font-weight: bold;
-            text-transform: uppercase;
-            letter-spacing: 3px;
-            background: transparent;
-            border: 3px solid;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
-            -webkit-user-select: none;
-            -moz-user-select: none;
-            -ms-user-select: none;
-            user-select: none;
-        }
-        
-        .btn-continue {
-            color: #ff0000;
-            border-color: #ff0000;
-            box-shadow: 0 0 15px rgba(255, 0, 0, 0.4);
-        }
-        
-        .btn-continue:hover {
-            background: #ff0000;
-            color: #000;
-            box-shadow: 0 0 25px #ff0000;
-            transform: scale(1.1);
-        }
-        
-        .btn-skip {
-            color: #666;
-            border-color: #666;
-        }
-        
-        .btn-skip:hover {
-            background: #666;
-            color: #000;
-            transform: scale(1.1);
-        }
-        
-        .warning-btn::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
-            transition: left 0.5s;
-        }
-        
-        .warning-btn:hover::before {
-            left: 100%;
-        }
-        
-        /* === Адаптация под телефоны === */
-        @media (max-width: 768px) {
-            .warning-text {
-                font-size: 24px;
-                letter-spacing: 2px;
-                margin-bottom: 15px;
-            }
-            
-            .warning-subtext {
-                font-size: 14px;
-                max-width: 90%;
-                margin-bottom: 30px;
-            }
-            
-            .warning-btn {
-                padding: 15px 30px;
-                font-size: 16px;
-                letter-spacing: 2px;
-            }
-            
-            .button-container {
-                flex-direction: column;
-                gap: 20px;
-                width: 90%;
-                max-width: 300px;
-            }
-            
-            video {
-                /* На очень маленьких экранах можно уменьшить */
-                object-fit: contain;
-                max-width: 100%;
-                max-height: 100%;
-            }
-        }
-        
-        /* Для старых iPhone и Android */
-        @media (max-width: 480px) {
-            .warning-text {
-                font-size: 20px;
-                letter-spacing: 1px;
-            }
-            
-            .warning-subtext {
-                font-size: 12px;
-            }
-            
-            .warning-btn {
-                padding: 12px 25px;
-                font-size: 14px;
-            }
-        }
-    </style>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}
+gtag('js',new Date());gtag('config','G-M30NK9KWVH');</script>
+<link rel=icon href=favicon.ico type=image/x-icon>
+<style>*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}body{overflow:hidden;background:#000;font-family:'Courier New',monospace;overscroll-behavior:none;touch-action:none}#video-container{position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:1;display:flex;justify-content:center;align-items:center;background:#000}video{width:100%;height:100%;object-fit:contain;object-position:center center}#warning-overlay{position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.98);backdrop-filter:blur(15px);-webkit-backdrop-filter:blur(15px);z-index:100;display:flex;flex-direction:column;justify-content:center;align-items:center;color:#f00;text-align:center;padding:20px}.warning-text{font-size:36px;font-weight:bold;text-transform:uppercase;letter-spacing:5px;margin-bottom:20px;text-shadow:0 0 15px #ff0000,0 0 30px #f00;animation:pulse 2s infinite}@keyframes pulse{0%,100%{opacity:.9}50%{opacity:1}}.warning-subtext{font-size:16px;color:#aaa;max-width:600px;line-height:1.8;margin-bottom:50px;letter-spacing:1px}.button-container{display:flex;gap:40px}.warning-btn{padding:18px 50px;font-size:18px;font-family:'Courier New',monospace;font-weight:bold;text-transform:uppercase;letter-spacing:3px;background:transparent;border:3px solid;cursor:pointer;transition:all .3s ease;position:relative;overflow:hidden;-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;user-select:none}.btn-continue{color:#f00;border-color:#f00;box-shadow:0 0 15px rgba(255,0,0,0.4)}.btn-continue:hover{background:#f00;color:#000;box-shadow:0 0 25px #f00;transform:scale(1.1)}.btn-skip{color:#666;border-color:#666}.btn-skip:hover{background:#666;color:#000;transform:scale(1.1)}.warning-btn::before{content:'';position:absolute;top:0;left:-100%;width:100%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.3),transparent);transition:left .5s}.warning-btn:hover::before{left:100%}@media(max-width:768px){.warning-text{font-size:24px;letter-spacing:2px;margin-bottom:15px}.warning-subtext{font-size:14px;max-width:90%;margin-bottom:30px}.warning-btn{padding:15px 30px;font-size:16px;letter-spacing:2px}.button-container{flex-direction:column;gap:20px;width:90%;max-width:300px}video{object-fit:contain;max-width:100%;max-height:100%}}@media(max-width:480px){.warning-text{font-size:20px;letter-spacing:1px}.warning-subtext{font-size:12px}.warning-btn{padding:12px 25px;font-size:14px}}</style>
 </head>
 <body>
-    <div id="video-container">
-        <video id="main-video" 
-               playsinline 
-               muted 
-               preload="metadata" 
-               x5-video-player-type="h5" 
-               x5-video-orientation="landscape" 
-               x5-playsinline 
-               webkit-playsinline
-               disablepictureinpicture
-               controlslist="nodownload noplaybackrate"></video>
-    </div>
-    
-    <div id="warning-overlay">
-        <div class="warning-text">⚠ Эпилептическое предупреждение</div>
-        <div class="warning-subtext">
-            Следующее видео содержит интенсивное мерцание, быстрые смены цветов и яркие вспышки.<br>
-            При наличии фоточувствительной эпилепсии или схожих состояний нажмите "Пропустить".
-        </div>
-        <div class="button-container">
-            <button class="warning-btn btn-continue">Продолжить</button>
-            <button class="warning-btn btn-skip">Пропустить</button>
-        </div>
-    </div>
-
-    <script>
-        const video = document.getElementById('main-video');
-        const overlay = document.getElementById('warning-overlay');
-        const btnContinue = document.querySelector('.btn-continue');
-        const btnSkip = document.querySelector('.btn-skip');
-        
-        let firstVideoPlayed = false;
-        let audioInitialized = false;
-        let audioContext, glitchBuffer, terminalBuffer, glitchSource, terminalSource, gainNode;
-        
-        // Детект старого/слабого устройства
-        const isOldDevice = /Android\s[1-6]\.|iPhone OS [1-8]_/.test(navigator.userAgent) || 
-                           (navigator.hardwareConcurrency && navigator.hardwareConcurrency < 4);
-        
-        // Используем легкие версии для старых устройств (если они есть)
-        const firstVideo = isOldDevice ? 'videos/OBSERVER-7-480p.mp4' : 'videos/OBSERVER-7.mp4';
-        const secondVideo = isOldDevice ? 'videos/OBSERVER-7-R-480p.mp4' : 'videos/OBSERVER-7-R.mp4';
-        
-        // Инициализация Web Audio API
-        async function initAudio() {
-            if (audioInitialized) return;
-            
-            audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            gainNode = audioContext.createGain();
-            gainNode.gain.value = 0.7;
-            gainNode.connect(audioContext.destination);
-            
-            try {
-                const [glitchData, terminalData] = await Promise.all([
-                    fetch('sounds/ambient/ambient_glitch.mp3').then(r => r.arrayBuffer()),
-                    fetch('sounds/ambient/ambient_terminal.mp3').then(r => r.arrayBuffer())
-                ]);
-                
-                glitchBuffer = await audioContext.decodeAudioData(glitchData);
-                terminalBuffer = await audioContext.decodeAudioData(terminalData);
-                audioInitialized = true;
-            } catch (e) {
-                console.warn('Audio loading failed:', e);
-            }
-        }
-        
-        // Запуск бесшовного аудио цикла
-        function startAudioLoop() {
-            if (!audioInitialized || !audioContext) return;
-            
-            if (audioContext.state === 'suspended') {
-                audioContext.resume();
-            }
-            
-            if (glitchSource) {
-                try {
-                    glitchSource.stop();
-                    terminalSource.stop();
-                } catch(e) {}
-            }
-            
-            glitchSource = audioContext.createBufferSource();
-            terminalSource = audioContext.createBufferSource();
-            
-            glitchSource.buffer = glitchBuffer;
-            terminalSource.buffer = terminalBuffer;
-            
-            glitchSource.loop = true;
-            terminalSource.loop = true;
-            
-            glitchSource.connect(gainNode);
-            terminalSource.connect(gainNode);
-            
-            glitchSource.start(0);
-            terminalSource.start(0);
-        }
-        
-        // Запуск видео последовательности
-        async function startVideoSequence(skipFirst = false) {
-            overlay.style.display = 'none';
-            
-            if (!audioInitialized) {
-                await initAudio();
-            }
-            
-            if (skipFirst) {
-                video.src = secondVideo;
-                video.loop = true;
-                await video.play();
-                startAudioLoop();
-            } else {
-                video.src = firstVideo;
-                await video.play();
-                
-                video.addEventListener('ended', async function onEnded() {
-                    if (!firstVideoPlayed) {
-                        firstVideoPlayed = true;
-                        video.src = secondVideo;
-                        video.loop = true;
-                        await video.play();
-                        startAudioLoop();
-                        video.removeEventListener('ended', onEnded);
-                    }
-                });
-            }
-        }
-        
-        btnContinue.addEventListener('click', () => startVideoSequence(false));
-        btnSkip.addEventListener('click', () => startVideoSequence(true));
-        
-        // Защита от случайных свайпов на телефонах
-        document.addEventListener('touchmove', function(e) {
-            e.preventDefault();
-        }, { passive: false });
-        
-        // Запрет контекстного меню (чтобы не вылезало при долгом тапе)
-        document.addEventListener('contextmenu', function(e) {
-            e.preventDefault();
-        });
-    </script>
+<div id=video-container>
+<video id=main-video playsinline muted preload=metadata x5-video-player-type=h5 x5-video-orientation=landscape x5-playsinline webkit-playsinline disablepictureinpicture controlslist="nodownload noplaybackrate"></video>
+</div>
+<div id=warning-overlay>
+<div class=warning-text>⚠ Эпилептическое предупреждение</div>
+<div class=warning-subtext>
+Следующее видео содержит интенсивное мерцание, быстрые смены цветов и яркие вспышки.<br>
+При наличии фоточувствительной эпилепсии или схожих состояний нажмите "Пропустить".
+</div>
+<div class=button-container>
+<button class="warning-btn btn-continue">Продолжить</button>
+<button class="warning-btn btn-skip">Пропустить</button>
+</div>
+</div>
+<script>const video=document.getElementById('main-video');const overlay=document.getElementById('warning-overlay');const btnContinue=document.querySelector('.btn-continue');const btnSkip=document.querySelector('.btn-skip');let firstVideoPlayed=false;let audioInitialized=false;let audioContext,glitchBuffer,terminalBuffer,glitchSource,terminalSource,gainNode;const isOldDevice=/Android\s[1-6]\.|iPhone OS [1-8]_/.test(navigator.userAgent)||(navigator.hardwareConcurrency&&navigator.hardwareConcurrency<4);const firstVideo=isOldDevice?'videos/OBSERVER-7-480p.mp4':'videos/OBSERVER-7.mp4';const secondVideo=isOldDevice?'videos/OBSERVER-7-R-480p.mp4':'videos/OBSERVER-7-R.mp4';async function initAudio(){if(audioInitialized)return;audioContext=new(window.AudioContext||window.webkitAudioContext)();gainNode=audioContext.createGain();gainNode.gain.value=0.7;gainNode.connect(audioContext.destination);try{const[glitchData,terminalData]=await Promise.all([fetch('sounds/ambient/ambient_glitch.mp3').then(r=>r.arrayBuffer()),fetch('sounds/ambient/ambient_terminal.mp3').then(r=>r.arrayBuffer())]);glitchBuffer=await audioContext.decodeAudioData(glitchData);terminalBuffer=await audioContext.decodeAudioData(terminalData);audioInitialized=true;}catch(e){console.warn('Audio loading failed:',e);}}
+function startAudioLoop(){if(!audioInitialized||!audioContext)return;if(audioContext.state==='suspended'){audioContext.resume();}
+if(glitchSource){try{glitchSource.stop();terminalSource.stop();}catch(e){}}
+glitchSource=audioContext.createBufferSource();terminalSource=audioContext.createBufferSource();glitchSource.buffer=glitchBuffer;terminalSource.buffer=terminalBuffer;glitchSource.loop=true;terminalSource.loop=true;glitchSource.connect(gainNode);terminalSource.connect(gainNode);glitchSource.start(0);terminalSource.start(0);}
+async function startVideoSequence(skipFirst=false){overlay.style.display='none';if(!audioInitialized){await initAudio();}
+if(skipFirst){video.src=secondVideo;video.loop=true;await video.play();startAudioLoop();}else{video.src=firstVideo;await video.play();video.addEventListener('ended',async function onEnded(){if(!firstVideoPlayed){firstVideoPlayed=true;video.src=secondVideo;video.loop=true;await video.play();startAudioLoop();video.removeEventListener('ended',onEnded);}});}}
+btnContinue.addEventListener('click',()=>startVideoSequence(false));btnSkip.addEventListener('click',()=>startVideoSequence(true));document.addEventListener('touchmove',function(e){e.preventDefault();},{passive:false});document.addEventListener('contextmenu',function(e){e.preventDefault();});</script>
 </body>
 </html>
-
