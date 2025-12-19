@@ -1099,7 +1099,6 @@ showResetProgress() {
 performAutoReset() {
 	  degradation.glitchAmbientActive = false;
 
-  console.log('[AUTO RESET] Starting...');
 // Сброс флагов голосов и перегенерация порогов
 localStorage.setItem('voiceAdam03Played', 'false');
 localStorage.setItem('voiceWhisper03Played', 'false');
@@ -1183,7 +1182,6 @@ if (degradation) {
       operationManager.activeOperation = null;
     }
     
-    console.log('[AUTO RESET] Complete. Terminal ready.');
   }, 1000);
 }
   // ========== МЕТОД: ОЧИСТКА ЭФФЕКТОВ ГЛИТЧА ==========
@@ -2836,7 +2834,7 @@ if (normalizedId === 'CORE' && degradation.level < 50) {
   document.body.style.filter = '';
   
   // ОТЛАДОЧНАЯ ИНФОРМАЦИЯ (УДАЛИТЕ В ПРОДАКШЕНЕ!)
-  console.log(`[DECRYPT DEBUG] Файл: ${normalizedId}, Сгенерированный код: ${decryptCode}`);
+
   
   // УВЕЛИЧЕНО КОЛИЧЕСТВО ПОПЫТОК ДО 5
   decryptAttempts = 5;
