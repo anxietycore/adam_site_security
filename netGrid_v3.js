@@ -257,7 +257,7 @@ checkSolution(){
       getDegradation: () => keyDegradation,
       
 forceReset() {
-  console.log('[CRITICAL] NetGrid forceReset triggered');
+
   systemDegradation = 0;
   keyDegradation = 0;
   tick = 0;
@@ -758,9 +758,9 @@ document.addEventListener('keydown', (e) => {
       raf = requestAnimationFrame(loop);
     });
 
-    console.log(`[DEBUG] netGrid_v3-FINAL loaded. Canvas: ${w}x${h}, DPR: ${DPR}, Nodes: ${NODE_COUNT}, Grid: ${CELL_COUNT}x${CELL_COUNT}`);
+
 
   } catch (err) {
-    console.error('[DEBUG] CRITICAL ERROR:', err);
+
   }
 })();
