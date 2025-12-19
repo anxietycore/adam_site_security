@@ -9,47 +9,42 @@
 </head>
 <body>
   
-  <!-- ✅ ПЕРВОЕ ПРЕДУПРЕЖДЕНИЕ (всегда показывается) -->
-  <div id="mobileWarning1" class="mobile-warning">
-    <div class="warning-card">
-      <div class="warning-header">⚠️ ВНИМАНИЕ!</div>
-      <div class="warning-content">
-        <p>ВЫ ИСПОЛЬЗУЕТЕ МОБИЛЬНУЮ ВЕРСИЮ,</p>
-        <p>КОТОРАЯ ИМЕЕТ УПРОЩЕННЫЙ И УРЕЗАННЫЙ ФУНКЦИОНАЛ,</p>
-        <p>ВАМ НЕДОСТУПНЫ НЕКОТОРЫЕ ФУНКЦИИ,</p>
-        <p>САМОСТОЯТЕЛЬНЫЙ ВВОД КОМАНД,</p>
-        <p>СЕКРЕТНЫЕ И ФИНАЛЬНАЯ КОМАНДА.</p>
-        <p style="color: #FFFF00; margin-top: 12px;">
-          <strong>НАСТОЯТЕЛЬНО РЕКОМЕНДУЕТСЯ</strong>
-        </p>
-        <p style="color: #FFFF00;">
-          <strong>ПОСЕЩАТЬ СТРАНИЦУ С ПК ИЛИ НОУТБУКА</strong>
-        </p>
-      </div>
-      <button id="okBtn1" class="warning-btn ok-btn">ДАЛЕЕ ▶</button>
+ <!-- ✅ ПРЕДУПРЕЖДЕНИЕ СИСТЕМЫ: ОГРАНИЧЕНИЕ ПЛАТФОРМЫ -->
+<div id="mobileWarning1" class="mobile-warning">
+  <div class="warning-card">
+    <div class="warning-header">⚠️ ДЕТЕКТИРОВАНА МОБИЛЬНАЯ ПЛАТФОРМА</div>
+    <div class="warning-content">
+      <p>СТАТУС ТЕРМИНАЛА: <span style="color: #FF8800;">ОГРАНИЧЕННЫЙ ФУНКЦИОНАЛ</span></p>
+      <p>НЕДОСТУПНЫ КОМПОНЕНТЫ:</p>
+      <p>• АВТОНОМНЫЙ ВВОД КОМАНД</p>
+      <p>• РАСШИРЕННЫЕ ПРОТОКОЛЫ</p>
+      <p>• СЕКРЕТНЫЕ КОМАНДЫ НАБЛЮДЕНИЯ</p>
+      <p>• ФИНАЛЬНЫЙ ПРОТОКОЛ VIGIL-9</p>
+      <p style="color: #FFFF00; margin-top: 12px;">
+        <strong>РЕКОМЕНДАЦИЯ: СТАЦИОНАРНАЯ РАБОЧАЯ СТАНЦИЯ</strong>
+      </p>
     </div>
+    <button id="okBtn1" class="warning-btn ok-btn">ДАЛЕЕ ▶</button>
   </div>
+</div>
 
-  <!-- ✅ ВТОРОЕ ПРЕДУПРЕЖДЕНИЕ (скрыто изначально) -->
-  <div id="mobileWarning2" class="mobile-warning hidden">
-    <div class="warning-card">
-      <div class="warning-header">⚠️ ПРЕДУПРЕЖДЕНИЕ!</div>
-      <div class="warning-content">
-        <p>НА МОБИЛЬНОЙ ВЕРСИИ ТЕРМИНАЛА</p>
-        <p>ТЕРЯЕТСЯ БОЛЬШАЯ ЧАСТЬ ГЕЙМПЛЕЯ И ИММЕРСИВНОСТИ</p>
-        <p style="color: #FFFF00; margin-top: 12px;">
-          <strong>ЕСЛИ ВЫ СОБИРАЕТЕСЬ ПРОДОЛЖИТЬ,</strong>
-        </p>
-        <p style="color: #FFFF00;">
-          <strong>ОБЯЗАТЕЛЬНО ВКЛЮЧИТЕ "ВЕРСИЮ ДЛЯ ПК"</strong>
-        </p>
-        <p style="font-size: 9px; color: #888; margin-top: 8px;">
-          (в настройках браузера: три точки ⋮ → "Версия для ПК")
-        </p>
-      </div>
-      <button id="okBtn2" class="warning-btn ok-btn">ПРИНЯТЬ И ПРОДОЛЖИТЬ</button>
+<!-- ✅ КРИТИЧЕСКОЕ СООБЩЕНИЕ: ПОТЕРЯ ОПЫТА -->
+<div id="mobileWarning2" class="mobile-warning hidden">
+  <div class="warning-card">
+    <div class="warning-header">⚠️ УПРЕЖДЕНИЕ: ПОТЕРЯ ОПЫТА</div>
+    <div class="warning-content">
+      <p>ГЕЙМПЛЕЙ СОКРАЩЁН НА <span style="color: #FF4444;">70%</span></p>
+      <p>ИММЕРСИВНОСТЬ: <span style="color: #FF8800;">НЕДОСТАТОЧНА</span></p>
+      <p style="color: #FFFF00; margin-top: 12px;">
+        <strong>ВКЛЮЧИТЕ: РЕЖИМ ВЕРСИИ ДЛЯ ПК</strong>
+      </p>
+      <p style="font-size: 9px; color: #888; margin-top: 8px;">
+        (меню браузера ⋮ → "ВЕРСИЯ ДЛЯ ПК")
+      </p>
     </div>
+    <button id="okBtn2" class="warning-btn ok-btn">ПРИНЯТЬ И ПРОДОЛЖИТЬ</button>
   </div>
+</div>
 
   <!-- ✅ ТЕРМИНАЛ (скрытый пока) -->
   <div id="terminal" style="opacity: 0;"></div>
