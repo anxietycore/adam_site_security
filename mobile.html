@@ -1,124 +1,120 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang=ru>
 <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-        <title>A.D.A.M.</title>
-    <!-- Google tag (gtag.js) -->
+<meta charset=utf-8 />
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self' 'unsafe-inline' 'unsafe-eval';
+  style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+  font-src 'self' https://fonts.gstatic.com;
+  img-src 'self' data:;
+  media-src 'self';
+  object-src 'none';
+  base-uri 'self';
+  form-action 'none';
+  frame-ancestors 'none';
+">
+<meta name=viewport content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+<title>A.D.A.M.</title>
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-M30NK9KWVH"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-  gtag('config', 'G-M30NK9KWVH');
-</script>
-    <link rel="icon" href="favicon.ico" type="image/x-icon">
-    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="mobile.css">
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag("js",new Date());gtag("config","G-M30NK9KWVH");</script>
+<link rel=icon href=favicon.ico type=image/x-icon>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel=stylesheet>
+<link rel=stylesheet href=mobile.css>
 </head>
 <body>
-  
- <!-- ✅ ПРЕДУПРЕЖДЕНИЕ СИСТЕМЫ: ОГРАНИЧЕНИЕ ПЛАТФОРМЫ -->
-<div id="mobileWarning1" class="mobile-warning">
-  <div class="warning-card">
-    <div class="warning-header">⚠️ ДЕТЕКТИРОВАНА МОБИЛЬНАЯ ПЛАТФОРМА</div>
-    <div class="warning-content">
-      <p>СТАТУС ТЕРМИНАЛА: <span style="color: #FF8800;">ОГРАНИЧЕННЫЙ ФУНКЦИОНАЛ</span></p>
-      <p>НЕДОСТУПНЫ КОМПОНЕНТЫ:</p>
-      <p>• АВТОНОМНЫЙ ВВОД КОМАНД</p>
-      <p>• РАСШИРЕННЫЕ ПРОТОКОЛЫ</p>
-      <p>• СЕКРЕТНЫЕ КОМАНДЫ НАБЛЮДЕНИЯ</p>
-      <p>• ФИНАЛЬНЫЙ ПРОТОКОЛ VIGIL-9</p>
-      <p style="color: #FFFF00; margin-top: 12px;">
-        <strong>РЕКОМЕНДАЦИЯ: СТАЦИОНАРНАЯ РАБОЧАЯ СТАНЦИЯ</strong>
-      </p>
-    </div>
-    <button id="okBtn1" class="warning-btn ok-btn">ДАЛЕЕ ▶</button>
-  </div>
+<div id=mobileWarning1 class=mobile-warning>
+<div class=warning-card>
+<div class=warning-header>⚠️ ДЕТЕКТИРОВАНА МОБИЛЬНАЯ ПЛАТФОРМА</div>
+<div class=warning-content>
+<p>СТАТУС ТЕРМИНАЛА: <span style=color:#f80>ОГРАНИЧЕННЫЙ ФУНКЦИОНАЛ</span></p>
+<p>НЕДОСТУПНЫ КОМПОНЕНТЫ:</p>
+<p>• АВТОНОМНЫЙ ВВОД КОМАНД</p>
+<p>• РАСШИРЕННЫЕ ПРОТОКОЛЫ</p>
+<p>• СЕКРЕТНЫЕ КОМАНДЫ НАБЛЮДЕНИЯ</p>
+<p>• ФИНАЛЬНЫЙ ПРОТОКОЛ VIGIL-9</p>
+<p style=color:#ff0;margin-top:12px>
+<strong>РЕКОМЕНДАЦИЯ: СТАЦИОНАРНАЯ РАБОЧАЯ СТАНЦИЯ</strong>
+</p>
 </div>
-
-<!-- ✅ КРИТИЧЕСКОЕ СООБЩЕНИЕ: ПОТЕРЯ ОПЫТА -->
-<div id="mobileWarning2" class="mobile-warning hidden">
-  <div class="warning-card">
-    <div class="warning-header">⚠️ УПРЕЖДЕНИЕ: ПОТЕРЯ ОПЫТА</div>
-    <div class="warning-content">
-      <p>ГЕЙМПЛЕЙ СОКРАЩЁН НА <span style="color: #FF4444;">70%</span></p>
-      <p>ИММЕРСИВНОСТЬ: <span style="color: #FF8800;">НЕДОСТАТОЧНА</span></p>
-      <p style="color: #FFFF00; margin-top: 12px;">
-        <strong>ВКЛЮЧИТЕ: РЕЖИМ ВЕРСИИ ДЛЯ ПК</strong>
-      </p>
-      <p style="font-size: 9px; color: #888; margin-top: 8px;">
-        (меню браузера ⋮ → "ВЕРСИЯ ДЛЯ ПК")
-      </p>
-    </div>
-    <button id="okBtn2" class="warning-btn ok-btn">ПРИНЯТЬ И ПРОДОЛЖИТЬ</button>
-  </div>
+<button id=okBtn1 class="warning-btn ok-btn">ДАЛЕЕ ▶</button>
 </div>
-
-  <!-- ✅ ТЕРМИНАЛ (скрытый пока) -->
-  <div id="terminal" style="opacity: 0;"></div>
-  <nav id="sidePanel" aria-label="Команды" style="opacity: 0;">
-    <div class="panel-handle" id="panelHandle">≫</div>
-    <div class="panel-content" id="panelContent"></div>
-  </nav>
-
-  <!-- Остальное содержимое... -->
-  <div id="gridModal" class="modal hidden">
-    <div class="modal-card grid-card">
-      <div class="modal-header">
-        <div>NET GRID — управление</div>
-        <button id="gridClose">✕</button>
-      </div>
-      <div class="grid-body">
-        <div id="mapContainer"></div>
-        <div class="grid-controls">
-          <div class="control-row">
-            <button class="ctrl" data-action="prev">Prev</button>
-            <button class="ctrl" data-action="next">Next</button>
-            <button class="ctrl" data-action="exit">Exit</button>
-          </div>
-          <div class="control-row">
-            <button class="ctrl arrow" data-action="up">↑</button>
-          </div>
-          <div class="control-row">
-            <button class="ctrl arrow" data-action="left">←</button>
-            <button class="ctrl" data-action="lock">Lock</button>
-            <button class="ctrl arrow" data-action="right">→</button>
-          </div>
-          <div class="control-row">
-            <button class="ctrl" data-action="down">↓</button>
-          </div>
-          <div class="control-row">
-            <button class="ctrl" data-action="check">Check</button>
-            <button class="ctrl danger" data-action="reset">Reset</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div id="virtualKeyboard" class="keyboard hidden">
-    <div class="keyboard-row">
-      <button data-key="1">1</button><button data-key="2">2</button><button data-key="3">3</button>
-      <button data-key="4">4</button><button data-key="5">5</button><button data-key="6">6</button>
-      <button data-key="7">7</button><button data-key="8">8</button><button data-key="9">9</button>
-      <button data-key="0">0</button>
-    </div>
-    <div class="keyboard-row">
-      <button data-key="x">X</button><button data-key="a">A</button><button data-key="b">B</button>
-      <button data-key="c">C</button><button data-key="d">D</button><button data-key="e">E</button>
-      <button data-key="f">F</button>
-    </div>
-    <div class="keyboard-row">
-      <button data-key="Backspace" class="wide">⌫</button>
-      <button data-key="Enter" class="wide">ENTER</button>
-      <button data-key="Escape" class="wide">ESC</button>
-    </div>
-  </div>
-
-  <script src="module_audio.js" defer></script>
-  <script src="netGrid_v3.js" defer></script>
-  <script src="terminal_canvas.js" defer></script>
-  <script src="mobile.js" defer></script>
+</div>
+<div id=mobileWarning2 class="mobile-warning hidden">
+<div class=warning-card>
+<div class=warning-header>⚠️ УПРЕЖДЕНИЕ: ПОТЕРЯ ОПЫТА</div>
+<div class=warning-content>
+<p>ГЕЙМПЛЕЙ СОКРАЩЁН НА <span style=color:#f44>70%</span></p>
+<p>ИММЕРСИВНОСТЬ: <span style=color:#f80>НЕДОСТАТОЧНА</span></p>
+<p style=color:#ff0;margin-top:12px>
+<strong>ВКЛЮЧИТЕ: РЕЖИМ ВЕРСИИ ДЛЯ ПК</strong>
+</p>
+<p style=font-size:9px;color:#888;margin-top:8px>
+(меню браузера ⋮ → "ВЕРСИЯ ДЛЯ ПК")
+</p>
+</div>
+<button id=okBtn2 class="warning-btn ok-btn">ПРИНЯТЬ И ПРОДОЛЖИТЬ</button>
+</div>
+</div>
+<div id=terminal style=opacity:0></div>
+<nav id=sidePanel aria-label=Команды style=opacity:0>
+<div class=panel-handle id=panelHandle>≫</div>
+<div class=panel-content id=panelContent></div>
+</nav>
+<div id=gridModal class="modal hidden">
+<div class="modal-card grid-card">
+<div class=modal-header>
+<div>NET GRID — управление</div>
+<button id=gridClose>✕</button>
+</div>
+<div class=grid-body>
+<div id=mapContainer></div>
+<div class=grid-controls>
+<div class=control-row>
+<button class=ctrl data-action=prev>Prev</button>
+<button class=ctrl data-action=next>Next</button>
+<button class=ctrl data-action=exit>Exit</button>
+</div>
+<div class=control-row>
+<button class="ctrl arrow" data-action=up>↑</button>
+</div>
+<div class=control-row>
+<button class="ctrl arrow" data-action=left>←</button>
+<button class=ctrl data-action=lock>Lock</button>
+<button class="ctrl arrow" data-action=right>→</button>
+</div>
+<div class=control-row>
+<button class=ctrl data-action=down>↓</button>
+</div>
+<div class=control-row>
+<button class=ctrl data-action=check>Check</button>
+<button class="ctrl danger" data-action=reset>Reset</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div id=virtualKeyboard class="keyboard hidden">
+<div class=keyboard-row>
+<button data-key=1>1</button><button data-key=2>2</button><button data-key=3>3</button>
+<button data-key=4>4</button><button data-key=5>5</button><button data-key=6>6</button>
+<button data-key=7>7</button><button data-key=8>8</button><button data-key=9>9</button>
+<button data-key=0>0</button>
+</div>
+<div class=keyboard-row>
+<button data-key=x>X</button><button data-key=a>A</button><button data-key=b>B</button>
+<button data-key=c>C</button><button data-key=d>D</button><button data-key=e>E</button>
+<button data-key=f>F</button>
+</div>
+<div class=keyboard-row>
+<button data-key=Backspace class=wide>⌫</button>
+<button data-key=Enter class=wide>ENTER</button>
+<button data-key=Escape class=wide>ESC</button>
+</div>
+</div>
+<script src=module_audio.js defer></script>
+<script src=netGrid_v3.js defer></script>
+<script src=terminal_canvas.js defer></script>
+<script src=mobile.js defer></script>
 </body>
 </html>
