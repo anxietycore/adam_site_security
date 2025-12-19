@@ -238,23 +238,23 @@ async playAmbientSeamless(filename, volume = 0.2) {
     // Создаем AudioContext если его нет (как в index_canvas.js)
     if (!this.audioContext) {
         this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        console.log('[Audio] Создан новый AudioContext');
+
     }
     
     // Возобновляем контекст если приостановлен
     if (this.audioContext.state === 'suspended') {
-        console.log('[Audio] Возобновляем приостановленный контекст');
+
         await this.audioContext.resume();
     }
     
     // ПУТЬ КАК В INDEX_CANVAS.JS - прямой путь к файлу
     const path = 'sounds/ambient/ambient_terminal.mp3'; // ⬅️ ПРЯМОЙ ПУТЬ
     
-    console.log(`[Audio] Загрузка ambient по пути: ${path}`);
+
     
     try {
         // ТОЧНО ТАК ЖЕ КАК В INDEX_CANVAS.JS!
-        console.log(`[Audio] Загрузка ambient через fetch...`);
+
         const response = await fetch(path);
         
         if (!response.ok) {
@@ -262,15 +262,15 @@ async playAmbientSeamless(filename, volume = 0.2) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         
-        console.log(`[Audio] Файл загружен, декодируем...`);
+
         const arrayBuffer = await response.arrayBuffer();
         const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
-        console.log(`[Audio] Аудио буфер готов, длительность: ${audioBuffer.duration} секунд`);
+
         
         // Останавливаем предыдущий источник с таким же именем
         const existing = this.backgroundSources.get(filename);
         if (existing && existing.stop) {
-            console.log('[Audio] Останавливаем предыдущий ambient');
+
             existing.stop();
             this.backgroundSources.delete(filename);
         }
@@ -292,7 +292,7 @@ async playAmbientSeamless(filename, volume = 0.2) {
         const startTime = this.audioContext.currentTime + 0.05;
         source.start(startTime);
         
-        console.log(`[Audio] Ambient запущен с бесшовным циклом (запуск через ${startTime} сек)`);
+
         
         // Сохраняем
         const sound = {
@@ -300,7 +300,7 @@ async playAmbientSeamless(filename, volume = 0.2) {
             source: source,
             gainNode: gainNode,
             stop: () => {
-                console.log('[Audio] Остановка ambient');
+
                 try {
                     if (source) {
                         source.stop();
@@ -335,7 +335,7 @@ async playAmbientSeamless(filename, volume = 0.2) {
         
         // Пробуем загрузить через XMLHttpRequest как fallback
         try {
-            console.log('[Audio] Пробую загрузить через XMLHttpRequest...');
+
             return await this.loadAmbientViaXHR(path, filename, volume);
         } catch (xhrError) {
             console.error('[Audio] XMLHttpRequest тоже не удался:', xhrError);
@@ -390,7 +390,7 @@ async loadAmbientViaXHR(path, filename, volume) {
                     };
                     
                     this.backgroundSources.set(filename, sound);
-                    console.log(`[Audio] Ambient загружен через XHR: ${filename}`);
+
                     resolve(sound);
                 } catch (error) {
                     reject(error);
@@ -563,16 +563,7 @@ async loadAmbientViaXHR(path, filename, volume) {
             return null;
     }
 }
-    // В классе AudioManager добавьте:
-ensureAudioContext() {
-  if (!this.audioContext) {
-    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-  }
-  if (this.audioContext.state === 'suspended') {
-    return this.audioContext.resume();
-  }
-  return Promise.resolve();
-}
+    
     // Системные звуки
     playSystemSound(type, options = {}) {
         const soundMap = {
