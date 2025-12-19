@@ -11,11 +11,13 @@
 const AudioManager = {
   context: null,
   sounds: {}, // для коротких звуков (HTML Audio)
+  keyPressSounds: {}, // ЗВУКИ КЛАВИШ ⭐
+  lastKeyPressSound: null, // ПОСЛЕДНИЙ ЗВУК ЧТОБЫ НЕ ПОВТОРЯТЬ ⭐
   ambientBuffer: null, // для бесшовного ambient
   ambientSource: null,
   isInitialized: false,
   loadedCount: 0,
-  totalSounds: 6, // теперь 6
+  totalSounds: 12, // 6 старых + 6 новых ⭐
 
   init() {
     if (this.isInitialized) return;
@@ -34,6 +36,14 @@ const AudioManager = {
     this.loadSound('glitch_error', 'sounds/index/glitch_error.mp3');
     this.loadSound('success', 'sounds/index/success.mp3');
     this.loadSound('boot', 'sounds/index/boot_sequence.mp3');
+    
+    // ЗВУКИ КЛАВИШ ⭐
+    this.loadKeyPressSound('interface_key_press_01.mp3');
+    this.loadKeyPressSound('interface_key_press_02.mp3');
+    this.loadKeyPressSound('interface_key_press_03.mp3');
+    this.loadKeyPressSound('interface_key_press_04.mp3');
+    this.loadKeyPressSound('interface_key_press_backspace.mp3');
+    this.loadKeyPressSound('interface_key_press_enter.mp3');
     
     // Ambient через Web Audio API
     this.loadAmbientSound('ambient_terminal', 'sounds/ambient/ambient_terminal.mp3');
@@ -59,6 +69,73 @@ const AudioManager = {
     });
     
     this.sounds[name].src = url;
+  },
+
+  // Загрузка звуков клавиш ⭐
+  loadKeyPressSound(filename) {
+    const path = 'sounds/interface/' + filename;
+    const name = filename.replace('.mp3', '');
+    console.log(`[Звук] Загрузка: ${name} из ${path}`);
+    
+    this.keyPressSounds[name] = new Audio();
+    this.keyPressSounds[name].preload = 'auto';
+    this.keyPressSounds[name].volume = 0.25; // Тиже для клавиш
+    
+    this.keyPressSounds[name].addEventListener('canplaythrough', () => {
+      this.loadedCount++;
+      console.log(`✅ Загружен: ${name} (${this.loadedCount}/${this.totalSounds})`);
+    });
+    
+    this.keyPressSounds[name].addEventListener('error', (e) => {
+      console.error(`❌ Ошибка ${name}:`, e);
+      this.loadedCount++;
+    });
+    
+    this.keyPressSounds[name].src = path;
+  },
+
+  // Воспроизведение звука клавиш ⭐
+  playKeyPress(keyType = 'generic') {
+    if (!this.isInitialized) return;
+    
+    let soundName;
+    
+    switch(keyType.toLowerCase()) {
+      case 'backspace':
+        soundName = 'interface_key_press_backspace';
+        break;
+      case 'enter':
+        soundName = 'interface_key_press_enter';
+        break;
+      case 'generic':
+        // Выбираем случайный звук из 01-04, но не повторяем предыдущий
+        const sounds = ['interface_key_press_01', 'interface_key_press_02', 'interface_key_press_03', 'interface_key_press_04'];
+        let availableSounds = sounds.filter(s => s !== this.lastKeyPressSound);
+        if (availableSounds.length === 0) availableSounds = sounds;
+        
+        soundName = availableSounds[Math.floor(Math.random() * availableSounds.length)];
+        this.lastKeyPressSound = soundName;
+        break;
+      default:
+        soundName = 'interface_key_press_01';
+    }
+    
+    const sound = this.keyPressSounds[soundName];
+    if (!sound) return;
+    
+    if (sound.readyState < 2) {
+      sound.addEventListener('canplaythrough', () => this.playKeyPress(keyType), { once: true });
+      return;
+    }
+    
+    try {
+      sound.currentTime = 0;
+      sound.volume = 0.25; // Тиже для клавиш
+      sound.play().catch(err => console.error(`❌ Воспроизведение ${soundName}:`, err));
+      console.log(`▶️ ${soundName} (volume: ${sound.volume})`);
+    } catch (e) {
+      console.error(`❌ Критическая ошибка ${soundName}:`, e);
+    }
   },
 
   // Загрузка ambient через fetch + AudioBuffer
@@ -480,9 +557,10 @@ window.onpopstate = function () {
     requestAnimationFrame(render);
   }
 
-  // === KEYBOARD HANDLER (БЕЗ ЗВУКА ПЕЧАТИ) ===
+  // === KEYBOARD HANDLER (С ЗВУКАМИ КЛАВИШ) ⭐ ===
   document.addEventListener('keydown', (e) => {
     if (isExiting) return;
+    
     // Инициализация AudioContext при первом взаимодействии
     if (!AudioManager.isInitialized) {
       AudioManager.init();
@@ -509,7 +587,9 @@ window.onpopstate = function () {
       }
     } else if (currentScreen === 'code' && codeInputFocused) {
       if (e.key === 'Enter') {
-        if (secretCode === 'test') {
+        AudioManager.playKeyPress('enter'); // ЗВУК ENTER ⭐
+        
+        if (secretCode === 'observer') {
           AudioManager.playSound('success', 0.4);
           triggerLocalGlitch();
           showSuccessMessage = true;
@@ -529,10 +609,11 @@ window.onpopstate = function () {
           secretCode = '';
         }
       } else if (e.key === 'Backspace') {
-        // УБРАЛИ ЗВУК ПЕЧАТИ
+        AudioManager.playKeyPress('backspace'); // ЗВУК BACKSPACE ⭐
         secretCode = secretCode.slice(0, -1);
       } else if (e.key.length === 1 && /^[a-zA-Z0-9]$/.test(e.key)) {
-        // УБРАЛИ ЗВУК ПЕЧАТИ
+        AudioManager.playKeyPress('generic'); // ЗВУК ОБЫЧНОЙ КЛАВИШИ ⭐
+        
         if (secretCode.length < MAX_CODE_LENGTH) {
           secretCode += e.key;
         }
