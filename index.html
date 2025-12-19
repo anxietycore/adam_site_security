@@ -1,12 +1,12 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang=ru>
 <head>
-    <meta charset="UTF-8">
-    <meta http-equiv="Content-Security-Policy" content="
+<meta charset=UTF-8>
+<meta http-equiv="Content-Security-Policy" content="
   default-src 'self';
   script-src 'self' 'unsafe-inline' 'unsafe-eval';
-  style-src 'self' 'unsafe-inline';
-  font-src 'self';
+  style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+  font-src 'self' https://fonts.gstatic.com;
   img-src 'self' data:;
   media-src 'self';
   object-src 'none';
@@ -14,41 +14,19 @@
   form-action 'none';
   frame-ancestors 'none';
 ">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>A.D.A.M.</title>
-    <!-- Google tag (gtag.js) -->
+<meta name=viewport content="width=device-width, initial-scale=1.0">
+<title>A.D.A.M.</title>
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-M30NK9KWVH"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-  gtag('config', 'G-M30NK9KWVH');
-</script>
-    <link rel="icon" href="favicon.ico" type="image/x-icon">
-    <link rel="stylesheet" href="style.css">
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <meta http-equiv="Pragma" content="no-cache">
-    <meta http-equiv="Expires" content="0">
-    
-    <!-- ✅ ПРОВЕРКА ТЕЛЕФОНА (физические признаки) -->
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            // Проверяем физические признаки (НЕ user agent)
-            const isMobile = (
-                ('ontouchstart' in window) || 
-                navigator.maxTouchPoints > 0 ||
-                window.innerWidth <= 768
-            );
-            
-            // Если это телефон и НЕТ флага — перенаправляем
-            if (isMobile && localStorage.getItem('adam_force_desktop') !== 'true') {
-                window.location.href = 'mobile.html';
-            }
-        });
-    </script>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag("js",new Date());gtag("config","G-M30NK9KWVH");</script>
+<link rel=icon href=favicon.ico type=image/x-icon>
+<link rel=stylesheet href=style.css>
+<meta http-equiv=Cache-Control content="no-cache, no-store, must-revalidate">
+<meta http-equiv=Pragma content=no-cache>
+<meta http-equiv=Expires content=0>
+<script>document.addEventListener("DOMContentLoaded",function(){const a=(("ontouchstart" in window)||navigator.maxTouchPoints>0||window.innerWidth<=768);if(a&&localStorage.getItem("adam_force_desktop")!=="true"){window.location.href="mobile.html"}});</script>
 </head>
 <body>
-    <script src="index_canvas.js"></script>
-    <script src="crt_overlay_index_only.js"></script>
+<script src=index_canvas.js></script>
+<script src=crt_overlay_index_only.js></script>
 </body>
 </html>
