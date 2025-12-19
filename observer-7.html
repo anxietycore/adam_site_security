@@ -2,35 +2,46 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Observer-7</title>
-    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="icon" href="favicon.ico" type="image/x-icon">
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
         }
         
         body {
             overflow: hidden;
             background: #000;
             font-family: 'Courier New', monospace;
+            overscroll-behavior: none;
+            touch-action: none;
         }
         
         #video-container {
             position: fixed;
             top: 0;
             left: 0;
-            width: 100%;
-            height: 100%;
+            width: 100vw;
+            height: 100vh;
             z-index: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #000;
         }
         
         video {
+            /* На телефонах — contain, сохраняет пропорции, не обрезает */
             width: 100%;
             height: 100%;
-            object-fit: cover;
+            object-fit: contain;
+            object-position: center center;
         }
         
         /* Эпилептическое предупреждение */
@@ -38,10 +49,11 @@
             position: fixed;
             top: 0;
             left: 0;
-            width: 100%;
-            height: 100%;
+            width: 100vw;
+            height: 100vh;
             background: rgba(0, 0, 0, 0.98);
             backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
             z-index: 100;
             display: flex;
             flex-direction: column;
@@ -49,6 +61,7 @@
             align-items: center;
             color: #ff0000;
             text-align: center;
+            padding: 20px;
         }
         
         .warning-text {
@@ -93,6 +106,10 @@
             transition: all 0.3s ease;
             position: relative;
             overflow: hidden;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
         }
         
         .btn-continue {
@@ -133,11 +150,72 @@
         .warning-btn:hover::before {
             left: 100%;
         }
+        
+        /* === Адаптация под телефоны === */
+        @media (max-width: 768px) {
+            .warning-text {
+                font-size: 24px;
+                letter-spacing: 2px;
+                margin-bottom: 15px;
+            }
+            
+            .warning-subtext {
+                font-size: 14px;
+                max-width: 90%;
+                margin-bottom: 30px;
+            }
+            
+            .warning-btn {
+                padding: 15px 30px;
+                font-size: 16px;
+                letter-spacing: 2px;
+            }
+            
+            .button-container {
+                flex-direction: column;
+                gap: 20px;
+                width: 90%;
+                max-width: 300px;
+            }
+            
+            video {
+                /* На очень маленьких экранах можно уменьшить */
+                object-fit: contain;
+                max-width: 100%;
+                max-height: 100%;
+            }
+        }
+        
+        /* Для старых iPhone и Android */
+        @media (max-width: 480px) {
+            .warning-text {
+                font-size: 20px;
+                letter-spacing: 1px;
+            }
+            
+            .warning-subtext {
+                font-size: 12px;
+            }
+            
+            .warning-btn {
+                padding: 12px 25px;
+                font-size: 14px;
+            }
+        }
     </style>
 </head>
 <body>
     <div id="video-container">
-        <video id="main-video" playsinline></video>
+        <video id="main-video" 
+               playsinline 
+               muted 
+               preload="metadata" 
+               x5-video-player-type="h5" 
+               x5-video-orientation="landscape" 
+               x5-playsinline 
+               webkit-playsinline
+               disablepictureinpicture
+               controlslist="nodownload noplaybackrate"></video>
     </div>
     
     <div id="warning-overlay">
@@ -162,8 +240,13 @@
         let audioInitialized = false;
         let audioContext, glitchBuffer, terminalBuffer, glitchSource, terminalSource, gainNode;
         
-        const firstVideo = 'videos/OBSERVER-7.mp4';
-        const secondVideo = 'videos/OBSERVER-7-R.mp4';
+        // Детект старого/слабого устройства
+        const isOldDevice = /Android\s[1-6]\.|iPhone OS [1-8]_/.test(navigator.userAgent) || 
+                           (navigator.hardwareConcurrency && navigator.hardwareConcurrency < 4);
+        
+        // Используем легкие версии для старых устройств (если они есть)
+        const firstVideo = isOldDevice ? 'videos/OBSERVER-7-480p.mp4' : 'videos/OBSERVER-7.mp4';
+        const secondVideo = isOldDevice ? 'videos/OBSERVER-7-R-480p.mp4' : 'videos/OBSERVER-7-R.mp4';
         
         // Инициализация Web Audio API
         async function initAudio() {
@@ -171,7 +254,7 @@
             
             audioContext = new (window.AudioContext || window.webkitAudioContext)();
             gainNode = audioContext.createGain();
-            gainNode.gain.value = 0.7; // Громкость 70%
+            gainNode.gain.value = 0.7;
             gainNode.connect(audioContext.destination);
             
             try {
@@ -196,7 +279,6 @@
                 audioContext.resume();
             }
             
-            // Останавливаем предыдущие источники
             if (glitchSource) {
                 try {
                     glitchSource.stop();
@@ -204,56 +286,36 @@
                 } catch(e) {}
             }
             
-            // Создаём новые источники
             glitchSource = audioContext.createBufferSource();
             terminalSource = audioContext.createBufferSource();
             
             glitchSource.buffer = glitchBuffer;
             terminalSource.buffer = terminalBuffer;
             
-            // Бесшовный цикл
             glitchSource.loop = true;
             terminalSource.loop = true;
             
-            // Подключаем
             glitchSource.connect(gainNode);
             terminalSource.connect(gainNode);
             
-            // Синхронный старт
             glitchSource.start(0);
             terminalSource.start(0);
         }
         
-        // Остановка аудио
-        function stopAudio() {
-            if (glitchSource) {
-                try {
-                    glitchSource.stop();
-                    terminalSource.stop();
-                } catch(e) {}
-                glitchSource = null;
-                terminalSource = null;
-            }
-        }
-        
         // Запуск видео последовательности
         async function startVideoSequence(skipFirst = false) {
-            // Скрываем предупреждение
             overlay.style.display = 'none';
             
-            // Инициализируем аудио (первый раз после взаимодействия)
             if (!audioInitialized) {
                 await initAudio();
             }
             
             if (skipFirst) {
-                // Пропускаем первое видео, запускаем цикл + аудио
                 video.src = secondVideo;
                 video.loop = true;
                 await video.play();
                 startAudioLoop();
             } else {
-                // Запускаем полную последовательность
                 video.src = firstVideo;
                 await video.play();
                 
@@ -272,7 +334,16 @@
         
         btnContinue.addEventListener('click', () => startVideoSequence(false));
         btnSkip.addEventListener('click', () => startVideoSequence(true));
+        
+        // Защита от случайных свайпов на телефонах
+        document.addEventListener('touchmove', function(e) {
+            e.preventDefault();
+        }, { passive: false });
+        
+        // Запрет контекстного меню (чтобы не вылезало при долгом тапе)
+        document.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+        });
     </script>
 </body>
 </html>
-
