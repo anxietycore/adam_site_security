@@ -48,19 +48,19 @@ const AudioManager = {
     // Ambient через Web Audio API
     this.loadAmbientSound('ambient_terminal', 'sounds/ambient/ambient_terminal.mp3');
     
-    console.log('[Звук] Менеджер инициализирован');
+
   },
 
   // Загрузка коротких звуков (HTML Audio)
   loadSound(name, url) {
-    console.log(`[Звук] Загрузка: ${name} из ${url}`);
+
     this.sounds[name] = new Audio();
     this.sounds[name].preload = 'auto';
     this.sounds[name].volume = 0.3;
     
     this.sounds[name].addEventListener('canplaythrough', () => {
       this.loadedCount++;
-      console.log(`✅ Загружен: ${name} (${this.loadedCount}/${this.totalSounds})`);
+
     });
     
     this.sounds[name].addEventListener('error', (e) => {
@@ -75,7 +75,7 @@ const AudioManager = {
   loadKeyPressSound(filename) {
     const path = 'sounds/interface/' + filename;
     const name = filename.replace('.mp3', '');
-    console.log(`[Звук] Загрузка: ${name} из ${path}`);
+
     
     this.keyPressSounds[name] = new Audio();
     this.keyPressSounds[name].preload = 'auto';
@@ -83,7 +83,7 @@ const AudioManager = {
     
     this.keyPressSounds[name].addEventListener('canplaythrough', () => {
       this.loadedCount++;
-      console.log(`✅ Загружен: ${name} (${this.loadedCount}/${this.totalSounds})`);
+
     });
     
     this.keyPressSounds[name].addEventListener('error', (e) => {
@@ -132,15 +132,15 @@ const AudioManager = {
       sound.currentTime = 0;
       sound.volume = 0.25; // Тиже для клавиш
       sound.play().catch(err => console.error(`❌ Воспроизведение ${soundName}:`, err));
-      console.log(`▶️ ${soundName} (volume: ${sound.volume})`);
+
     } catch (e) {
-      console.error(`❌ Критическая ошибка ${soundName}:`, e);
+
     }
   },
 
   // Загрузка ambient через fetch + AudioBuffer
   loadAmbientSound(name, url) {
-    console.log(`[Звук] Загрузка ambient: ${name}`);
+
     
     fetch(url)
       .then(r => r.arrayBuffer())
@@ -148,7 +148,7 @@ const AudioManager = {
       .then(buffer => {
         this.ambientBuffer = buffer;
         this.loadedCount++;
-        console.log(`✅ Загружен ambient: ${name} (${this.loadedCount}/${this.totalSounds})`);
+
       })
       .catch(err => {
         console.error(`❌ Ошибка ambient ${name}:`, err);
@@ -172,7 +172,7 @@ const AudioManager = {
       sound.currentTime = 0;
       sound.volume = Math.max(0, Math.min(1, volume));
       sound.play().catch(err => console.error(`❌ Воспроизведение ${name}:`, err));
-      console.log(`▶️ ${name} (volume: ${sound.volume})`);
+
     } catch (e) {
       console.error(`❌ Критическая ошибка ${name}:`, e);
     }
@@ -199,7 +199,7 @@ const AudioManager = {
       gain.connect(this.context.destination);
       
       this.ambientSource.start(0);
-      console.log(`▶️ Ambient looping (volume: ${volume})`);
+
     } catch (e) {
       console.error('❌ Ошибка ambient:', e);
     }
@@ -212,7 +212,7 @@ const AudioManager = {
         this.ambientSource.disconnect();
       } catch (e) {}
       this.ambientSource = null;
-      console.log('⏹️ Остановка ambient');
+
     }
   }
 };
